@@ -1,0 +1,264 @@
+package com.mrhayami.vaultio.ui.collection
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.mrhayami.vaultio.data.UserPreferencesRepository
+import com.mrhayami.vaultio.data.local.CardWithDetails
+import com.mrhayami.vaultio.data.local.FolderEntity
+import com.mrhayami.vaultio.data.local.UserCardEntity
+import com.mrhayami.vaultio.data.remote.TcgDexCard
+import com.mrhayami.vaultio.data.repository.VaultioRepository
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+
+enum class ViewMode { LIST, GRID, POKEDEX }
+enum class SortMode { NAME, SET, VALUE, DATE_ADDED }
+
+data class ListSettings(
+    val showPrices: Boolean = true,
+    val isCompact: Boolean = false
+)
+
+data class GridSettings(
+    val columns: Int = 3,
+    val showBadges: Boolean = true
+)
+
+data class PokedexSettings(
+    val showUncollected: Boolean = true,
+    val useShinySprites: Boolean = false
+)
+
+data class CollectionUiState(
+    val viewMode: ViewMode = ViewMode.GRID,
+    val sortMode: SortMode = SortMode.DATE_ADDED,
+    val userCards: List<CardWithDetails> = emptyList(),
+    val filteredUserCards: List<CardWithDetails> = emptyList(),
+    val folders: List<FolderEntity> = emptyList(),
+    val selectedFolderId: Long? = null,
+    val searchQuery: String = "",
+    val isSearchBarVisible: Boolean = false,
+    val isLoading: Boolean = true,
+    val searchResults: List<TcgDexCard> = emptyList(),
+    val isSearching: Boolean = false,
+    val selectedIds: Set<Long> = emptySet(),
+    val isSelectionMode: Boolean = false,
+    val listSettings: ListSettings = ListSettings(),
+    val gridSettings: GridSettings = GridSettings(),
+    val pokedexSettings: PokedexSettings = PokedexSettings()
+)
+
+class CollectionViewModel(
+    private val repository: VaultioRepository,
+    private val userPreferencesRepository: UserPreferencesRepository
+) : ViewModel() {
+
+    private val _searchQuery = MutableStateFlow("")
+    private val _selectedFolderId = MutableStateFlow<Long?>(null)
+    private val _isSearchBarVisible = MutableStateFlow(false)
+    private val _viewMode = MutableStateFlow(ViewMode.GRID)
+    private val _sortMode = MutableStateFlow(SortMode.DATE_ADDED)
+    
+    private val _listSettings = MutableStateFlow(ListSettings())
+    private val _gridSettings = MutableStateFlow(GridSettings())
+    private val _pokedexSettings = MutableStateFlow(PokedexSettings())
+
+    private val _selectionState = MutableStateFlow(emptySet<Long>())
+
+    init {
+        viewModelScope.launch {
+            userPreferencesRepository.viewMode.collect { savedViewMode ->
+                _viewMode.value = savedViewMode
+            }
+        }
+    }
+
+    val uiState: StateFlow<CollectionUiState> = combine(
+        repository.allUserCards,
+        repository.allFolders,
+        _searchQuery,
+        _selectedFolderId,
+        _isSearchBarVisible,
+        _viewMode,
+        _sortMode,
+        _selectionState,
+        _listSettings,
+        _gridSettings,
+        _pokedexSettings
+    ) { args ->
+        val userCards = args[0] as List<CardWithDetails>
+        val folders = args[1] as List<FolderEntity>
+        val searchQuery = args[2] as String
+        val selectedFolderId = args[3] as Long?
+        val isSearchBarVisible = args[4] as Boolean
+        val viewMode = args[5] as ViewMode
+        val sortMode = args[6] as SortMode
+        val selectedIds = args[7] as Set<Long>
+        val listSettings = args[8] as ListSettings
+        val gridSettings = args[9] as GridSettings
+        val pokedexSettings = args[10] as PokedexSettings
+
+        val filtered = userCards.filter { card ->
+            val matchesSearch = if (searchQuery.isBlank()) true 
+                else card.card.name.contains(searchQuery, ignoreCase = true) || 
+                     card.set.name.contains(searchQuery, ignoreCase = true)
+            
+            matchesSearch
+        }
+
+        CollectionUiState(
+            viewMode = viewMode,
+            sortMode = sortMode,
+            userCards = userCards,
+            filteredUserCards = filtered,
+            folders = folders,
+            selectedFolderId = selectedFolderId,
+            searchQuery = searchQuery,
+            isSearchBarVisible = isSearchBarVisible,
+            isLoading = false,
+            selectedIds = selectedIds,
+            isSelectionMode = selectedIds.isNotEmpty(),
+            listSettings = listSettings,
+            gridSettings = gridSettings,
+            pokedexSettings = pokedexSettings
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CollectionUiState()
+    )
+
+    fun setViewMode(viewMode: ViewMode) {
+        _viewMode.value = viewMode
+        viewModelScope.launch {
+            userPreferencesRepository.setViewMode(viewMode)
+        }
+    }
+
+    fun setSortMode(sortMode: SortMode) {
+        _sortMode.value = sortMode
+    }
+
+    fun toggleSearchBar() {
+        _isSearchBarVisible.value = !_isSearchBarVisible.value
+        if (!_isSearchBarVisible.value) {
+            _searchQuery.value = ""
+        }
+    }
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun selectFolder(folderId: Long?) {
+        _selectedFolderId.value = folderId
+    }
+
+    fun updateListSettings(settings: ListSettings) {
+        _listSettings.value = settings
+    }
+
+    fun updateGridSettings(settings: GridSettings) {
+        _gridSettings.value = settings
+    }
+
+    fun updatePokedexSettings(settings: PokedexSettings) {
+        _pokedexSettings.value = settings
+    }
+
+    fun addUserCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String) {
+        viewModelScope.launch {
+            repository.addUserCard(
+                card,
+                UserCardEntity(
+                    cardId = card.id,
+                    quantity = quantity,
+                    condition = condition,
+                    printing = printing,
+                    finish = finish
+                )
+            )
+        }
+    }
+
+    fun addFolder(name: String, icon: String?, color: String?) {
+        viewModelScope.launch {
+            repository.addFolder(name, icon, color)
+        }
+    }
+
+    fun updateFolder(folder: FolderEntity) {
+        viewModelScope.launch {
+            repository.updateFolder(folder)
+        }
+    }
+
+    fun deleteFolder(folder: FolderEntity) {
+        viewModelScope.launch {
+            repository.deleteFolder(folder)
+        }
+    }
+
+    fun toggleSelection(id: Long) {
+        val current = _selectionState.value
+        _selectionState.value = if (current.contains(id)) {
+            current - id
+        } else {
+            current + id
+        }
+    }
+
+    fun selectAll() {
+        val allIds = uiState.value.userCards.map { it.userCard.id }.toSet()
+        _selectionState.value = allIds
+    }
+
+    fun clearSelection() {
+        _selectionState.value = emptySet()
+    }
+
+    fun deleteSelectedCards() {
+        viewModelScope.launch {
+            repository.deleteUserCards(_selectionState.value.toList())
+            clearSelection()
+        }
+    }
+
+    fun moveSelectedToFolder(folderId: Long) {
+        viewModelScope.launch {
+            repository.addCardsToFolder(_selectionState.value.toList(), folderId)
+            clearSelection()
+        }
+    }
+
+    // This is for the remote search in the "Add Card" modal
+    private val _remoteSearchResults = MutableStateFlow<List<TcgDexCard>>(emptyList())
+    private val _isRemoteSearching = MutableStateFlow(false)
+    
+    val remoteSearchState = combine(_remoteSearchResults, _isRemoteSearching) { results, loading ->
+        Pair(results, loading)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Pair(emptyList(), false))
+
+    fun searchRemoteCards(query: String) {
+        viewModelScope.launch {
+            _isRemoteSearching.value = true
+            val results = repository.searchTcgDex(query)
+            _remoteSearchResults.value = results
+            _isRemoteSearching.value = false
+        }
+    }
+}
+
+class CollectionViewModelFactory(
+    private val repository: VaultioRepository,
+    private val userPreferencesRepository: UserPreferencesRepository
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(CollectionViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return CollectionViewModel(repository, userPreferencesRepository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}

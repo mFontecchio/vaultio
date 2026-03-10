@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.Vaultio" parent="Theme.MaterialComponents.Light" />
+</resources>

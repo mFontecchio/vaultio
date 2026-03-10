@@ -1,0 +1,141 @@
+package com.mrhayami.vaultio.data.local
+
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "sets")
+data class SetEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val series: String?,
+    val logo: String?,
+    val symbol: String?,
+    val totalCards: Int,
+    val releaseDate: String?,
+    val isDownloaded: Boolean = false,
+    val lastUpdated: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "cards",
+    indices = [Index(value = ["setId"])]
+)
+data class CardEntity(
+    @PrimaryKey val id: String,
+    val localId: String,
+    val name: String,
+    val image: String?,
+    val setId: String,
+    val rarity: String?,
+    val category: String?,
+    val types: String?, // Comma-separated or JSON
+    val dexId: String?,
+    val tcgPlayerId: String? = null,
+    val lastUpdated: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "user_cards",
+    indices = [Index(value = ["cardId"])]
+)
+data class UserCardEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val cardId: String,
+    val quantity: Int = 1,
+    val condition: String = "Near Mint",
+    val printing: String = "Standard",
+    val finish: String = "Non Holo",
+    val manualPrice: Double? = null,
+    val dateAdded: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "folders")
+data class FolderEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val icon: String? = null,
+    val color: String? = null,
+    val dateCreated: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "folder_cards",
+    primaryKeys = ["folderId", "userCardId"],
+    foreignKeys = [
+        ForeignKey(
+            entity = FolderEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["folderId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = UserCardEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["userCardId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["userCardId"])]
+)
+data class FolderCardCrossRef(
+    val folderId: Long,
+    val userCardId: Long
+)
+
+@Entity(
+    tableName = "prices",
+    primaryKeys = ["cardId", "finish", "condition"]
+)
+data class PriceEntity(
+    val cardId: String,
+    val finish: String,
+    val condition: String,
+    val marketPrice: Double?,
+    val lowPrice: Double?,
+    val midPrice: Double?,
+    val highPrice: Double?,
+    val source: String, // "tcgdex" or "justtcg"
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "vintage_prices",
+    primaryKeys = ["cardId", "finish", "printing", "condition"]
+)
+data class VintagePriceEntity(
+    val cardId: String,
+    val finish: String,
+    val printing: String,
+    val condition: String,
+    val marketPrice: Double?,
+    val lowPrice: Double?,
+    val midPrice: Double?,
+    val highPrice: Double?,
+    val source: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "price_meta")
+data class PriceMetaEntity(
+    @PrimaryKey val id: String, // "cardId-finish-condition" or similar
+    val lastFetch: Long,
+    val lastError: String? = null
+)
+
+@Entity(tableName = "api_usage")
+data class ApiUsageEntity(
+    @PrimaryKey val date: String, // "yyyy-MM-dd"
+    val count: Int = 0
+)
+
+@Entity(tableName = "telemetry_log")
+data class TelemetryLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val api: String,
+    val endpoint: String,
+    val status: Int,
+    val latency: Long,
+    val timestamp: Long = System.currentTimeMillis()
+)
