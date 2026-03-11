@@ -13,6 +13,7 @@ data class SetEntity(
     val logo: String?,
     val symbol: String?,
     val totalCards: Int,
+    val officialCards: Int = 0,
     val releaseDate: String?,
     val isDownloaded: Boolean = false,
     val lastUpdated: Long = System.currentTimeMillis()

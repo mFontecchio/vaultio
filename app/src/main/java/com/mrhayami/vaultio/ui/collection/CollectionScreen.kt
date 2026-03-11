@@ -14,9 +14,11 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.List
@@ -47,6 +49,7 @@ import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import com.mrhayami.vaultio.ui.components.MetadataModal
 import kotlinx.coroutines.launch
 
 @Composable
@@ -69,8 +72,17 @@ fun CollectionScreen(
     
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.showSaveSuccess) {
+        if (uiState.showSaveSuccess) {
+            snackbarHostState.showSnackbar("Card added to collection")
+            viewModel.consumeSaveSuccess()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             if (uiState.isSelectionMode) {
                 TopAppBar(
@@ -375,7 +387,7 @@ fun CollectionScreen(
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
                                 AsyncImage(
-                                    model = "${item.card.image}/high.png",
+                                    model = "${item.card.image}/high.webp",
                                     contentDescription = null,
                                     modifier = Modifier.fillMaxWidth().aspectRatio(0.718f),
                                     contentScale = ContentScale.FillBounds
@@ -657,7 +669,7 @@ fun ListView(
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         AsyncImage(
-                            model = "${item.card.image}/low.png",
+                            model = "${item.card.image}/low.webp",
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
@@ -714,7 +726,7 @@ fun GridView(
             ) {
                 Box {
                     AsyncImage(
-                        model = "${item.card.image}/high.png",
+                        model = "${item.card.image}/high.webp",
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -800,7 +812,8 @@ fun PokedexView(
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun AddCardModal(viewModel: CollectionViewModel, onDismiss: () -> Unit) {
-    val uiState by viewModel.remoteSearchState.collectAsState()
+    val searchState by viewModel.remoteSearchState.collectAsState()
+    val collectionUiState by viewModel.uiState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedCard by remember { mutableStateOf<TcgDexCard?>(null) }
 
@@ -821,23 +834,39 @@ fun AddCardModal(viewModel: CollectionViewModel, onDismiss: () -> Unit) {
                 label = { Text("Search Pokemon Cards") },
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
-                    if (uiState.second) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    if (searchState.second) CircularProgressIndicator(modifier = Modifier.size(24.dp))
                 }
             )
             
             Spacer(modifier = Modifier.height(16.dp))
             
             LazyColumn(modifier = Modifier.weight(1f)) {
-                items(uiState.first) { card ->
+                items(searchState.first) { card ->
                     ListItem(
-                        headlineContent = { Text(card.name) },
-                        supportingContent = { Text(card.id) },
+                        headlineContent = { Text(card.name, fontWeight = FontWeight.Bold) },
+                        supportingContent = {
+                            val setId = card.id.substringBefore("-")
+                            val set = collectionUiState.sets[setId]
+                            val setName = set?.name ?: setId
+                            val officialCount = set?.officialCards ?: 0
+                            val cardNumberText = if (officialCount > 0) "${card.localId}/$officialCount" else card.localId
+                            val category = card.category ?: ""
+                            Text("$setName • $cardNumberText" + if (category.isNotEmpty()) " • $category" else "")
+                        },
                         leadingContent = {
-                            AsyncImage(
-                                model = card.image,
-                                contentDescription = null,
-                                modifier = Modifier.size(40.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(60.dp)
+                                    .clip(MaterialTheme.shapes.small)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                AsyncImage(
+                                    model = "${card.image}/low.webp",
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
                         },
                         modifier = Modifier.clickable { selectedCard = card }
                     )
@@ -853,84 +882,5 @@ fun AddCardModal(viewModel: CollectionViewModel, onDismiss: () -> Unit) {
             },
             onBack = { selectedCard = null }
         )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MetadataModal(
-    card: TcgDexCard,
-    onConfirm: (Int, String, String, String) -> Unit,
-    onBack: () -> Unit
-) {
-    var quantity by remember { mutableIntStateOf(1) }
-    var condition by remember { mutableStateOf("Near Mint") }
-    var printing by remember { mutableStateOf("Standard") }
-    var finish by remember { mutableStateOf("Non Holo") }
-
-    Column(modifier = Modifier.padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
-            Text("Add ${card.name}", style = MaterialTheme.typography.titleLarge)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        AsyncImage(
-            model = "${card.image}/high.png",
-            contentDescription = null,
-            modifier = Modifier
-                .height(200.dp)
-                .align(Alignment.CenterHorizontally),
-            contentScale = ContentScale.Fit
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Quantity: $quantity", modifier = Modifier.weight(1f))
-            IconButton(onClick = { if (quantity > 1) quantity-- }) { Icon(Icons.Rounded.Remove, null) }
-            IconButton(onClick = { quantity++ }) { Icon(Icons.Rounded.Add, null) }
-        }
-
-        val conditions = listOf("Near Mint", "Lightly Played", "Moderately Played", "Heavily Played", "Damaged")
-        var expandedCondition by remember { mutableStateOf(false) }
-        ExposedDropdownMenuBox(
-            expanded = expandedCondition,
-            onExpandedChange = { expandedCondition = !expandedCondition }
-        ) {
-            OutlinedTextField(
-                value = condition,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Condition") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCondition) },
-                modifier = Modifier.menuAnchor().fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedCondition,
-                onDismissRequest = { expandedCondition = false }
-            ) {
-                conditions.forEach { item ->
-                    DropdownMenuItem(
-                        text = { Text(item) },
-                        onClick = {
-                            condition = item
-                            expandedCondition = false
-                        }
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = { onConfirm(quantity, condition, printing, finish) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Add to Collection")
-        }
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }

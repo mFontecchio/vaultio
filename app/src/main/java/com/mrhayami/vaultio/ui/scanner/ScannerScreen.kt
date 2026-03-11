@@ -6,6 +6,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,8 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.FlashlightOff
-import androidx.compose.material.icons.rounded.FlashlightOn
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +37,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.mrhayami.vaultio.data.repository.VaultioRepository
-import com.mrhayami.vaultio.ui.collection.MetadataModal
+import com.mrhayami.vaultio.ui.components.MetadataModal
 import java.util.concurrent.Executors
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -58,7 +58,7 @@ fun ScannerScreen(
     if (cameraPermissionState.status.isGranted) {
         Box(modifier = Modifier.fillMaxSize()) {
             CameraPreview(
-                onTextRecognized = viewModel::onTextDetected
+                onLinesDetected = viewModel::onLinesDetected
             )
             
             ScannerOverlay()
@@ -78,12 +78,60 @@ fun ScannerScreen(
                 ) {
                     Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White)
                 }
-                Text("Scan Card Number", color = Color.White, style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.width(48.dp)) // For balance
+                Text("Scan Card", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.width(48.dp))
             }
 
-            // Debug/Detected Info
-            if (uiState.detectedNumber != null || uiState.isSearching) {
+            // High Confidence Match / Pause Overlay
+            AnimatedVisibility(
+                visible = uiState.autoSelectedCard != null,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                Card(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .padding(bottom = 32.dp)
+                        .fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Match Found!", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ListItem(
+                            headlineContent = { Text(uiState.autoSelectedCard?.name ?: "") },
+                            supportingContent = { Text(uiState.autoSelectedCard?.id ?: "") },
+                            leadingContent = {
+                                AsyncImage(
+                                    model = "${uiState.autoSelectedCard?.image}/low.webp",
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp)
+                                )
+                            }
+                        )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = viewModel::resumeScanning,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Rounded.Close, contentDescription = null)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Reject")
+                            }
+                            Button(
+                                onClick = { selectedCard = uiState.autoSelectedCard },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Add Details")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Debug/Detected Info (only if not showing a match)
+            if (uiState.autoSelectedCard == null && (uiState.detectedNumber != null || uiState.isSearching)) {
                 Card(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -91,19 +139,19 @@ fun ScannerScreen(
                         .padding(horizontal = 16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
                 ) {
-                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         if (uiState.isSearching) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            Text("Searching for ${uiState.detectedNumber}...", modifier = Modifier.padding(top = 8.dp))
+                            Text("Identifying ${uiState.detectedNumber}...", modifier = Modifier.padding(top = 8.dp))
                         } else {
-                            Text("Detected: ${uiState.detectedNumber}", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            Text("Detected: ${uiState.detectedName ?: uiState.detectedNumber}", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                         }
                     }
                 }
             }
 
-            // Candidates
-            if (uiState.candidates.isNotEmpty()) {
+            // Candidates Bottom Sheet
+            if (uiState.candidates.isNotEmpty() && uiState.autoSelectedCard == null) {
                 ModalBottomSheet(onDismissRequest = { viewModel.clearDetectedNumber() }) {
                     LazyColumn(
                         modifier = Modifier
@@ -120,7 +168,7 @@ fun ScannerScreen(
                                 supportingContent = { Text(card.id) },
                                 leadingContent = {
                                     AsyncImage(
-                                        model = card.image,
+                                        model = "${card.image}/low.webp",
                                         contentDescription = null,
                                         modifier = Modifier.size(48.dp)
                                     )
@@ -143,8 +191,7 @@ fun ScannerScreen(
             MetadataModal(
                 card = selectedCard!!,
                 onConfirm = { q, c, p, f ->
-                    // Reusing logic from CollectionViewModel or calling repository directly
-                    // For brevity, we'll just print for now or assume a shared VM
+                    viewModel.saveScannedCard(selectedCard!!, q, c, p, f)
                     selectedCard = null
                     onNavigateBack()
                 },
@@ -155,7 +202,7 @@ fun ScannerScreen(
 }
 
 @Composable
-fun CameraPreview(onTextRecognized: (String) -> Unit) {
+fun CameraPreview(onLinesDetected: (List<DetectedLine>) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
@@ -174,7 +221,7 @@ fun CameraPreview(onTextRecognized: (String) -> Unit) {
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also {
-                        it.setAnalyzer(executor, CameraAnalyzer(onTextRecognized))
+                        it.setAnalyzer(executor, CameraAnalyzer(onLinesDetected))
                     }
 
                 try {
@@ -200,8 +247,8 @@ fun ScannerOverlay() {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val canvasWidth = size.width
         val canvasHeight = size.height
-        val rectWidth = canvasWidth * 0.8f
-        val rectHeight = rectWidth * 0.718f // Card aspect ratio
+        val rectWidth = canvasWidth * 0.85f // Slightly wider for full card view
+        val rectHeight = rectWidth * 1.397f // Pokemon card standard aspect ratio
         val left = (canvasWidth - rectWidth) / 2
         val top = (canvasHeight - rectHeight) / 2
 
@@ -211,7 +258,7 @@ fun ScannerOverlay() {
             color = Color.Transparent,
             topLeft = Offset(left, top),
             size = Size(rectWidth, rectHeight),
-            cornerRadius = CornerRadius(12.dp.toPx()),
+            cornerRadius = CornerRadius(16.dp.toPx()),
             blendMode = BlendMode.Clear
         )
 
@@ -220,7 +267,7 @@ fun ScannerOverlay() {
             color = Color.White,
             topLeft = Offset(left, top),
             size = Size(rectWidth, rectHeight),
-            cornerRadius = CornerRadius(12.dp.toPx()),
+            cornerRadius = CornerRadius(16.dp.toPx()),
             style = Stroke(width = 2.dp.toPx())
         )
     }

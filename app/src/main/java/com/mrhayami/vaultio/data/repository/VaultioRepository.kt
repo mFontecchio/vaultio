@@ -40,19 +40,34 @@ class VaultioRepository(
         try {
             val remoteSets = tcgDexApi.getSets()
             val entities = remoteSets.map {
+                val setId = it.id
+                val rawLogo = it.logo ?: "https://assets.tcgdex.net/en/sets/$setId/logo"
+                val rawSymbol = it.symbol ?: "https://assets.tcgdex.net/en/sets/$setId/symbol"
+
                 SetEntity(
-                    id = it.id,
+                    id = setId,
                     name = it.name,
                     series = it.series,
-                    logo = it.logo?.let { l -> if (l.endsWith(".png")) l else "$l.png" },
-                    symbol = it.symbol?.let { s -> if (s.endsWith(".png")) s else "$s.png" },
+                    logo = ensureImageUrl(rawLogo),
+                    symbol = ensureImageUrl(rawSymbol),
                     totalCards = it.cardCount.total,
+                    officialCards = it.cardCount.official,
                     releaseDate = it.releaseDate
                 )
             }
             setDao.insertSets(entities)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("VaultioRepository", "Error refreshing sets", e)
+        }
+    }
+
+    private fun ensureImageUrl(url: String): String {
+        if (url.isEmpty()) return url
+        val extensions = listOf(".png", ".webp", ".jpg", ".jpeg")
+        return if (extensions.any { url.lowercase().endsWith(it) }) {
+            url
+        } else {
+            "$url.png"
         }
     }
 
@@ -76,12 +91,17 @@ class VaultioRepository(
             cardDao.insertCards(cardEntities)
             setDao.updateDownloadStatus(setId, true)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("VaultioRepository", "Error downloading set $setId", e)
         }
     }
 
     suspend fun deleteDownloadedSet(setId: String) {
         setDao.updateDownloadStatus(setId, false)
+        cardDao.deleteCardsBySet(setId)
+    }
+
+    suspend fun searchLocalCards(localId: String): List<CardEntity> {
+        return cardDao.getCardsByLocalId(localId)
     }
 
     suspend fun searchTcgDex(query: String): List<TcgDexCard> {
@@ -89,7 +109,7 @@ class VaultioRepository(
             if (query.isBlank()) return emptyList()
             tcgDexApi.searchCards("$query*")
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("VaultioRepository", "Error searching cards", e)
             emptyList()
         }
     }
@@ -98,7 +118,7 @@ class VaultioRepository(
         return try {
             tcgDexApi.searchCardsByLocalId(localId)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("VaultioRepository", "Error searching by local ID", e)
             emptyList()
         }
     }
@@ -115,40 +135,28 @@ class VaultioRepository(
                         id = remoteSet.id,
                         name = remoteSet.name,
                         series = remoteSet.series,
-                        logo = remoteSet.logo?.let { l -> if (l.endsWith(".png")) l else "$l.png" },
-                        symbol = remoteSet.symbol?.let { s -> if (s.endsWith(".png")) s else "$s.png" },
+                        logo = ensureImageUrl(remoteSet.logo ?: "https://assets.tcgdex.net/en/sets/$setId/logo"),
+                        symbol = ensureImageUrl(remoteSet.symbol ?: "https://assets.tcgdex.net/en/sets/$setId/symbol"),
                         totalCards = remoteSet.cardCount.total,
+                        officialCards = remoteSet.cardCount.official,
                         releaseDate = remoteSet.releaseDate
                     )
                     setDao.insertSets(listOf(setEntity!!))
-                } else {
-                    setDao.insertSets(listOf(SetEntity(
-                        id = setId,
-                        name = "Unknown Set",
-                        series = null,
-                        logo = null,
-                        symbol = null,
-                        totalCards = 0,
-                        releaseDate = null
-                    )))
                 }
-            } catch (e: Exception) {
-                Log.e("Vaultio", "Failed to fetch sets list", e)
-            }
+            } catch (e: Exception) { Log.e("Vaultio", "Failed to sync set", e) }
         }
 
         val existingCard = cardDao.getCardById(card.id)
-        if (existingCard == null || existingCard.dexId == null) {
+        
+        // If the card doesn't exist or is missing its dexId, fetch full details
+        if (existingCard == null || (existingCard.dexId == null && card.dexId == null)) {
             val fullCard = try {
-                Log.d("Vaultio", "Fetching details for ${card.id} to get dexId")
+                Log.d("Vaultio", "Fetching details for ${card.id} to ensure dexId presence")
                 tcgDexApi.getCardDetail(card.id)
             } catch (e: Exception) {
                 Log.e("Vaultio", "Failed to fetch card details", e)
                 card
             }
-            
-            val dexId = fullCard.dexId?.firstOrNull()?.toString()
-            Log.d("Vaultio", "Resolved dexId: $dexId for ${fullCard.name}")
 
             val cardEntity = CardEntity(
                 id = fullCard.id,
@@ -159,7 +167,7 @@ class VaultioRepository(
                 rarity = fullCard.rarity,
                 category = fullCard.category,
                 types = null,
-                dexId = dexId,
+                dexId = fullCard.dexId?.firstOrNull()?.toString(),
                 tcgPlayerId = extractTcgPlayerId(fullCard.tcgplayer?.url)
             )
             cardDao.insertCards(listOf(cardEntity))

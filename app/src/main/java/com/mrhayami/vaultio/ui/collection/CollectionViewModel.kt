@@ -7,6 +7,7 @@ import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
+import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import kotlinx.coroutines.flow.*
@@ -46,7 +47,9 @@ data class CollectionUiState(
     val isSelectionMode: Boolean = false,
     val listSettings: ListSettings = ListSettings(),
     val gridSettings: GridSettings = GridSettings(),
-    val pokedexSettings: PokedexSettings = PokedexSettings()
+    val pokedexSettings: PokedexSettings = PokedexSettings(),
+    val sets: Map<String, SetEntity> = emptyMap(),
+    val showSaveSuccess: Boolean = false
 )
 
 class CollectionViewModel(
@@ -65,6 +68,7 @@ class CollectionViewModel(
     private val _pokedexSettings = MutableStateFlow(PokedexSettings())
 
     private val _selectionState = MutableStateFlow(emptySet<Long>())
+    private val _showSaveSuccess = MutableStateFlow(false)
 
     init {
         viewModelScope.launch {
@@ -85,19 +89,27 @@ class CollectionViewModel(
         _selectionState,
         _listSettings,
         _gridSettings,
-        _pokedexSettings
+        _pokedexSettings,
+        repository.allSets.map { sets -> sets.associateBy { it.id } },
+        _showSaveSuccess
     ) { args ->
+        @Suppress("UNCHECKED_CAST")
         val userCards = args[0] as List<CardWithDetails>
+        @Suppress("UNCHECKED_CAST")
         val folders = args[1] as List<FolderEntity>
         val searchQuery = args[2] as String
         val selectedFolderId = args[3] as Long?
         val isSearchBarVisible = args[4] as Boolean
         val viewMode = args[5] as ViewMode
         val sortMode = args[6] as SortMode
+        @Suppress("UNCHECKED_CAST")
         val selectedIds = args[7] as Set<Long>
         val listSettings = args[8] as ListSettings
         val gridSettings = args[9] as GridSettings
         val pokedexSettings = args[10] as PokedexSettings
+        @Suppress("UNCHECKED_CAST")
+        val sets = args[11] as Map<String, SetEntity>
+        val showSaveSuccess = args[12] as Boolean
 
         val filtered = userCards.filter { card ->
             val matchesSearch = if (searchQuery.isBlank()) true 
@@ -121,7 +133,9 @@ class CollectionViewModel(
             isSelectionMode = selectedIds.isNotEmpty(),
             listSettings = listSettings,
             gridSettings = gridSettings,
-            pokedexSettings = pokedexSettings
+            pokedexSettings = pokedexSettings,
+            sets = sets,
+            showSaveSuccess = showSaveSuccess
         )
     }.stateIn(
         scope = viewModelScope,
@@ -179,7 +193,12 @@ class CollectionViewModel(
                     finish = finish
                 )
             )
+            _showSaveSuccess.value = true
         }
+    }
+
+    fun consumeSaveSuccess() {
+        _showSaveSuccess.value = false
     }
 
     fun addFolder(name: String, icon: String?, color: String?) {

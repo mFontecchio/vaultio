@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -33,6 +32,7 @@ fun CardDetailScreen(
         factory = CardDetailViewModelFactory(repository, SavedStateHandle(mapOf("userCardId" to userCardId)))
     )
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var quantity by remember { mutableIntStateOf(0) }
     var condition by remember { mutableStateOf("") }
@@ -57,7 +57,15 @@ fun CardDetailScreen(
         }
     }
 
+    LaunchedEffect(uiState.showSaveSuccess) {
+        if (uiState.showSaveSuccess) {
+            snackbarHostState.showSnackbar("Card updated successfully")
+            viewModel.consumeSaveSuccess()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(uiState.cardWithDetails?.card?.name ?: "") },
@@ -149,8 +157,7 @@ fun CardDetailScreen(
                     if (card.rarity != null) {
                         Surface(
                             color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = MaterialTheme.shapes.small
-                        ) {
+                            shape = MaterialTheme.shapes.small) {
                             Text(
                                 card.rarity,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -278,7 +285,7 @@ fun DetailDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable, true).fillMaxWidth(),
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
         )
         ExposedDropdownMenu(

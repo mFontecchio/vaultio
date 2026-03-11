@@ -25,10 +25,10 @@ interface SetDao {
     fun getAllSets(): Flow<List<SetEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSets(sets: List<SetEntity>)
+    suspend fun insertSets(sets: List<SetEntity>): List<Long>
 
     @Query("UPDATE sets SET isDownloaded = :isDownloaded WHERE id = :setId")
-    suspend fun updateDownloadStatus(setId: String, isDownloaded: Boolean)
+    suspend fun updateDownloadStatus(setId: String, isDownloaded: Boolean): Int
 
     @Query("SELECT * FROM sets WHERE id = :setId")
     suspend fun getSetById(setId: String): SetEntity?
@@ -40,10 +40,25 @@ interface CardDao {
     fun getCardsBySet(setId: String): Flow<List<CardEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertCards(cards: List<CardEntity>)
+    suspend fun insertCards(cards: List<CardEntity>): List<Long>
 
     @Query("SELECT * FROM cards WHERE id = :cardId")
     suspend fun getCardById(cardId: String): CardEntity?
+
+    @Query("SELECT * FROM cards WHERE localId = :localId")
+    suspend fun getCardsByLocalId(localId: String): List<CardEntity>
+
+    @Query("SELECT * FROM cards WHERE name LIKE '%' || :name || '%'")
+    suspend fun searchCardsByName(name: String): List<CardEntity>
+
+    @Query("DELETE FROM cards WHERE setId = :setId AND id NOT IN (SELECT cardId FROM user_cards)")
+    suspend fun deleteCardsBySet(setId: String): Int
+
+    @Query("DELETE FROM cards WHERE id NOT IN (SELECT cardId FROM user_cards)")
+    suspend fun deleteAllUnusedCards(): Int
+    
+    @Query("SELECT COUNT(*) FROM cards")
+    suspend fun getCardCount(): Int
 }
 
 @Dao
@@ -53,7 +68,7 @@ interface UserCardDao {
         SELECT
             user_cards.*,
             c.id as card_id, c.localId as card_localId, c.name as card_name, c.image as card_image, c.setId as card_setId, c.rarity as card_rarity, c.category as card_category, c.types as card_types, c.dexId as card_dexId, c.tcgPlayerId as card_tcgPlayerId, c.lastUpdated as card_lastUpdated,
-            s.id as set_id, s.name as set_name, s.series as set_series, s.logo as set_logo, s.symbol as set_symbol, s.totalCards as set_totalCards, s.releaseDate as set_releaseDate, s.isDownloaded as set_isDownloaded, s.lastUpdated as set_lastUpdated
+            s.id as set_id, s.name as set_name, s.series as set_series, s.logo as set_logo, s.symbol as set_symbol, s.totalCards as set_totalCards, s.officialCards as set_officialCards, s.releaseDate as set_releaseDate, s.isDownloaded as set_isDownloaded, s.lastUpdated as set_lastUpdated
         FROM user_cards
         INNER JOIN cards c ON user_cards.cardId = c.id
         INNER JOIN sets s ON c.setId = s.id
@@ -66,7 +81,7 @@ interface UserCardDao {
         SELECT
             user_cards.*,
             c.id as card_id, c.localId as card_localId, c.name as card_name, c.image as card_image, c.setId as card_setId, c.rarity as card_rarity, c.category as card_category, c.types as card_types, c.dexId as card_dexId, c.tcgPlayerId as card_tcgPlayerId, c.lastUpdated as card_lastUpdated,
-            s.id as set_id, s.name as set_name, s.series as set_series, s.logo as set_logo, s.symbol as set_symbol, s.totalCards as set_totalCards, s.releaseDate as set_releaseDate, s.isDownloaded as set_isDownloaded, s.lastUpdated as set_lastUpdated
+            s.id as set_id, s.name as set_name, s.series as set_series, s.logo as set_logo, s.symbol as set_symbol, s.totalCards as set_totalCards, s.officialCards as set_officialCards, s.releaseDate as set_releaseDate, s.isDownloaded as set_isDownloaded, s.lastUpdated as set_lastUpdated
         FROM user_cards
         INNER JOIN cards c ON user_cards.cardId = c.id
         INNER JOIN sets s ON c.setId = s.id
@@ -78,7 +93,7 @@ interface UserCardDao {
         SELECT
             user_cards.*,
             c.id as card_id, c.localId as card_localId, c.name as card_name, c.image as card_image, c.setId as card_setId, c.rarity as card_rarity, c.category as card_category, c.types as card_types, c.dexId as card_dexId, c.tcgPlayerId as card_tcgPlayerId, c.lastUpdated as card_lastUpdated,
-            s.id as set_id, s.name as set_name, s.series as set_series, s.logo as set_logo, s.symbol as set_symbol, s.totalCards as set_totalCards, s.releaseDate as set_releaseDate, s.isDownloaded as set_isDownloaded, s.lastUpdated as set_lastUpdated
+            s.id as set_id, s.name as set_name, s.series as set_series, s.logo as set_logo, s.symbol as set_symbol, s.totalCards as set_totalCards, s.officialCards as set_officialCards, s.releaseDate as set_releaseDate, s.isDownloaded as set_isDownloaded, s.lastUpdated as set_lastUpdated
         FROM user_cards
         INNER JOIN cards c ON user_cards.cardId = c.id
         INNER JOIN sets s ON c.setId = s.id
@@ -91,19 +106,19 @@ interface UserCardDao {
     suspend fun insertUserCard(userCard: UserCardEntity): Long
 
     @Query("DELETE FROM user_cards WHERE id = :userCardId")
-    suspend fun deleteUserCard(userCardId: Long)
+    suspend fun deleteUserCard(userCardId: Long): Int
 
     @Query("DELETE FROM user_cards WHERE id IN (:userCardIds)")
-    suspend fun deleteUserCards(userCardIds: List<Long>)
+    suspend fun deleteUserCards(userCardIds: List<Long>): Int
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertFolderCardCrossRef(crossRef: FolderCardCrossRef)
+    suspend fun insertFolderCardCrossRef(crossRef: FolderCardCrossRef): Long
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertFolderCardCrossRefs(crossRefs: List<FolderCardCrossRef>)
+    suspend fun insertFolderCardCrossRefs(crossRefs: List<FolderCardCrossRef>): List<Long>
 
     @Query("DELETE FROM folder_cards WHERE userCardId = :userCardId AND folderId = :folderId")
-    suspend fun removeCardFromFolder(userCardId: Long, folderId: Long)
+    suspend fun removeCardFromFolder(userCardId: Long, folderId: Long): Int
 }
 
 @Dao
@@ -115,10 +130,10 @@ interface FolderDao {
     suspend fun insertFolder(folder: FolderEntity): Long
 
     @Update
-    suspend fun updateFolder(folder: FolderEntity)
+    suspend fun updateFolder(folder: FolderEntity): Int
 
     @Delete
-    suspend fun deleteFolder(folder: FolderEntity)
+    suspend fun deleteFolder(folder: FolderEntity): Int
 }
 
 @Dao
@@ -127,13 +142,13 @@ interface PriceDao {
     fun getPricesForCard(cardId: String): Flow<List<PriceEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertPrices(prices: List<PriceEntity>)
+    suspend fun insertPrices(prices: List<PriceEntity>): List<Long>
 
     @Query("SELECT * FROM vintage_prices WHERE cardId = :cardId")
     fun getVintagePricesForCard(cardId: String): Flow<List<VintagePriceEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertVintagePrices(prices: List<VintagePriceEntity>)
+    suspend fun insertVintagePrices(prices: List<VintagePriceEntity>): List<Long>
 }
 
 @Dao
@@ -142,13 +157,13 @@ interface ApiUsageDao {
     suspend fun getUsageForDate(date: String): ApiUsageEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertUsage(usage: ApiUsageEntity)
+    suspend fun insertUsage(usage: ApiUsageEntity): Long
 }
 
 @Dao
 interface TelemetryDao {
     @Insert
-    suspend fun insertLog(log: TelemetryLogEntity)
+    suspend fun insertLog(log: TelemetryLogEntity): Long
 
     @Query("SELECT * FROM telemetry_log ORDER BY timestamp DESC LIMIT 100")
     fun getRecentLogs(): Flow<List<TelemetryLogEntity>>

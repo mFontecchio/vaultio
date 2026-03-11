@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemBars
@@ -20,6 +21,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.mrhayami.vaultio.data.DarkThemeConfig
+import com.mrhayami.vaultio.data.ThemeBrand
 import com.mrhayami.vaultio.ui.navigation.Screen
 import com.mrhayami.vaultio.ui.collection.CollectionScreen
 import com.mrhayami.vaultio.ui.screens.SetDownloadsScreen
@@ -37,7 +40,16 @@ class MainActivity : ComponentActivity() {
         val userPreferencesRepository = app.userPreferencesRepository
         
         setContent {
-            VaultioTheme {
+            val themeBrand by userPreferencesRepository.themeBrand.collectAsState(initial = ThemeBrand.DEFAULT)
+            val darkThemeConfig by userPreferencesRepository.darkThemeConfig.collectAsState(initial = DarkThemeConfig.FOLLOW_SYSTEM)
+            
+            val useDarkTheme = when (darkThemeConfig) {
+                DarkThemeConfig.FOLLOW_SYSTEM -> isSystemInDarkTheme()
+                DarkThemeConfig.LIGHT -> false
+                DarkThemeConfig.DARK -> true
+            }
+
+            VaultioTheme(themeBrand = themeBrand, darkTheme = useDarkTheme) {
                 val navController = rememberNavController()
                 val items = listOf(
                     Screen.Collection,
@@ -89,7 +101,7 @@ class MainActivity : ComponentActivity() {
                             ) 
                         }
                         composable(Screen.SetDownloads.route) { SetDownloadsScreen(repository) }
-                        composable(Screen.Settings.route) { SettingsScreen(repository) }
+                        composable(Screen.Settings.route) { SettingsScreen(repository, userPreferencesRepository) }
                         composable(Screen.Scanner.route) { 
                             ScannerScreen(
                                 repository = repository,

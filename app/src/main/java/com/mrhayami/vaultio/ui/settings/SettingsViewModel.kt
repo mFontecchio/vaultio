@@ -3,52 +3,76 @@ package com.mrhayami.vaultio.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.mrhayami.vaultio.data.DarkThemeConfig
+import com.mrhayami.vaultio.data.ThemeBrand
+import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.repository.VaultioRepository
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
-    val theme: String = "System",
+    val themeBrand: ThemeBrand = ThemeBrand.DEFAULT,
+    val darkThemeConfig: DarkThemeConfig = DarkThemeConfig.FOLLOW_SYSTEM,
     val apiUsage: Int = 0,
     val offlineSetsCount: Int = 0,
     val isLoading: Boolean = true
 )
 
-class SettingsViewModel(private val repository: VaultioRepository) : ViewModel() {
+class SettingsViewModel(
+    private val repository: VaultioRepository,
+    private val userPreferencesRepository: UserPreferencesRepository
+) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(SettingsUiState())
-    val uiState = _uiState.asStateFlow()
+    val uiState: StateFlow<SettingsUiState> = combine(
+        userPreferencesRepository.themeBrand,
+        userPreferencesRepository.darkThemeConfig,
+        repository.allSets.map { sets -> sets.count { it.isDownloaded } }
+    ) { themeBrand, darkThemeConfig, downloadedCount ->
+        SettingsUiState(
+            themeBrand = themeBrand,
+            darkThemeConfig = darkThemeConfig,
+            apiUsage = repository.getApiUsage(),
+            offlineSetsCount = downloadedCount,
+            isLoading = false
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = SettingsUiState()
+    )
 
-    init {
+    fun setThemeBrand(brand: ThemeBrand) {
         viewModelScope.launch {
-            val usage = repository.getApiUsage()
-            // In a real app, you'd collect from a flow or DataStore
-            _uiState.value = SettingsUiState(
-                apiUsage = usage,
-                isLoading = false
-            )
+            userPreferencesRepository.setThemeBrand(brand)
         }
     }
 
-    fun setTheme(theme: String) {
-        _uiState.value = _uiState.value.copy(theme = theme)
+    fun setDarkThemeConfig(config: DarkThemeConfig) {
+        viewModelScope.launch {
+            userPreferencesRepository.setDarkThemeConfig(config)
+        }
     }
 
     fun clearImageCache() {
-        // TODO: Implement
+        // TODO: Implement using Coil's ImageLoader if needed
     }
 
     fun resetSettings() {
-        // TODO: Implement
+        viewModelScope.launch {
+            userPreferencesRepository.setThemeBrand(ThemeBrand.DEFAULT)
+            userPreferencesRepository.setDarkThemeConfig(DarkThemeConfig.FOLLOW_SYSTEM)
+        }
     }
 }
 
-class SettingsViewModelFactory(private val repository: VaultioRepository) : ViewModelProvider.Factory {
+class SettingsViewModelFactory(
+    private val repository: VaultioRepository,
+    private val userPreferencesRepository: UserPreferencesRepository
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return SettingsViewModel(repository) as T
+            return SettingsViewModel(repository, userPreferencesRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

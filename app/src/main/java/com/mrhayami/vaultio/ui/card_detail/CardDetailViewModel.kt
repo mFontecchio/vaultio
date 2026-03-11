@@ -10,11 +10,7 @@ import com.mrhayami.vaultio.data.local.PriceEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class CardDetailUiState(
@@ -23,6 +19,7 @@ data class CardDetailUiState(
     val prices: List<PriceEntity> = emptyList(),
     val isLoading: Boolean = true,
     val isDeleted: Boolean = false,
+    val showSaveSuccess: Boolean = false,
     val errorMessage: String? = null
 )
 
@@ -45,7 +42,7 @@ class CardDetailViewModel(
                     if (cardWithDetails != null) repository.getPricesForCard(cardWithDetails.card.id) 
                     else flowOf(emptyList<PriceEntity>())
                 ) { folders, prices ->
-                    CardDetailUiState(
+                    _uiState.value.copy(
                         cardWithDetails = cardWithDetails,
                         folders = folders,
                         prices = prices,
@@ -65,7 +62,12 @@ class CardDetailViewModel(
                 printing = printing,
                 finish = finish
             ))
+            _uiState.value = _uiState.value.copy(showSaveSuccess = true)
         }
+    }
+
+    fun consumeSaveSuccess() {
+        _uiState.value = _uiState.value.copy(showSaveSuccess = false)
     }
 
     fun deleteUserCard() {
