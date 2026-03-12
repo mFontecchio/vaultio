@@ -7,6 +7,11 @@ import com.mrhayami.vaultio.data.DarkThemeConfig
 import com.mrhayami.vaultio.data.ThemeBrand
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import com.mrhayami.vaultio.ui.collection.GridSettings
+import com.mrhayami.vaultio.ui.collection.ListSettings
+import com.mrhayami.vaultio.ui.collection.PokedexSettings
+import com.mrhayami.vaultio.ui.collection.SortMode
+import com.mrhayami.vaultio.ui.collection.ViewMode
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -61,6 +66,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             userPreferencesRepository.setThemeBrand(ThemeBrand.DEFAULT)
             userPreferencesRepository.setDarkThemeConfig(DarkThemeConfig.FOLLOW_SYSTEM)
+            userPreferencesRepository.setViewMode(ViewMode.GRID)
+            userPreferencesRepository.setSortMode(SortMode.DATE_ADDED)
+            userPreferencesRepository.setListSettings(ListSettings())
+            userPreferencesRepository.setGridSettings(GridSettings())
+            userPreferencesRepository.setPokedexSettings(PokedexSettings())
         }
     }
 }

@@ -87,9 +87,19 @@ class CollectionViewModel(
 
     init {
         viewModelScope.launch {
-            userPreferencesRepository.viewMode.collect { savedViewMode ->
-                _viewMode.value = savedViewMode
-            }
+            userPreferencesRepository.viewMode.collect { _viewMode.value = it }
+        }
+        viewModelScope.launch {
+            userPreferencesRepository.sortMode.collect { _sortMode.value = it }
+        }
+        viewModelScope.launch {
+            userPreferencesRepository.listSettings.collect { _listSettings.value = it }
+        }
+        viewModelScope.launch {
+            userPreferencesRepository.gridSettings.collect { _gridSettings.value = it }
+        }
+        viewModelScope.launch {
+            userPreferencesRepository.pokedexSettings.collect { _pokedexSettings.value = it }
         }
     }
 
@@ -202,14 +212,15 @@ class CollectionViewModel(
     }
 
     fun setViewMode(viewMode: ViewMode) {
-        _viewMode.value = viewMode
         viewModelScope.launch {
             userPreferencesRepository.setViewMode(viewMode)
         }
     }
 
     fun setSortMode(sortMode: SortMode) {
-        _sortMode.value = sortMode
+        viewModelScope.launch {
+            userPreferencesRepository.setSortMode(sortMode)
+        }
     }
 
     fun toggleSearchBar() {
@@ -228,15 +239,21 @@ class CollectionViewModel(
     }
 
     fun updateListSettings(settings: ListSettings) {
-        _listSettings.value = settings
+        viewModelScope.launch {
+            userPreferencesRepository.setListSettings(settings)
+        }
     }
 
     fun updateGridSettings(settings: GridSettings) {
-        _gridSettings.value = settings
+        viewModelScope.launch {
+            userPreferencesRepository.setGridSettings(settings)
+        }
     }
 
     fun updatePokedexSettings(settings: PokedexSettings) {
-        _pokedexSettings.value = settings
+        viewModelScope.launch {
+            userPreferencesRepository.setPokedexSettings(settings)
+        }
     }
 
     fun addUserCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String) {
