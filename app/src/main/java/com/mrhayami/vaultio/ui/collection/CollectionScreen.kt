@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,6 +51,8 @@ import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.components.MetadataModal
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 import kotlinx.coroutines.launch
 
 @Composable
@@ -234,7 +237,7 @@ fun CollectionScreen(
                             onCardLongClick = viewModel::toggleSelection
                         )
                         ViewMode.POKEDEX -> PokedexView(
-                            userCards = uiState.filteredUserCards,
+                            entries = uiState.pokedexEntries,
                             settings = uiState.pokedexSettings,
                             onDexClick = { dexId -> selectedDexId = dexId }
                         )
@@ -355,7 +358,19 @@ fun CollectionScreen(
     }
 
     if (selectedDexId != null) {
-        val collectedForDex = uiState.userCards.filter { it.card.dexId == selectedDexId.toString() }
+        val moshi = remember { Moshi.Builder().build() }
+        val listIntAdapter = remember { moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Integer::class.java)) }
+        
+        val collectedForDex = uiState.userCards.filter { cardWithDetails ->
+            val card = cardWithDetails.card
+            val dexIds = try {
+                card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
+            } catch (e: Exception) {
+                listOfNotNull(card.dexId?.toIntOrNull())
+            }
+            dexIds.contains(selectedDexId)
+        }
+        
         ModalBottomSheet(onDismissRequest = { selectedDexId = null }) {
             Column(
                 modifier = Modifier
@@ -757,12 +772,10 @@ fun GridView(
 
 @Composable
 fun PokedexView(
-    userCards: List<CardWithDetails>,
+    entries: List<PokedexEntry>,
     settings: PokedexSettings,
     onDexClick: (Int) -> Unit
 ) {
-    val collectedDexIds = userCards.mapNotNull { it.card.dexId?.toIntOrNull() }.toSet()
-
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
         contentPadding = PaddingValues(8.dp, 8.dp, 8.dp, 80.dp),
@@ -770,28 +783,28 @@ fun PokedexView(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier.navigationBarsPadding()
     ) {
-        val totalDexCount = 1025
-        items(totalDexCount) { index ->
-            val dexNumber = index + 1
-            val isCollected = collectedDexIds.contains(dexNumber)
+        items(entries) { entry ->
+            val isCollected = entry.isCollected
+            val spriteType = if (settings.useShinySprites) "shiny" else "pokemon"
+            val spriteUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/$spriteType/${entry.dexNumber}.png"
 
-            if (isCollected || settings.showUncollected) {
-                val spriteType = if (settings.useShinySprites) "shiny" else "pokemon"
-                val spriteUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/$spriteType/$dexNumber.png"
-
-                Box(
-                    modifier = Modifier
-                        .aspectRatio(1f)
-                        .background(
-                            if (isCollected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant,
-                            shape = MaterialTheme.shapes.small
-                        )
-                        .clickable { onDexClick(dexNumber) },
-                    contentAlignment = Alignment.Center
+            Box(
+                modifier = Modifier
+                    .aspectRatio(1f)
+                    .background(
+                        if (isCollected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.small
+                    )
+                    .clickable { onDexClick(entry.dexNumber) },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(4.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("#$dexNumber", fontSize = 10.sp)
+                    Text("#${entry.dexNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Box(contentAlignment = Alignment.Center) {
                         AsyncImage(
                             model = spriteUrl,
                             contentDescription = null,
@@ -801,6 +814,18 @@ fun PokedexView(
                             colorFilter = if (isCollected) null else androidx.compose.ui.graphics.ColorFilter.colorMatrix(
                                 androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) }
                             )
+                        )
+                        if (!isCollected) {
+                           // Potential silhouette placeholder if sprite fails or for better effect
+                        }
+                    }
+                    if (isCollected && entry.pokemonName != null) {
+                        Text(
+                            entry.pokemonName,
+                            fontSize = 8.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }

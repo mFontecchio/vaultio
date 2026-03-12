@@ -32,7 +32,9 @@ data class CardEntity(
     val rarity: String?,
     val category: String?,
     val types: String?, // Comma-separated or JSON
-    val dexId: String?,
+    val dexId: String?, // Primary National Dex number
+    val dexIds: String? = null, // JSON array of all dex IDs for multi-Pokemon cards
+    val pokemonName: String? = null, // Extracted Pokemon base name
     val tcgPlayerId: String? = null,
     val lastUpdated: Long = System.currentTimeMillis()
 )

@@ -8,6 +8,8 @@ import com.mrhayami.vaultio.data.remote.TcgDexCard
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 
 class VaultioRepository(
     private val setDao: SetDao,
@@ -20,6 +22,9 @@ class VaultioRepository(
     private val tcgDexApi: TcgDexApi,
     val justTcgApi: JustTcgApi
 ) {
+    private val moshi = Moshi.Builder().build()
+    private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Integer::class.java))
+
     val allSets: Flow<List<SetEntity>> = setDao.getAllSets()
     val allUserCards: Flow<List<CardWithDetails>> = userCardDao.getAllUserCardsWithDetails()
     val allFolders: Flow<List<FolderEntity>> = folderDao.getAllFolders()
@@ -83,8 +88,10 @@ class VaultioRepository(
                     setId = setId,
                     rarity = it.rarity,
                     category = it.category,
-                    types = null,
+                    types = it.types?.joinToString(","),
                     dexId = it.dexId?.firstOrNull()?.toString(),
+                    dexIds = it.dexId?.let { ids -> listIntAdapter.toJson(ids) },
+                    pokemonName = extractPokemonName(it.name),
                     tcgPlayerId = extractTcgPlayerId(it.tcgplayer?.url)
                 )
             }
@@ -93,6 +100,11 @@ class VaultioRepository(
         } catch (e: Exception) {
             Log.e("VaultioRepository", "Error downloading set $setId", e)
         }
+    }
+
+    private fun extractPokemonName(fullName: String): String {
+        // Basic normalization: remove suffixes like "GX", "VMAX", "ex", etc.
+        return fullName.split(" ").first()
     }
 
     suspend fun deleteDownloadedSet(setId: String) {
@@ -124,6 +136,7 @@ class VaultioRepository(
     }
 
     suspend fun addUserCard(card: TcgDexCard, userCardEntity: UserCardEntity) {
+        Log.d("Vaultio", "Adding card to collection: ${card.name} (${card.id})")
         val setId = card.id.substringBefore("-")
         var setEntity = setDao.getSetById(setId)
         if (setEntity == null) {
@@ -148,14 +161,61 @@ class VaultioRepository(
 
         val existingCard = cardDao.getCardById(card.id)
         
-        // If the card doesn't exist or is missing its dexId, fetch full details
-        if (existingCard == null || (existingCard.dexId == null && card.dexId == null)) {
-            val fullCard = try {
-                Log.d("Vaultio", "Fetching details for ${card.id} to ensure dexId presence")
-                tcgDexApi.getCardDetail(card.id)
-            } catch (e: Exception) {
-                Log.e("Vaultio", "Failed to fetch card details", e)
+        // If the card doesn't exist or is missing its dexId, ensure we have full details and update the DB
+        if (existingCard == null || existingCard.dexId == null) {
+            val fullCard = if (card.dexId.isNullOrEmpty()) {
+                try {
+                    Log.d("Vaultio", "Fetching details for ${card.id} to ensure dexId presence")
+                    tcgDexApi.getCardDetail(card.id)
+                } catch (e: Exception) {
+                    Log.e("Vaultio", "Failed to fetch card details", e)
+                    card
+                }
+            } else {
                 card
+            }
+
+            var dexIdString = fullCard.dexId?.firstOrNull()?.toString()
+            var dexIdsJson = fullCard.dexId?.let { listIntAdapter.toJson(it) }
+
+            // Recovery: If dexId is missing in API, check local and then network for a valid dexId for this name
+            if (dexIdString == null && (fullCard.category == "Pokemon" || fullCard.category == "Pokémon")) {
+                val candidates = cardDao.searchCardsByName(fullCard.name)
+                val localMatch = candidates.find { it.name.equals(fullCard.name, ignoreCase = true) && it.dexId != null }
+                
+                if (localMatch != null) {
+                    dexIdString = localMatch.dexId
+                    dexIdsJson = localMatch.dexIds
+                    Log.d("Vaultio", "Recovered dexId $dexIdString for ${fullCard.name} from local card ${localMatch.id}")
+                } else {
+                    Log.d("Vaultio", "Local recovery failed for ${fullCard.name} (${candidates.size} candidates checked). Trying network recovery...")
+                    try {
+                        // Try to find any version of this card on the network that has a dexId
+                        val searchResults = tcgDexApi.searchCards(fullCard.name)
+                        for (shortCard in searchResults.take(5)) { // Check top 5 results
+                            if (shortCard.name.equals(fullCard.name, ignoreCase = true)) {
+                                if (!shortCard.dexId.isNullOrEmpty()) {
+                                    dexIdString = shortCard.dexId.first().toString()
+                                    dexIdsJson = listIntAdapter.toJson(shortCard.dexId)
+                                    Log.d("Vaultio", "Network recovery SUCCESS: found dexId $dexIdString in search result for ${shortCard.id}")
+                                    break
+                                } else {
+                                    // Try fetching details for this other version to see if IT has a dexId
+                                    val otherDetail = tcgDexApi.getCardDetail(shortCard.id)
+                                    val otherDexId = otherDetail.dexId?.firstOrNull()?.toString()
+                                    if (otherDexId != null) {
+                                        dexIdString = otherDexId
+                                        dexIdsJson = otherDetail.dexId?.let { listIntAdapter.toJson(it) }
+                                        Log.d("Vaultio", "Network recovery SUCCESS: found dexId $dexIdString via detail of ${shortCard.id}")
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("Vaultio", "Network recovery failed", e)
+                    }
+                }
             }
 
             val cardEntity = CardEntity(
@@ -166,13 +226,19 @@ class VaultioRepository(
                 setId = setId,
                 rarity = fullCard.rarity,
                 category = fullCard.category,
-                types = null,
-                dexId = fullCard.dexId?.firstOrNull()?.toString(),
+                types = fullCard.types?.joinToString(","),
+                dexId = dexIdString,
+                dexIds = dexIdsJson,
+                pokemonName = extractPokemonName(fullCard.name),
                 tcgPlayerId = extractTcgPlayerId(fullCard.tcgplayer?.url)
             )
+            Log.d("Vaultio", "Inserting CardEntity: id=${cardEntity.id}, name=${cardEntity.name}, dexId=${cardEntity.dexId}")
             cardDao.insertCards(listOf(cardEntity))
+        } else {
+            Log.d("Vaultio", "Card already exists in local DB with dexId: ${existingCard.dexId}")
         }
-        userCardDao.insertUserCard(userCardEntity.copy(cardId = card.id))
+        val userCardIdResult = userCardDao.insertUserCard(userCardEntity.copy(cardId = card.id))
+        Log.d("Vaultio", "Inserted UserCard with result ID: $userCardIdResult")
     }
 
     private fun extractTcgPlayerId(url: String?): String? {

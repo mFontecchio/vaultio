@@ -32,6 +32,9 @@ data class TcgDexCard(
     val rarity: String?,
     val category: String?,
     val dexId: List<Int>? = null,
+    val hp: Int? = null,
+    val types: List<String>? = null,
+    val stage: String? = null,
     val variants: TcgDexVariants? = null,
     val tcgplayer: TcgDexMarket? = null,
     val cardmarket: TcgDexMarket? = null

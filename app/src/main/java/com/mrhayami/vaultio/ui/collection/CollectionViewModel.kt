@@ -10,6 +10,8 @@ import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -31,11 +33,21 @@ data class PokedexSettings(
     val useShinySprites: Boolean = false
 )
 
+data class PokedexEntry(
+    val dexNumber: Int,
+    val pokemonName: String?,
+    val cardCount: Int,
+    val totalQuantity: Int,
+    val representativeImage: String?,
+    val isCollected: Boolean
+)
+
 data class CollectionUiState(
     val viewMode: ViewMode = ViewMode.GRID,
     val sortMode: SortMode = SortMode.DATE_ADDED,
     val userCards: List<CardWithDetails> = emptyList(),
     val filteredUserCards: List<CardWithDetails> = emptyList(),
+    val pokedexEntries: List<PokedexEntry> = emptyList(),
     val folders: List<FolderEntity> = emptyList(),
     val selectedFolderId: Long? = null,
     val searchQuery: String = "",
@@ -56,6 +68,9 @@ class CollectionViewModel(
     private val repository: VaultioRepository,
     private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
+
+    private val moshi = Moshi.Builder().build()
+    private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Integer::class.java))
 
     private val _searchQuery = MutableStateFlow("")
     private val _selectedFolderId = MutableStateFlow<Long?>(null)
@@ -116,14 +131,20 @@ class CollectionViewModel(
                 else card.card.name.contains(searchQuery, ignoreCase = true) || 
                      card.set.name.contains(searchQuery, ignoreCase = true)
             
+            val matchesFolder = if (selectedFolderId == null) true
+                else false // Folders need a more complex join or pre-filtered flow if we want this to work here efficiently
+            
             matchesSearch
         }
+
+        val pokedexEntries = computePokedexEntries(userCards, pokedexSettings)
 
         CollectionUiState(
             viewMode = viewMode,
             sortMode = sortMode,
             userCards = userCards,
             filteredUserCards = filtered,
+            pokedexEntries = pokedexEntries,
             folders = folders,
             selectedFolderId = selectedFolderId,
             searchQuery = searchQuery,
@@ -142,6 +163,43 @@ class CollectionViewModel(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = CollectionUiState()
     )
+
+    private fun computePokedexEntries(userCards: List<CardWithDetails>, settings: PokedexSettings): List<PokedexEntry> {
+        val buckets = mutableMapOf<Int, MutableList<CardWithDetails>>()
+        
+        userCards.forEach { cardWithDetails ->
+            val card = cardWithDetails.card
+            val dexIds = try {
+                card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
+            } catch (e: Exception) {
+                listOfNotNull(card.dexId?.toIntOrNull())
+            }
+
+            dexIds.forEach { id ->
+                buckets.getOrPut(id) { mutableListOf() }.add(cardWithDetails)
+            }
+        }
+
+        val entries = mutableListOf<PokedexEntry>()
+        val maxDexNumber = if (settings.showUncollected) 1025 else buckets.keys.maxOrNull() ?: 0
+
+        for (i in 1..maxDexNumber) {
+            val cardsInBucket = buckets[i] ?: emptyList()
+            if (cardsInBucket.isNotEmpty() || settings.showUncollected) {
+                entries.add(
+                    PokedexEntry(
+                        dexNumber = i,
+                        pokemonName = cardsInBucket.firstOrNull()?.card?.pokemonName ?: cardsInBucket.firstOrNull()?.card?.name,
+                        cardCount = cardsInBucket.size,
+                        totalQuantity = cardsInBucket.sumOf { it.userCard.quantity },
+                        representativeImage = cardsInBucket.firstOrNull()?.card?.image,
+                        isCollected = cardsInBucket.isNotEmpty()
+                    )
+                )
+            }
+        }
+        return entries
+    }
 
     fun setViewMode(viewMode: ViewMode) {
         _viewMode.value = viewMode
