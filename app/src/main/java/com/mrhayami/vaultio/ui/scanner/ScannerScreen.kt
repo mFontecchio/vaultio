@@ -219,7 +219,9 @@ fun CameraPreview(onLinesDetected: (List<DetectedLine>) -> Unit) {
 
     AndroidView(
         factory = { ctx ->
-            val previewView = PreviewView(ctx)
+            val previewView = PreviewView(ctx).apply {
+                keepScreenOn = true
+            }
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
                 val preview = Preview.Builder()
