@@ -1,9 +1,12 @@
 package com.mrhayami.vaultio.ui.scanner
 
 import android.Manifest
+import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
@@ -22,12 +25,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -82,7 +86,23 @@ fun ScannerScreen(
                 Spacer(modifier = Modifier.width(48.dp))
             }
 
-            // High Confidence Match / Pause Overlay
+            // Debug/Detected Info Overlay (Operational Transparency)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 100.dp)
+                    .background(Color.Black.copy(alpha = 0.4f), MaterialTheme.shapes.small)
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("OCR Number: ${uiState.detectedNumber ?: "---"}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                Text("OCR Name: ${uiState.detectedName ?: "---"}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                if (uiState.isSearching) {
+                    LinearProgressIndicator(modifier = Modifier.width(100.dp).padding(top = 4.dp))
+                }
+            }
+
+            // High Confidence Match / Quick Confirm Overlay
             AnimatedVisibility(
                 visible = uiState.autoSelectedCard != null,
                 enter = fadeIn() + expandVertically(),
@@ -130,27 +150,7 @@ fun ScannerScreen(
                 }
             }
 
-            // Debug/Detected Info (only if not showing a match)
-            if (uiState.autoSelectedCard == null && (uiState.detectedNumber != null || uiState.isSearching)) {
-                Card(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 150.dp)
-                        .padding(horizontal = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
-                ) {
-                    Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (uiState.isSearching) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            Text("Identifying ${uiState.detectedNumber}...", modifier = Modifier.padding(top = 8.dp))
-                        } else {
-                            Text("Detected: ${uiState.detectedName ?: uiState.detectedNumber}", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
-            // Candidates Bottom Sheet
+            // Candidates List (Manual Selection)
             if (uiState.candidates.isNotEmpty() && uiState.autoSelectedCard == null) {
                 ModalBottomSheet(onDismissRequest = { viewModel.clearDetectedNumber() }) {
                     LazyColumn(
@@ -193,7 +193,6 @@ fun ScannerScreen(
                 onConfirm = { q, c, p, f ->
                     viewModel.saveScannedCard(selectedCard!!, q, c, p, f)
                     selectedCard = null
-                    onNavigateBack()
                 },
                 onBack = { selectedCard = null }
             )
@@ -208,16 +207,29 @@ fun CameraPreview(onLinesDetected: (List<DetectedLine>) -> Unit) {
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val executor = remember { Executors.newSingleThreadExecutor() }
 
+    // Target Resolution 1080p for accuracy as per deep dive
+    val resolutionSelector = ResolutionSelector.Builder()
+        .setResolutionStrategy(
+            ResolutionStrategy(
+                Size(1920, 1080),
+                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+            )
+        )
+        .build()
+
     AndroidView(
         factory = { ctx ->
             val previewView = PreviewView(ctx)
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
-                val preview = Preview.Builder().build().also {
-                    it.surfaceProvider = previewView.surfaceProvider
-                }
+                val preview = Preview.Builder()
+                    .setResolutionSelector(resolutionSelector)
+                    .build().also {
+                        it.surfaceProvider = previewView.surfaceProvider
+                    }
 
                 val imageAnalysis = ImageAnalysis.Builder()
+                    .setResolutionSelector(resolutionSelector)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also {
@@ -247,8 +259,8 @@ fun ScannerOverlay() {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val canvasWidth = size.width
         val canvasHeight = size.height
-        val rectWidth = canvasWidth * 0.85f // Slightly wider for full card view
-        val rectHeight = rectWidth * 1.397f // Pokemon card standard aspect ratio
+        val rectWidth = canvasWidth * 0.85f
+        val rectHeight = rectWidth * 1.397f
         val left = (canvasWidth - rectWidth) / 2
         val top = (canvasHeight - rectHeight) / 2
 
@@ -257,7 +269,7 @@ fun ScannerOverlay() {
         drawRoundRect(
             color = Color.Transparent,
             topLeft = Offset(left, top),
-            size = Size(rectWidth, rectHeight),
+            size = ComposeSize(rectWidth, rectHeight),
             cornerRadius = CornerRadius(16.dp.toPx()),
             blendMode = BlendMode.Clear
         )
@@ -266,7 +278,7 @@ fun ScannerOverlay() {
         drawRoundRect(
             color = Color.White,
             topLeft = Offset(left, top),
-            size = Size(rectWidth, rectHeight),
+            size = ComposeSize(rectWidth, rectHeight),
             cornerRadius = CornerRadius(16.dp.toPx()),
             style = Stroke(width = 2.dp.toPx())
         )

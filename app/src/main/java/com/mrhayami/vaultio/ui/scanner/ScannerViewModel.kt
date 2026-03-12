@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,73 +30,104 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
     private val _uiState = MutableStateFlow(ScannerUiState())
     val uiState: StateFlow<ScannerUiState> = _uiState.asStateFlow()
 
-    // Pokemon Card Layout Analysis (normalized coordinates 0.0 - 1.0)
-    // Name: Top (0% - 15% height)
-    // Number: Bottom (85% - 100% height)
-    
-    private val numberRegex = Regex("""(\d+)/(\d+)|([A-Z]{1,2}\d{1,3})""")
-    private val nameRegex = Regex("""\b[A-Z][a-z]{2,}\b""")
+    private var searchJob: Job? = null
+    private var lastMatchedNumber: String? = null
 
+    // Pokemon Card Layout Analysis
+    private val numberRegex = Regex("""(\d{1,3})\s*/\s*(\d{1,3})""")
+    
     private val noiseWords = setOf(
-        "HP", "Stage", "Basic", "Level", "Weakness", "Resistance", "Retreat", 
-        "Pokemon", "Dragon", "Pulse", "Spiral", "Burst", "Rapid", "Strike", 
-        "Discard", "Energy", "Damage", "Rule", "Ability", "Trainer", "Item", 
-        "Supporter", "Stadium", "Attack", "Vrule", "Knocked"
+        "HP", "STAGE", "BASIC", "LEVEL", "WEAKNESS", "RESISTANCE", "RETREAT", 
+        "POKEMON", "DRAGON", "PULSE", "SPIRAL", "BURST", "RAPID", "STRIKE", 
+        "DISCARD", "ENERGY", "DAMAGE", "RULE", "ABILITY", "TRAINER", "ITEM", 
+        "SUPPORTER", "STADIUM", "ATTACK", "VRULE", "KNOCKED"
     )
 
     fun onLinesDetected(lines: List<DetectedLine>) {
         if (_uiState.value.isPaused || _uiState.value.isSearching) return
 
-        var bestLocalId: String? = null
-        var bestTotal: String? = null
+        // Deep Dive Step 8: Inspect first three lines for name
+        val topLines = lines.sortedBy { it.boundingBox?.top ?: Int.MAX_VALUE }.take(3)
         var bestName: String? = null
-
-        // Group lines by region
-        lines.forEach { line ->
-            val box = line.boundingBox ?: return@forEach
-            val centerY = box.centerY().toFloat() / line.imageHeight
-            
-            // 1. Region: Top (Card Name)
-            if (centerY < 0.20f) {
-                val nameMatch = nameRegex.find(line.text)
-                if (nameMatch != null && nameMatch.value.uppercase() !in noiseWords.map { it.uppercase() }) {
-                    if (bestName == null) bestName = nameMatch.value
-                }
-            }
-            
-            // 2. Region: Bottom (Card Number e.g. 194/203)
-            if (centerY > 0.80f) {
-                val numMatch = numberRegex.find(line.text)
-                if (numMatch != null) {
-                    val fullMatch = numMatch.value
-                    if (fullMatch.contains("/")) {
-                        val parts = fullMatch.split("/")
-                        bestLocalId = parts.getOrNull(0)
-                        bestTotal = parts.getOrNull(1)
-                    } else {
-                        bestLocalId = fullMatch
-                    }
-                }
+        for (line in topLines) {
+            val cleaned = cleanCardName(line.text)
+            if (cleaned.length >= 3) {
+                bestName = cleaned
+                break
             }
         }
 
-        if (bestLocalId != null && (bestLocalId != _uiState.value.detectedNumber || bestTotal != _uiState.value.detectedTotal || bestName != _uiState.value.detectedName)) {
+        // Deep Dive Step 7: Collector-number extraction (slash pattern only)
+        var bestLocalId: String? = null
+        var bestTotal: String? = null
+        
+        // Search bottom 40% of the cropped frame for number
+        val numberCandidates = lines.filter { (it.boundingBox?.centerY()?.toFloat() ?: 0f) / it.imageHeight > 0.60f }
+        for (line in numberCandidates) {
+            val normalizedText = normalizeOcrText(line.text)
+            val numMatch = numberRegex.find(normalizedText)
+            if (numMatch != null) {
+                bestLocalId = numMatch.groupValues[1]
+                bestTotal = numMatch.groupValues[2]
+                break
+            }
+        }
+
+        // Deep Dive: Rejects events whose numberText is the same as the last matched number
+        if (bestLocalId != null && bestLocalId == lastMatchedNumber) return
+
+        if (bestLocalId != null) {
             _uiState.value = _uiState.value.copy(
                 detectedNumber = bestLocalId,
                 detectedTotal = bestTotal,
                 detectedName = bestName,
                 isSearching = true
             )
-            searchCard(bestLocalId!!, bestTotal, bestName)
+            
+            // Debounce window (100ms) as per deep dive
+            searchJob?.cancel()
+            searchJob = viewModelScope.launch {
+                delay(100)
+                searchCard(bestLocalId, bestTotal, bestName)
+            }
         }
+    }
+
+    private fun normalizeOcrText(text: String): String {
+        return text.replace("O", "0")
+            .replace("o", "0")
+            .replace("I", "1")
+            .replace("l", "1")
+            .replace("S", "5")
+            .replace("s", "5")
+            .replace("B", "8")
+            .replace("G", "6")
+            .replace("D", "0")
+            .replace("Z", "2")
+            .replace("b", "6")
+            .replace("q", "9")
+    }
+
+    private fun cleanCardName(text: String): String {
+        val upper = text.uppercase()
+        // Reject lines that look like evolution boilerplate, HP, etc.
+        if (noiseWords.any { upper.contains(it) }) {
+            // If it contains a noise word, try to strip common prefixes
+            val prefixes = listOf("BASIC", "STAGE 1", "STAGE 2", "LEVEL")
+            var cleaned = upper
+            prefixes.forEach { cleaned = cleaned.replace(it, "") }
+            return cleaned.replace(Regex("[^A-Z ]"), "").trim()
+        }
+        return text.replace(Regex("[^A-Za-z0-9 ]"), "").trim()
     }
 
     private fun searchCard(localId: String, totalCount: String?, name: String?) {
         viewModelScope.launch {
-            // Priority 1: Search local DB first for instant matches
-            val localResults = repository.searchLocalCards(localId)
+            // Normalize for DB lookup (e.g., "5" -> "005")
+            val numberNorm = localId.padStart(3, '0')
             
-            // Convert local CardEntity to TcgDexCard for consistency in UI
+            // 1. Search Local DB (priority)
+            val localResults = repository.searchLocalCards(numberNorm)
             val localCandidates = localResults.map { entity ->
                 TcgDexCard(
                     id = entity.id,
@@ -107,26 +140,38 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
                 )
             }
 
-            // Priority 2: Supplement with API results if needed
-            val remoteResults = repository.searchTcgDexByLocalId(localId)
+            // 2. Supplement with API
+            val remoteResults = try {
+                repository.searchTcgDexByLocalId(localId)
+            } catch (e: Exception) {
+                emptyList()
+            }
             
             val allCandidates = (localCandidates + remoteResults).distinctBy { it.id }
             
-            // Filter by name and total count
+            // 3. Strict Number + Name Filtering (Deep Dive Stage: Strict number plus name search)
             var filtered = allCandidates
             if (name != null) {
-                filtered = filtered.filter { it.name.contains(name, ignoreCase = true) }
+                val tokens = name.lowercase().split(" ").filter { it.length >= 3 }
+                if (tokens.isNotEmpty()) {
+                    filtered = allCandidates.filter { card ->
+                        val cardNameLower = card.name.lowercase()
+                        tokens.any { cardNameLower.contains(it) }
+                    }
+                }
             }
             
-            // Use the "Total" part of the number (e.g., 203) to find the specific set
-            if (totalCount != null) {
-                val totalInt = totalCount.toIntOrNull()
-                // Most modern cards follow 'id = setid-localid'. 
-                // We can't easily filter by set count without another API call or DB lookup,
-                // but the combination of name + localId is usually unique.
+            // If name was provided and filtered out everything, we stick to that (prevent false positives)
+            // unless we have high confidence in the number match and multiple candidates remain.
+            
+            // 4. Ranking (Similarity heuristic)
+            if (filtered.size > 1 && name != null) {
+                filtered = filtered.sortedByDescending { calculateSimilarity(it.name, name) }
             }
 
-            if (filtered.size == 1 && (name != null || totalCount != null)) {
+            // Check if we have a definitive match
+            if (filtered.size == 1) {
+                lastMatchedNumber = localId
                 _uiState.value = _uiState.value.copy(
                     autoSelectedCard = filtered.first(),
                     isSearching = false,
@@ -134,14 +179,27 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
                 )
             } else {
                 _uiState.value = _uiState.value.copy(
-                    candidates = filtered,
+                    candidates = filtered.take(5), // Limit to top 5
                     isSearching = false
                 )
             }
         }
     }
 
+    private fun calculateSimilarity(s1: String, s2: String): Float {
+        val name1 = s1.lowercase()
+        val name2 = s2.lowercase()
+        if (name1.startsWith(name2) || name2.startsWith(name1)) return 0.9f
+        
+        // Simple word overlap similarity
+        val words1 = name1.split(" ").toSet()
+        val words2 = name2.split(" ").toSet()
+        val intersection = words1.intersect(words2)
+        return intersection.size.toFloat() / maxOf(words1.size, words2.size)
+    }
+
     fun resumeScanning() {
+        lastMatchedNumber = null
         _uiState.value = _uiState.value.copy(
             isPaused = false, 
             autoSelectedCard = null, 
@@ -164,12 +222,19 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
                     finish = finish
                 )
             )
+            // Don't go back, stay in scanner but clear state for next card
             resumeScanning()
         }
     }
 
     fun clearDetectedNumber() {
-        _uiState.value = _uiState.value.copy(detectedNumber = null, detectedTotal = null, detectedName = null, candidates = emptyList())
+        lastMatchedNumber = null
+        _uiState.value = _uiState.value.copy(
+            detectedNumber = null, 
+            detectedTotal = null, 
+            detectedName = null, 
+            candidates = emptyList()
+        )
     }
 }
 
