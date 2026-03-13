@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -33,10 +35,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -121,21 +125,41 @@ fun CollectionScreen(
                         if (uiState.isSearchBarVisible) {
                             val focusRequester = remember { FocusRequester() }
                             val focusManager = LocalFocusManager.current
-                            TextField(
-                                value = uiState.searchQuery,
-                                onValueChange = viewModel::setSearchQuery,
-                                placeholder = { Text("Search your cards...") },
-                                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                                singleLine = true,
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent
-                                ),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
-                            )
+                            
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    .padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                BasicTextField(
+                                    value = uiState.searchQuery,
+                                    onValueChange = viewModel::setSearchQuery,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(focusRequester),
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                                    decorationBox = { innerTextField ->
+                                        if (uiState.searchQuery.isEmpty()) {
+                                            Text(
+                                                "Search your cards...",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                )
+                            }
                             LaunchedEffect(Unit) { focusRequester.requestFocus() }
                         } else {
                             Text("Collection")
@@ -175,20 +199,23 @@ fun CollectionScreen(
                     SmallFloatingActionButton(
                         onClick = { showFolderDialog = FolderEntity(name = "") },
                         modifier = Modifier.padding(bottom = 8.dp),
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = CircleShape
                     ) {
                         Icon(Icons.Rounded.CreateNewFolder, contentDescription = "Add Folder")
                     }
                     SmallFloatingActionButton(
                         onClick = onNavigateToScanner,
                         modifier = Modifier.padding(bottom = 8.dp),
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = CircleShape
                     ) {
                         Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan Card")
                     }
                     FloatingActionButton(
                         onClick = { showAddCardModal = true },
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        shape = CircleShape
                     ) {
                         Icon(Icons.Rounded.Add, contentDescription = "Add Card")
                     }
@@ -264,7 +291,8 @@ fun CollectionScreen(
     if (showAddCardModal) {
         ModalBottomSheet(
             onDismissRequest = { showAddCardModal = false },
-            sheetState = sheetState
+            sheetState = sheetState,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
             AddCardModal(
                 viewModel = viewModel,
@@ -294,10 +322,12 @@ fun CollectionScreen(
                                 tint = folder.color?.let { Color(it.toLong().toInt()) } ?: MaterialTheme.colorScheme.primary
                             )
                         },
-                        modifier = Modifier.clickable {
-                            viewModel.moveSelectedToFolder(folder.id)
-                            showMoveToFolderSheet = false
-                        }
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                viewModel.moveSelectedToFolder(folder.id)
+                                showMoveToFolderSheet = false
+                            }
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -399,6 +429,7 @@ fun CollectionScreen(
                                     onNavigateToCardDetail(item.userCard.id)
                                     selectedDexId = null
                                 },
+                                shape = RoundedCornerShape(12.dp),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
                                 AsyncImage(
@@ -505,13 +536,15 @@ fun FolderDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (folder.id == 0L) "New Folder" else "Edit Folder") },
+        shape = RoundedCornerShape(28.dp),
         text = {
             Column {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Folder Name") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Icon", style = MaterialTheme.typography.labelLarge)
@@ -598,7 +631,8 @@ fun StickyControls(
                 FilterChip(
                     selected = uiState.selectedFolderId == null,
                     onClick = { onFolderSelect(null) },
-                    label = { Text("All") }
+                    label = { Text("All") },
+                    shape = CircleShape
                 )
             }
             items(uiState.folders) { folder ->
@@ -606,6 +640,7 @@ fun StickyControls(
                     selected = uiState.selectedFolderId == folder.id,
                     onClick = { onFolderSelect(folder.id) },
                     label = { Text(folder.name) },
+                    shape = CircleShape,
                     leadingIcon = {
                         Icon(
                             getIconFromName(folder.icon),
@@ -632,7 +667,9 @@ fun StickyControls(
                 modifier = Modifier.padding(start = 16.dp)
             )
 
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.padding(end = 16.dp)) {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier.padding(end = 16.dp),
+            ) {
                 SegmentedButton(
                     selected = uiState.viewMode == ViewMode.LIST,
                     onClick = { onViewModeChange(ViewMode.LIST) },
@@ -680,7 +717,7 @@ fun ListView(
                     Box(
                         modifier = Modifier
                             .size(if (settings.isCompact) 48.dp else 64.dp)
-                            .clip(MaterialTheme.shapes.small)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         AsyncImage(
@@ -704,10 +741,14 @@ fun ListView(
                         }
                     }
                 },
-                modifier = Modifier.combinedClickable(
-                    onClick = { onCardClick(item.userCard.id) },
-                    onLongClick = { onCardLongClick(item.userCard.id) }
-                ).background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent)
+                modifier = Modifier
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .combinedClickable(
+                        onClick = { onCardClick(item.userCard.id) },
+                        onLongClick = { onCardLongClick(item.userCard.id) }
+                    )
+                    .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface)
             )
         }
     }
@@ -736,8 +777,9 @@ fun GridView(
                     onClick = { onCardClick(item.userCard.id) },
                     onLongClick = { onCardLongClick(item.userCard.id) }
                 ),
+                shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+                border = if (isSelected) androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
             ) {
                 Box {
                     AsyncImage(
@@ -759,9 +801,11 @@ fun GridView(
                         Badge(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .padding(4.dp)
+                                .padding(4.dp),
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         ) {
-                            Text("${item.userCard.quantity}")
+                            Text("${item.userCard.quantity}", modifier = Modifier.padding(2.dp))
                         }
                     }
                 }
@@ -779,8 +823,8 @@ fun PokedexView(
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
         contentPadding = PaddingValues(8.dp, 8.dp, 8.dp, 80.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.navigationBarsPadding()
     ) {
         items(entries) { entry ->
@@ -794,7 +838,7 @@ fun PokedexView(
                     .background(
                         if (isCollected) MaterialTheme.colorScheme.primaryContainer
                         else MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.small
+                        shape = RoundedCornerShape(16.dp)
                     )
                     .clickable { onDexClick(entry.dexNumber) },
                 contentAlignment = Alignment.Center
@@ -815,9 +859,6 @@ fun PokedexView(
                                 androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) }
                             )
                         )
-                        if (!isCollected) {
-                           // Potential silhouette placeholder if sprite fails or for better effect
-                        }
                     }
                     if (isCollected && entry.pokemonName != null) {
                         Text(
@@ -849,19 +890,58 @@ fun AddCardModal(viewModel: CollectionViewModel, onDismiss: () -> Unit) {
                 .padding(16.dp)
                 .imePadding()
         ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = {
-                    searchQuery = it
-                    if (it.length > 2) viewModel.searchRemoteCards(it)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search Pokemon Cards") },
-                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchState.second) CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                }
-            )
+            val focusRequester = remember { FocusRequester() }
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = {
+                        searchQuery = it
+                        if (it.length > 2) viewModel.searchRemoteCards(it)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    decorationBox = { innerTextField ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Rounded.Search, 
+                                contentDescription = null, 
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        "Search Pokemon Cards",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                                innerTextField()
+                            }
+                            if (searchState.second) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            }
+                        }
+                    }
+                )
+            }
             
             Spacer(modifier = Modifier.height(16.dp))
             
@@ -882,7 +962,7 @@ fun AddCardModal(viewModel: CollectionViewModel, onDismiss: () -> Unit) {
                             Box(
                                 modifier = Modifier
                                     .size(60.dp)
-                                    .clip(MaterialTheme.shapes.small)
+                                    .clip(RoundedCornerShape(8.dp))
                                     .background(MaterialTheme.colorScheme.surfaceVariant)
                             ) {
                                 AsyncImage(
@@ -893,7 +973,10 @@ fun AddCardModal(viewModel: CollectionViewModel, onDismiss: () -> Unit) {
                                 )
                             }
                         },
-                        modifier = Modifier.clickable { selectedCard = card }
+                        modifier = Modifier
+                            .padding(vertical = 4.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { selectedCard = card }
                     )
                 }
             }

@@ -16,6 +16,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
@@ -23,6 +25,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size as ComposeSize
@@ -78,11 +81,23 @@ fun ScannerScreen(
             ) {
                 IconButton(
                     onClick = onNavigateBack,
-                    colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f))
+                    colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                    modifier = Modifier.clip(CircleShape)
                 ) {
                     Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White)
                 }
-                Text("Scan Card", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                Surface(
+                    color = Color.Black.copy(alpha = 0.5f),
+                    shape = CircleShape
+                ) {
+                    Text(
+                        "Scan Card", 
+                        color = Color.White, 
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Spacer(modifier = Modifier.width(48.dp))
             }
 
@@ -91,14 +106,17 @@ fun ScannerScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 100.dp)
-                    .background(Color.Black.copy(alpha = 0.4f), MaterialTheme.shapes.small)
-                    .padding(8.dp),
+                    .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("OCR Number: ${uiState.detectedNumber ?: "---"}", color = Color.White, style = MaterialTheme.typography.bodySmall)
-                Text("OCR Name: ${uiState.detectedName ?: "---"}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                Text("Detected: ${uiState.detectedNumber ?: "---"} ${uiState.detectedName ?: ""}", color = Color.White, style = MaterialTheme.typography.bodySmall)
                 if (uiState.isSearching) {
-                    LinearProgressIndicator(modifier = Modifier.width(100.dp).padding(top = 4.dp))
+                    LinearProgressIndicator(
+                        modifier = Modifier.width(100.dp).padding(top = 4.dp).height(2.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.White.copy(alpha = 0.3f)
+                    )
                 }
             }
 
@@ -114,26 +132,32 @@ fun ScannerScreen(
                         .padding(16.dp)
                         .padding(bottom = 32.dp)
                         .fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Match Found!", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(8.dp))
+                    Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Match Found!", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(12.dp))
                         ListItem(
-                            headlineContent = { Text(uiState.autoSelectedCard?.name ?: "") },
+                            headlineContent = { Text(uiState.autoSelectedCard?.name ?: "", fontWeight = FontWeight.Bold) },
                             supportingContent = { Text(uiState.autoSelectedCard?.id ?: "") },
                             leadingContent = {
-                                AsyncImage(
-                                    model = "${uiState.autoSelectedCard?.image}/low.webp",
-                                    contentDescription = null,
-                                    modifier = Modifier.size(64.dp)
-                                )
-                            }
+                                Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                                    AsyncImage(
+                                        model = "${uiState.autoSelectedCard?.image}/low.webp",
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp)
+                                    )
+                                }
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                         )
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedButton(
                                 onClick = viewModel::resumeScanning,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                shape = CircleShape
                             ) {
                                 Icon(Icons.Rounded.Close, contentDescription = null)
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -141,7 +165,8 @@ fun ScannerScreen(
                             }
                             Button(
                                 onClick = { selectedCard = uiState.autoSelectedCard },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                shape = CircleShape
                             ) {
                                 Text("Add Details")
                             }
@@ -152,7 +177,10 @@ fun ScannerScreen(
 
             // Candidates List (Manual Selection)
             if (uiState.candidates.isNotEmpty() && uiState.autoSelectedCard == null) {
-                ModalBottomSheet(onDismissRequest = { viewModel.clearDetectedNumber() }) {
+                ModalBottomSheet(
+                    onDismissRequest = { viewModel.clearDetectedNumber() },
+                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+                ) {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -160,20 +188,25 @@ fun ScannerScreen(
                             .navigationBarsPadding()
                     ) {
                         item {
-                            Text("Select Match", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+                            Text("Select Match", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
                         }
                         items(uiState.candidates) { card ->
                             ListItem(
-                                headlineContent = { Text(card.name) },
+                                headlineContent = { Text(card.name, fontWeight = FontWeight.Bold) },
                                 supportingContent = { Text(card.id) },
                                 leadingContent = {
-                                    AsyncImage(
-                                        model = "${card.image}/low.webp",
-                                        contentDescription = null,
-                                        modifier = Modifier.size(48.dp)
-                                    )
+                                    Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                                        AsyncImage(
+                                            model = "${card.image}/low.webp",
+                                            contentDescription = null,
+                                            modifier = Modifier.size(56.dp)
+                                        )
+                                    }
                                 },
-                                modifier = Modifier.clickable { selectedCard = card }
+                                modifier = Modifier
+                                    .padding(vertical = 4.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { selectedCard = card }
                             )
                         }
                     }
@@ -187,7 +220,10 @@ fun ScannerScreen(
     }
 
     if (selectedCard != null) {
-        ModalBottomSheet(onDismissRequest = { selectedCard = null }) {
+        ModalBottomSheet(
+            onDismissRequest = { selectedCard = null },
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
             MetadataModal(
                 card = selectedCard!!,
                 onConfirm = { q, c, p, f ->
@@ -272,7 +308,7 @@ fun ScannerOverlay() {
             color = Color.Transparent,
             topLeft = Offset(left, top),
             size = ComposeSize(rectWidth, rectHeight),
-            cornerRadius = CornerRadius(16.dp.toPx()),
+            cornerRadius = CornerRadius(24.dp.toPx()),
             blendMode = BlendMode.Clear
         )
 
@@ -281,8 +317,8 @@ fun ScannerOverlay() {
             color = Color.White,
             topLeft = Offset(left, top),
             size = ComposeSize(rectWidth, rectHeight),
-            cornerRadius = CornerRadius(16.dp.toPx()),
-            style = Stroke(width = 2.dp.toPx())
+            cornerRadius = CornerRadius(24.dp.toPx()),
+            style = Stroke(width = 3.dp.toPx())
         )
     }
 }

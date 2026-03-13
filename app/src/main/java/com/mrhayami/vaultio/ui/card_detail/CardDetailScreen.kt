@@ -1,7 +1,10 @@
 package com.mrhayami.vaultio.ui.card_detail
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -10,6 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -17,6 +23,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import com.mrhayami.vaultio.ui.theme.*
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
@@ -68,7 +75,7 @@ fun CardDetailScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(uiState.cardWithDetails?.card?.name ?: "") },
+                title = { Text(uiState.cardWithDetails?.card?.name ?: "", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
@@ -87,6 +94,7 @@ fun CardDetailScreen(
                             onDismissRequest = { showDeleteDialog = false },
                             title = { Text("Delete Card") },
                             text = { Text("Are you sure you want to remove this card from your collection?") },
+                            shape = RoundedCornerShape(28.dp),
                             confirmButton = {
                                 TextButton(onClick = { 
                                     showDeleteDialog = false
@@ -98,7 +106,11 @@ fun CardDetailScreen(
                             }
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface
+                )
             )
         }
     ) { padding ->
@@ -117,149 +129,248 @@ fun CardDetailScreen(
                 it.condition == userCard.condition 
             } ?: uiState.prices.firstOrNull()
 
-            Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                AsyncImage(
-                    model = "${card.image}/high.png",
-                    contentDescription = null,
+            val energyColor = remember(card.types) {
+                val type = card.types?.let { 
+                    if (it.startsWith("[")) {
+                        it.substringAfter("\"").substringBefore("\"")
+                    } else {
+                        it.split(",").firstOrNull()?.trim()
+                    }
+                }
+                when (type?.lowercase()) {
+                    "grass" -> EnergyGrass
+                    "fire" -> EnergyFire
+                    "water" -> EnergyWater
+                    "lightning", "electric" -> EnergyLightning
+                    "psychic" -> EnergyPsychic
+                    "fighting" -> EnergyFighting
+                    "darkness", "dark" -> EnergyDarkness
+                    "metal", "steel" -> EnergyMetal
+                    "fairy" -> EnergyFairy
+                    "dragon" -> EnergyDragon
+                    else -> Color.Gray
+                }
+            }
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Background Gradient
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(350.dp)
-                        .padding(vertical = 16.dp),
-                    contentScale = ContentScale.Fit
+                        .height(450.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    energyColor.copy(alpha = 0.4f),
+                                    energyColor.copy(alpha = 0.15f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
                 )
 
-                // Set and Rarity Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(horizontal = 16.dp)
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    if (set.symbol != null) {
-                        AsyncImage(
-                            model = set.symbol,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(set.name, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "#${card.localId} / ${set.totalCards}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    if (card.rarity != null) {
+                    // Card Image Display (Transparent container instead of tile)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = MaterialTheme.shapes.small) {
-                            Text(
-                                card.rarity,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelMedium
+                            modifier = Modifier
+                                .fillMaxWidth(0.85f)
+                                .aspectRatio(0.718f), // Standard card ratio
+                            shape = RoundedCornerShape(12.dp),
+                            shadowElevation = 16.dp,
+                            color = Color.Transparent
+                        ) {
+                            AsyncImage(
+                                model = "${card.image}/high.webp",
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
                             )
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val priceText = currentPrice?.marketPrice?.let {
-                                NumberFormat.getCurrencyInstance(Locale.US).format(it)
-                            } ?: "$0.00"
-                            Text("Market Value: $priceText", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.weight(1f))
-                            IconButton(onClick = { viewModel.refreshPrice() }) {
-                                Icon(Icons.Rounded.Refresh, contentDescription = "Refresh Price")
+                    // Set and Rarity Row
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (set.symbol != null) {
+                                AsyncImage(
+                                    model = set.symbol,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(set.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "#${card.localId} / ${set.totalCards}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (card.rarity != null) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    shape = CircleShape
+                                ) {
+                                    Text(
+                                        card.rarity,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
-                        if (currentPrice != null) {
-                            Text(
-                                "Source: ${currentPrice.source.uppercase()} • Updated ${getRelativeTime(currentPrice.timestamp)}",
-                                style = MaterialTheme.typography.bodySmall
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val priceText = currentPrice?.marketPrice?.let {
+                                    NumberFormat.getCurrencyInstance(Locale.US).format(it)
+                                } ?: "$0.00"
+                                Text(priceText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.weight(1f))
+                                IconButton(
+                                    onClick = { viewModel.refreshPrice() },
+                                    modifier = Modifier.background(MaterialTheme.colorScheme.surface, CircleShape)
+                                ) {
+                                    Icon(Icons.Rounded.Refresh, contentDescription = "Refresh Price", tint = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            Text("Estimated Market Value", style = MaterialTheme.typography.labelLarge)
+                            if (currentPrice != null) {
+                                Text(
+                                    "Source: ${currentPrice.source.uppercase()} • Updated ${getRelativeTime(currentPrice.timestamp)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text("Collection Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    
+                    Text(
+                        "Added on ${SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(userCard.dateAdded))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Quantity Selector
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Quantity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.surface, CircleShape)
+                                        .padding(horizontal = 4.dp)
+                                ) {
+                                    IconButton(onClick = { if (quantity > 1) quantity-- }) { 
+                                        Icon(Icons.Rounded.Remove, null, tint = MaterialTheme.colorScheme.primary) 
+                                    }
+                                    Text(
+                                        quantity.toString(), 
+                                        style = MaterialTheme.typography.titleLarge, 
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 12.dp)
+                                    )
+                                    IconButton(onClick = { quantity++ }) { 
+                                        Icon(Icons.Rounded.Add, null, tint = MaterialTheme.colorScheme.primary) 
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            DetailDropdown(
+                                label = "Condition",
+                                value = condition,
+                                options = listOf("Near Mint", "Lightly Played", "Moderately Played", "Heavily Played", "Damaged"),
+                                onSelected = { condition = it }
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            DetailDropdown(
+                                label = "Printing",
+                                value = printing,
+                                options = listOf("Standard", "First Edition", "Unlimited", "Promo"),
+                                onSelected = { printing = it }
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            DetailDropdown(
+                                label = "Finish",
+                                value = finish,
+                                options = listOf("Non Holo", "Holo", "Reverse Holo", "Textured", "Gold"),
+                                onSelected = { finish = it }
                             )
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                Text("Collection Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                
-                Text(
-                    "Collected on ${SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(userCard.dateAdded))}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                    Text("Folders", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                // Quantity Selector
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Quantity", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    IconButton(onClick = { if (quantity > 1) quantity-- }) { Icon(Icons.Rounded.Remove, null) }
-                    Text(quantity.toString(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 8.dp))
-                    IconButton(onClick = { quantity++ }) { Icon(Icons.Rounded.Add, null) }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Dropdowns for Condition, Printing, Finish
-                DetailDropdown(
-                    label = "Condition",
-                    value = condition,
-                    options = listOf("Near Mint", "Lightly Played", "Moderately Played", "Heavily Played", "Damaged"),
-                    onSelected = { condition = it }
-                )
-
-                DetailDropdown(
-                    label = "Printing",
-                    value = printing,
-                    options = listOf("Standard", "First Edition", "Unlimited", "Promo"),
-                    onSelected = { printing = it }
-                )
-
-                DetailDropdown(
-                    label = "Finish",
-                    value = finish,
-                    options = listOf("Non Holo", "Holo", "Reverse Holo", "Textured", "Gold"),
-                    onSelected = { finish = it }
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text("Folders", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-
-                FlowRow(modifier = Modifier.fillMaxWidth()) {
-                    uiState.folders.forEach { folder ->
-                        val isInFolder = false // TODO: Real check via CrossRef
-                        FilterChip(
-                            selected = isInFolder,
-                            onClick = { 
-                                if (isInFolder) viewModel.removeCardFromFolder(folder.id)
-                                else viewModel.addCardToFolder(folder.id)
-                            },
-                            label = { Text(folder.name) },
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
+                    FlowRow(modifier = Modifier.fillMaxWidth()) {
+                        uiState.folders.forEach { folder ->
+                            val isInFolder = false // TODO: Real check via CrossRef
+                            FilterChip(
+                                selected = isInFolder,
+                                onClick = { 
+                                    if (isInFolder) viewModel.removeCardFromFolder(folder.id)
+                                    else viewModel.addCardToFolder(folder.id)
+                                },
+                                label = { Text(folder.name) },
+                                modifier = Modifier.padding(end = 8.dp),
+                                shape = CircleShape
+                            )
+                        }
                     }
+                    
+                    Spacer(modifier = Modifier.height(100.dp))
                 }
-                
-                Spacer(modifier = Modifier.height(100.dp))
             }
         }
     }
@@ -277,7 +388,7 @@ fun DetailDropdown(
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded },
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+        modifier = Modifier.fillMaxWidth()
     ) {
         OutlinedTextField(
             value = value,
@@ -286,11 +397,18 @@ fun DetailDropdown(
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable, true).fillMaxWidth(),
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+            shape = RoundedCornerShape(16.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                unfocusedIndicatorColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+            )
         )
         ExposedDropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
         ) {
             options.forEach { option ->
                 DropdownMenuItem(
@@ -298,7 +416,8 @@ fun DetailDropdown(
                     onClick = {
                         onSelected(option)
                         expanded = false
-                    }
+                    },
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp))
                 )
             }
         }
