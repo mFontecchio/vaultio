@@ -139,6 +139,7 @@ class CollectionViewModel(
         val filtered = userCards.filter { card ->
             val matchesSearch = if (searchQuery.isBlank()) true 
                 else card.card.name.contains(searchQuery, ignoreCase = true) || 
+                     card.card.pokemonName?.contains(searchQuery, ignoreCase = true) == true ||
                      card.set.name.contains(searchQuery, ignoreCase = true)
             
             val matchesFolder = if (selectedFolderId == null) true
@@ -177,6 +178,10 @@ class CollectionViewModel(
     private fun computePokedexEntries(userCards: List<CardWithDetails>, settings: PokedexSettings): List<PokedexEntry> {
         val buckets = mutableMapOf<Int, MutableList<CardWithDetails>>()
         
+        // Map to store normalized name to Dex ID mapping for fuzzy matching cards missing Dex IDs
+        val nameToDexIdMap = mutableMapOf<String, Int>()
+
+        // First pass: group by explicit Dex IDs and build name->ID map
         userCards.forEach { cardWithDetails ->
             val card = cardWithDetails.card
             val dexIds = try {
@@ -187,6 +192,28 @@ class CollectionViewModel(
 
             dexIds.forEach { id ->
                 buckets.getOrPut(id) { mutableListOf() }.add(cardWithDetails)
+                card.pokemonName?.let { nameToDexIdMap[it.lowercase()] = id }
+            }
+        }
+
+        // Second pass: handle cards missing Dex IDs but having a pokemonName that matches a known Dex ID
+        userCards.forEach { cardWithDetails ->
+            val card = cardWithDetails.card
+            val dexIds = try {
+                card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
+            } catch (e: Exception) {
+                listOfNotNull(card.dexId?.toIntOrNull())
+            }
+
+            if (dexIds.isEmpty()) {
+                card.pokemonName?.lowercase()?.let { normalizedName ->
+                    nameToDexIdMap[normalizedName]?.let { id ->
+                        val bucket = buckets.getOrPut(id) { mutableListOf() }
+                        if (!bucket.any { it.userCard.id == cardWithDetails.userCard.id }) {
+                            bucket.add(cardWithDetails)
+                        }
+                    }
+                }
             }
         }
 
@@ -196,10 +223,14 @@ class CollectionViewModel(
         for (i in 1..maxDexNumber) {
             val cardsInBucket = buckets[i] ?: emptyList()
             if (cardsInBucket.isNotEmpty() || settings.showUncollected) {
+                // Prioritize normalized pokemonName for the entry title
+                val bestName = cardsInBucket.mapNotNull { it.card.pokemonName }.firstOrNull() 
+                    ?: cardsInBucket.firstOrNull()?.card?.name
+                
                 entries.add(
                     PokedexEntry(
                         dexNumber = i,
-                        pokemonName = cardsInBucket.firstOrNull()?.card?.pokemonName ?: cardsInBucket.firstOrNull()?.card?.name,
+                        pokemonName = bestName,
                         cardCount = cardsInBucket.size,
                         totalQuantity = cardsInBucket.sumOf { it.userCard.quantity },
                         representativeImage = cardsInBucket.firstOrNull()?.card?.image,
