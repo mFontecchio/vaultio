@@ -3,6 +3,7 @@ package com.mrhayami.vaultio.ui.collection
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.mrhayami.vaultio.data.PokemonUtils
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderEntity
@@ -178,10 +179,11 @@ class CollectionViewModel(
     private fun computePokedexEntries(userCards: List<CardWithDetails>, settings: PokedexSettings): List<PokedexEntry> {
         val buckets = mutableMapOf<Int, MutableList<CardWithDetails>>()
         
-        // Map to store normalized name to Dex ID mapping for fuzzy matching cards missing Dex IDs
+        // Map to store normalized name for each Dex ID
+        val idToNameMap = mutableMapOf<Int, String>()
         val nameToDexIdMap = mutableMapOf<String, Int>()
 
-        // First pass: group by explicit Dex IDs and build name->ID map
+        // First pass: group by explicit Dex IDs and build name mappings
         userCards.forEach { cardWithDetails ->
             val card = cardWithDetails.card
             val dexIds = try {
@@ -190,13 +192,20 @@ class CollectionViewModel(
                 listOfNotNull(card.dexId?.toIntOrNull())
             }
 
+            val normalizedName = card.pokemonName ?: PokemonUtils.extractPokemonName(card.name)
+
             dexIds.forEach { id ->
                 buckets.getOrPut(id) { mutableListOf() }.add(cardWithDetails)
-                card.pokemonName?.let { nameToDexIdMap[it.lowercase()] = id }
+                // Always keep the best (shortest or most standard) normalized name for the ID
+                val currentName = idToNameMap[id]
+                if (currentName == null || normalizedName.length < currentName.length) {
+                    idToNameMap[id] = normalizedName
+                }
+                nameToDexIdMap[normalizedName.lowercase()] = id
             }
         }
 
-        // Second pass: handle cards missing Dex IDs but having a pokemonName that matches a known Dex ID
+        // Second pass: handle cards missing Dex IDs but having a name that matches a known Dex ID
         userCards.forEach { cardWithDetails ->
             val card = cardWithDetails.card
             val dexIds = try {
@@ -206,12 +215,11 @@ class CollectionViewModel(
             }
 
             if (dexIds.isEmpty()) {
-                card.pokemonName?.lowercase()?.let { normalizedName ->
-                    nameToDexIdMap[normalizedName]?.let { id ->
-                        val bucket = buckets.getOrPut(id) { mutableListOf() }
-                        if (!bucket.any { it.userCard.id == cardWithDetails.userCard.id }) {
-                            bucket.add(cardWithDetails)
-                        }
+                val normalizedName = card.pokemonName ?: PokemonUtils.extractPokemonName(card.name)
+                nameToDexIdMap[normalizedName.lowercase()]?.let { id ->
+                    val bucket = buckets.getOrPut(id) { mutableListOf() }
+                    if (!bucket.any { it.userCard.id == cardWithDetails.userCard.id }) {
+                        bucket.add(cardWithDetails)
                     }
                 }
             }
@@ -223,14 +231,15 @@ class CollectionViewModel(
         for (i in 1..maxDexNumber) {
             val cardsInBucket = buckets[i] ?: emptyList()
             if (cardsInBucket.isNotEmpty() || settings.showUncollected) {
-                // Prioritize normalized pokemonName for the entry title
-                val bestName = cardsInBucket.mapNotNull { it.card.pokemonName }.firstOrNull() 
-                    ?: cardsInBucket.firstOrNull()?.card?.name
+                // Prioritize the name we mapped for this ID
+                val displayName = idToNameMap[i] 
+                    ?: cardsInBucket.mapNotNull { it.card.pokemonName }.firstOrNull()
+                    ?: cardsInBucket.firstOrNull()?.card?.let { PokemonUtils.extractPokemonName(it.name) }
                 
                 entries.add(
                     PokedexEntry(
                         dexNumber = i,
-                        pokemonName = bestName,
+                        pokemonName = displayName,
                         cardCount = cardsInBucket.size,
                         totalQuantity = cardsInBucket.sumOf { it.userCard.quantity },
                         representativeImage = cardsInBucket.firstOrNull()?.card?.image,
