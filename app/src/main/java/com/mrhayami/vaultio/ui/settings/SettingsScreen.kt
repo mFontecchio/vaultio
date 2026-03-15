@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mrhayami.vaultio.BuildConfig
 import com.mrhayami.vaultio.data.DarkThemeConfig
 import com.mrhayami.vaultio.data.ThemeBrand
 import com.mrhayami.vaultio.data.UserPreferencesRepository
@@ -157,7 +158,7 @@ fun SettingsScreen(
 
             ListItem(
                 headlineContent = { Text("App Version") },
-                supportingContent = { Text("1.0.0 (Debug)") },
+                supportingContent = { Text("${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})") },
                 leadingContent = { Icon(Icons.Rounded.Info, contentDescription = null) }
             )
 
