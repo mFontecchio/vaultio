@@ -392,7 +392,8 @@ fun CollectionScreen(
         val moshi = remember { Moshi.Builder().build() }
         val listIntAdapter = remember { moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Integer::class.java)) }
         
-        val collectedForDex = uiState.userCards.filter { cardWithDetails ->
+        // Use filtered cards so folder filtering applies to the detailed list too
+        val collectedForDex = uiState.filteredUserCards.filter { cardWithDetails ->
             val card = cardWithDetails.card
             val dexIds = try {
                 card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
@@ -416,7 +417,7 @@ fun CollectionScreen(
                 )
 
                 if (collectedForDex.isEmpty()) {
-                    Text("No cards collected for this Pokemon yet.", modifier = Modifier.padding(vertical = 32.dp))
+                    Text("No cards collected for this Pokemon in the current filter.", modifier = Modifier.padding(vertical = 32.dp))
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
@@ -662,7 +663,8 @@ fun StickyControls(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                "${uiState.filteredUserCards.size} Cards",
+                if (uiState.viewMode == ViewMode.POKEDEX) "${uiState.pokedexEntries.count { it.isCollected }} / ${uiState.pokedexEntries.size} Collected"
+                else "${uiState.filteredUserCards.size} Cards",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(start = 16.dp)

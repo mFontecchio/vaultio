@@ -153,7 +153,23 @@ class CollectionViewModel(
             matchesSearch && matchesFolder
         }
 
-        val pokedexEntries = computePokedexEntries(userCards, pokedexSettings)
+        // Apply folder filtering to Pokedex collection status
+        // We compute entries based on cards that match the current folder
+        val folderFilteredCards = if (selectedFolderId == null) userCards 
+                                 else userCards.filter { card -> crossRefs.any { it.folderId == selectedFolderId && it.userCardId == card.userCard.id } }
+        
+        // If a folder is selected, we only show entries that have cards in that folder.
+        // We override showUncollected to false when a folder is active to "filter" the view.
+        val effectivePokedexSettings = if (selectedFolderId != null) pokedexSettings.copy(showUncollected = false) else pokedexSettings
+        var pokedexEntries = computePokedexEntries(folderFilteredCards, effectivePokedexSettings)
+        
+        // Further filter the Pokédex entries list if there's a search query
+        if (searchQuery.isNotBlank()) {
+            pokedexEntries = pokedexEntries.filter { entry ->
+                entry.pokemonName?.contains(searchQuery, ignoreCase = true) == true ||
+                entry.dexNumber.toString() == searchQuery
+            }
+        }
 
         CollectionUiState(
             viewMode = viewMode,
