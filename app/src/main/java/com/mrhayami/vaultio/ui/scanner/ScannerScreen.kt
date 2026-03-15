@@ -2,6 +2,7 @@ package com.mrhayami.vaultio.ui.scanner
 
 import android.Manifest
 import android.util.Size
+import android.widget.Toast
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -57,9 +58,17 @@ fun ScannerScreen(
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     val uiState by viewModel.uiState.collectAsState()
     var selectedCard by remember { mutableStateOf<com.mrhayami.vaultio.data.remote.TcgDexCard?>(null) }
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         cameraPermissionState.launchPermissionRequest()
+    }
+
+    LaunchedEffect(uiState.showSaveSuccess) {
+        if (uiState.showSaveSuccess) {
+            Toast.makeText(context, "Card added to collection", Toast.LENGTH_SHORT).show()
+            viewModel.consumeSaveSuccess()
+        }
     }
 
     if (cameraPermissionState.status.isGranted) {

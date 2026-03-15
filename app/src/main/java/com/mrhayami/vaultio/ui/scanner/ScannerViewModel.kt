@@ -22,6 +22,7 @@ data class ScannerUiState(
     val isSearching: Boolean = false,
     val isPaused: Boolean = false,
     val autoSelectedCard: TcgDexCard? = null,
+    val showSaveSuccess: Boolean = false,
     val errorMessage: String? = null
 )
 
@@ -228,9 +229,14 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
                 ),
                 folderIds = folderIds
             )
+            _uiState.update { it.copy(showSaveSuccess = true) }
             // Don't go back, stay in scanner but clear state for next card
             resumeScanning()
         }
+    }
+
+    fun consumeSaveSuccess() {
+        _uiState.update { it.copy(showSaveSuccess = false) }
     }
 
     fun clearDetectedNumber() {

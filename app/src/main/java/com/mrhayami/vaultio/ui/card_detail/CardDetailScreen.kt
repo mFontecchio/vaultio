@@ -1,5 +1,6 @@
 package com.mrhayami.vaultio.ui.card_detail
 
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
@@ -42,7 +44,7 @@ fun CardDetailScreen(
         factory = CardDetailViewModelFactory(repository, SavedStateHandle(mapOf("userCardId" to userCardId)))
     )
     val uiState by viewModel.uiState.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     var quantity by remember { mutableIntStateOf(0) }
     var condition by remember { mutableStateOf("") }
@@ -70,13 +72,12 @@ fun CardDetailScreen(
 
     LaunchedEffect(uiState.showSaveSuccess) {
         if (uiState.showSaveSuccess) {
-            snackbarHostState.showSnackbar("Card updated successfully")
+            Toast.makeText(context, "Card updated successfully", Toast.LENGTH_SHORT).show()
             viewModel.consumeSaveSuccess()
         }
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(uiState.cardWithDetails?.card?.name ?: "", fontWeight = FontWeight.Bold) },

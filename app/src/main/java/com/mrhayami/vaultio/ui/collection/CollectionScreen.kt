@@ -2,6 +2,7 @@
 
 package com.mrhayami.vaultio.ui.collection
 
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -82,17 +84,16 @@ fun CollectionScreen(
     
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     LaunchedEffect(uiState.showSaveSuccess) {
         if (uiState.showSaveSuccess) {
-            snackbarHostState.showSnackbar("Card added to collection")
+            Toast.makeText(context, "Card added to collection", Toast.LENGTH_SHORT).show()
             viewModel.consumeSaveSuccess()
         }
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             if (uiState.isSelectionMode) {
                 TopAppBar(
@@ -410,7 +411,7 @@ fun CollectionScreen(
 
     if (selectedDexId != null) {
         val moshi = remember { Moshi.Builder().build() }
-        val listIntAdapter = remember { moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Integer::class.java)) }
+        val listIntAdapter = remember { moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Int::class.javaObjectType)) }
         
         // Use filtered cards so folder filtering applies to the detailed list too
         val collectedForDex = uiState.filteredUserCards.filter { cardWithDetails ->
