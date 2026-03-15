@@ -24,6 +24,9 @@ interface SetDao {
     @Query("SELECT * FROM sets ORDER BY releaseDate DESC")
     fun getAllSets(): Flow<List<SetEntity>>
 
+    @Query("SELECT * FROM sets")
+    suspend fun getSetsSync(): List<SetEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSets(sets: List<SetEntity>): List<Long>
 
@@ -119,6 +122,9 @@ interface UserCardDao {
 
     @Query("DELETE FROM folder_cards WHERE userCardId = :userCardId AND folderId = :folderId")
     suspend fun removeCardFromFolder(userCardId: Long, folderId: Long): Int
+
+    @Query("SELECT * FROM folder_cards")
+    fun getAllFolderCardCrossRefs(): Flow<List<FolderCardCrossRef>>
 }
 
 @Dao

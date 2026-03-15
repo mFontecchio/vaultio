@@ -9,6 +9,7 @@ import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.local.SetEntity
+import com.mrhayami.vaultio.data.local.FolderCardCrossRef
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.squareup.moshi.Moshi
@@ -107,6 +108,7 @@ class CollectionViewModel(
     val uiState: StateFlow<CollectionUiState> = combine(
         repository.allUserCards,
         repository.allFolders,
+        repository.allFolderCardCrossRefs,
         _searchQuery,
         _selectedFolderId,
         _isSearchBarVisible,
@@ -123,19 +125,21 @@ class CollectionViewModel(
         val userCards = args[0] as List<CardWithDetails>
         @Suppress("UNCHECKED_CAST")
         val folders = args[1] as List<FolderEntity>
-        val searchQuery = args[2] as String
-        val selectedFolderId = args[3] as Long?
-        val isSearchBarVisible = args[4] as Boolean
-        val viewMode = args[5] as ViewMode
-        val sortMode = args[6] as SortMode
         @Suppress("UNCHECKED_CAST")
-        val selectedIds = args[7] as Set<Long>
-        val listSettings = args[8] as ListSettings
-        val gridSettings = args[9] as GridSettings
-        val pokedexSettings = args[10] as PokedexSettings
+        val crossRefs = args[2] as List<FolderCardCrossRef>
+        val searchQuery = args[3] as String
+        val selectedFolderId = args[4] as Long?
+        val isSearchBarVisible = args[5] as Boolean
+        val viewMode = args[6] as ViewMode
+        val sortMode = args[7] as SortMode
         @Suppress("UNCHECKED_CAST")
-        val sets = args[11] as Map<String, SetEntity>
-        val showSaveSuccess = args[12] as Boolean
+        val selectedIds = args[8] as Set<Long>
+        val listSettings = args[9] as ListSettings
+        val gridSettings = args[10] as GridSettings
+        val pokedexSettings = args[11] as PokedexSettings
+        @Suppress("UNCHECKED_CAST")
+        val sets = args[12] as Map<String, SetEntity>
+        val showSaveSuccess = args[13] as Boolean
 
         val filtered = userCards.filter { card ->
             val matchesSearch = if (searchQuery.isBlank()) true 
@@ -144,9 +148,9 @@ class CollectionViewModel(
                      card.set.name.contains(searchQuery, ignoreCase = true)
             
             val matchesFolder = if (selectedFolderId == null) true
-                else false // Folders need a more complex join or pre-filtered flow if we want this to work here efficiently
+                else crossRefs.any { it.folderId == selectedFolderId && it.userCardId == card.userCard.id }
             
-            matchesSearch
+            matchesSearch && matchesFolder
         }
 
         val pokedexEntries = computePokedexEntries(userCards, pokedexSettings)
@@ -296,7 +300,7 @@ class CollectionViewModel(
         }
     }
 
-    fun addUserCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String) {
+    fun addUserCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String, folderIds: List<Long> = emptyList()) {
         viewModelScope.launch {
             repository.addUserCard(
                 card,
@@ -306,7 +310,8 @@ class CollectionViewModel(
                     condition = condition,
                     printing = printing,
                     finish = finish
-                )
+                ),
+                folderIds = folderIds
             )
             _showSaveSuccess.value = true
         }

@@ -226,8 +226,9 @@ fun ScannerScreen(
         ) {
             MetadataModal(
                 card = selectedCard!!,
-                onConfirm = { q, c, p, f ->
-                    viewModel.saveScannedCard(selectedCard!!, q, c, p, f)
+                folders = uiState.folders,
+                onConfirm = { q, c, p, f, folderIds ->
+                    viewModel.saveScannedCard(selectedCard!!, q, c, p, f, folderIds)
                     selectedCard = null
                 },
                 onBack = { selectedCard = null }

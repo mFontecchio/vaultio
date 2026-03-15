@@ -31,6 +31,7 @@ class VaultioRepository(
     val allSets: Flow<List<SetEntity>> = setDao.getAllSets()
     val allUserCards: Flow<List<CardWithDetails>> = userCardDao.getAllUserCardsWithDetails()
     val allFolders: Flow<List<FolderEntity>> = folderDao.getAllFolders()
+    val allFolderCardCrossRefs: Flow<List<FolderCardCrossRef>> = userCardDao.getAllFolderCardCrossRefs()
 
     fun getUserCardById(userCardId: Long): Flow<CardWithDetails?> {
         return userCardDao.getUserCardById(userCardId)
@@ -46,6 +47,9 @@ class VaultioRepository(
 
     suspend fun refreshSets() {
         try {
+            val currentSets = setDao.getSetsSync()
+            val downloadedSetIds = currentSets.filter { it.isDownloaded }.map { it.id }.toSet()
+            
             val remoteSets = tcgDexApi.getSets()
             val entities = remoteSets.map {
                 val setId = it.id
@@ -60,7 +64,8 @@ class VaultioRepository(
                     symbol = ensureImageUrl(rawSymbol),
                     totalCards = it.cardCount.total,
                     officialCards = it.cardCount.official,
-                    releaseDate = it.releaseDate
+                    releaseDate = it.releaseDate,
+                    isDownloaded = downloadedSetIds.contains(setId)
                 )
             }
             setDao.insertSets(entities)
@@ -133,7 +138,7 @@ class VaultioRepository(
         }
     }
 
-    suspend fun addUserCard(card: TcgDexCard, userCardEntity: UserCardEntity) {
+    suspend fun addUserCard(card: TcgDexCard, userCardEntity: UserCardEntity, folderIds: List<Long> = emptyList()) {
         Log.d("Vaultio", "Adding card to collection: ${card.name} (${card.id})")
         val setId = card.id.substringBefore("-")
         var setEntity = setDao.getSetById(setId)
@@ -243,6 +248,12 @@ class VaultioRepository(
         }
         val userCardIdResult = userCardDao.insertUserCard(userCardEntity.copy(cardId = card.id))
         Log.d("Vaultio", "Inserted UserCard with result ID: $userCardIdResult")
+
+        if (folderIds.isNotEmpty()) {
+            val crossRefs = folderIds.map { FolderCardCrossRef(folderId = it, userCardId = userCardIdResult) }
+            userCardDao.insertFolderCardCrossRefs(crossRefs)
+            Log.d("Vaultio", "Added UserCard $userCardIdResult to folders: $folderIds")
+        }
     }
 
     private fun extractTcgPlayerId(url: String?): String? {
@@ -304,5 +315,9 @@ class VaultioRepository(
         } else {
             apiUsageDao.insertUsage(currentUsage.copy(count = currentUsage.count + 1))
         }
+    }
+
+    suspend fun logTelemetry(api: String, endpoint: String, status: Int, latency: Long) {
+        telemetryDao.insertLog(TelemetryLogEntity(api = api, endpoint = endpoint, status = status, latency = latency))
     }
 }

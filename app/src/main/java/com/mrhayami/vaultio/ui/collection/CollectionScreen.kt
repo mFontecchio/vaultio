@@ -240,6 +240,7 @@ fun CollectionScreen(
                 } else if (uiState.filteredUserCards.isEmpty() && uiState.viewMode != ViewMode.POKEDEX) {
                     Text(
                         if (uiState.searchQuery.isNotEmpty()) "No cards match your search." 
+                        else if (uiState.selectedFolderId != null) "This folder is empty."
                         else "Your collection is empty.\nTap + to add cards!",
                         modifier = Modifier.align(Alignment.Center),
                         textAlign = TextAlign.Center,
@@ -990,8 +991,9 @@ fun AddCardModal(viewModel: CollectionViewModel, onDismiss: () -> Unit) {
     } else {
         MetadataModal(
             card = selectedCard!!,
-            onConfirm = { q, c, p, f ->
-                viewModel.addUserCard(selectedCard!!, q, c, p, f)
+            folders = collectionUiState.folders,
+            onConfirm = { q, c, p, f, folderIds ->
+                viewModel.addUserCard(selectedCard!!, q, c, p, f, folderIds)
                 onDismiss()
             },
             onBack = { selectedCard = null }

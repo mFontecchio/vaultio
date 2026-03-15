@@ -20,19 +20,22 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MetadataModal(
     card: TcgDexCard,
-    onConfirm: (Int, String, String, String) -> Unit,
+    folders: List<FolderEntity> = emptyList(),
+    onConfirm: (Int, String, String, String, List<Long>) -> Unit,
     onBack: () -> Unit
 ) {
     var quantity by remember { mutableIntStateOf(1) }
     var condition by remember { mutableStateOf("Near Mint") }
     var printing by remember { mutableStateOf("Standard") }
     var finish by remember { mutableStateOf("Non Holo") }
+    val selectedFolderIds = remember { mutableStateListOf<Long>() }
 
     Column(
         modifier = Modifier
@@ -128,13 +131,40 @@ fun MetadataModal(
 
                 val finishes = listOf("Non Holo", "Holo", "Reverse Holo", "Textured", "Gold")
                 DropdownSelector("Finish", finish, finishes) { finish = it }
+
+                if (folders.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        "Add to Folders", 
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        folders.forEach { folder ->
+                            val isSelected = selectedFolderIds.contains(folder.id)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    if (isSelected) selectedFolderIds.remove(folder.id)
+                                    else selectedFolderIds.add(folder.id)
+                                },
+                                label = { Text(folder.name) },
+                                shape = CircleShape
+                            )
+                        }
+                    }
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
-            onClick = { onConfirm(quantity, condition, printing, finish) },
+            onClick = { onConfirm(quantity, condition, printing, finish, selectedFolderIds.toList()) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),

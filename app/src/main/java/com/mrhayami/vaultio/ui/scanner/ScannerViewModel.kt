@@ -3,14 +3,13 @@ package com.mrhayami.vaultio.ui.scanner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class ScannerUiState(
@@ -19,6 +18,7 @@ data class ScannerUiState(
     val detectedTotal: String? = null,
     val detectedName: String? = null,
     val candidates: List<TcgDexCard> = emptyList(),
+    val folders: List<FolderEntity> = emptyList(),
     val isSearching: Boolean = false,
     val isPaused: Boolean = false,
     val autoSelectedCard: TcgDexCard? = null,
@@ -28,7 +28,12 @@ data class ScannerUiState(
 class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScannerUiState())
-    val uiState: StateFlow<ScannerUiState> = _uiState.asStateFlow()
+    val uiState: StateFlow<ScannerUiState> = combine(
+        _uiState,
+        repository.allFolders
+    ) { state, folders ->
+        state.copy(folders = folders)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScannerUiState())
 
     private var searchJob: Job? = null
     private var lastMatchedNumber: String? = null
@@ -77,12 +82,12 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
         if (bestLocalId != null && bestLocalId == lastMatchedNumber) return
 
         if (bestLocalId != null) {
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 detectedNumber = bestLocalId,
                 detectedTotal = bestTotal,
                 detectedName = bestName,
                 isSearching = true
-            )
+            ) }
             
             // Debounce window (100ms) as per deep dive
             searchJob?.cancel()
@@ -172,16 +177,16 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
             // Check if we have a definitive match
             if (filtered.size == 1) {
                 lastMatchedNumber = localId
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     autoSelectedCard = filtered.first(),
                     isSearching = false,
                     isPaused = true
-                )
+                ) }
             } else {
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     candidates = filtered.take(5), // Limit to top 5
                     isSearching = false
-                )
+                ) }
             }
         }
     }
@@ -200,17 +205,17 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
 
     fun resumeScanning() {
         lastMatchedNumber = null
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             isPaused = false, 
             autoSelectedCard = null, 
             detectedNumber = null,
             detectedTotal = null,
             detectedName = null,
             candidates = emptyList()
-        )
+        ) }
     }
 
-    fun saveScannedCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String) {
+    fun saveScannedCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String, folderIds: List<Long> = emptyList()) {
         viewModelScope.launch {
             repository.addUserCard(
                 card,
@@ -220,7 +225,8 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
                     condition = condition,
                     printing = printing,
                     finish = finish
-                )
+                ),
+                folderIds = folderIds
             )
             // Don't go back, stay in scanner but clear state for next card
             resumeScanning()
@@ -229,12 +235,12 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
 
     fun clearDetectedNumber() {
         lastMatchedNumber = null
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             detectedNumber = null, 
             detectedTotal = null, 
             detectedName = null, 
             candidates = emptyList()
-        )
+        ) }
     }
 }
 

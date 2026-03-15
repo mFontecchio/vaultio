@@ -8,6 +8,7 @@ import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.PriceEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
+import com.mrhayami.vaultio.data.local.FolderCardCrossRef
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 data class CardDetailUiState(
     val cardWithDetails: CardWithDetails? = null,
     val folders: List<FolderEntity> = emptyList(),
+    val cardFolderIds: Set<Long> = emptySet(),
     val prices: List<PriceEntity> = emptyList(),
     val showEnergyAnimations: Boolean = true,
     val showFinishAnimations: Boolean = true,
@@ -41,14 +43,21 @@ class CardDetailViewModel(
             repository.getUserCardById(userCardId).flatMapLatest { cardWithDetails ->
                 combine(
                     repository.allFolders,
+                    repository.allFolderCardCrossRefs,
                     repository.userPreferencesRepository.showEnergyAnimations,
                     repository.userPreferencesRepository.showFinishAnimations,
                     if (cardWithDetails != null) repository.getPricesForCard(cardWithDetails.card.id) 
                     else flowOf(emptyList<PriceEntity>())
-                ) { folders, showEnergyAnims, showFinishAnims, prices ->
+                ) { folders, crossRefs, showEnergyAnims, showFinishAnims, prices ->
+                    val cardFolderIds = crossRefs
+                        .filter { it.userCardId == userCardId }
+                        .map { it.folderId }
+                        .toSet()
+
                     _uiState.value.copy(
                         cardWithDetails = cardWithDetails,
                         folders = folders,
+                        cardFolderIds = cardFolderIds,
                         prices = prices,
                         showEnergyAnimations = showEnergyAnims,
                         showFinishAnimations = showFinishAnims,

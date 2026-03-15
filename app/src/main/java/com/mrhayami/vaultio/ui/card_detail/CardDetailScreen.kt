@@ -395,7 +395,7 @@ fun CardDetailScreen(
 
                     FlowRow(modifier = Modifier.fillMaxWidth()) {
                         uiState.folders.forEach { folder ->
-                            val isInFolder = false // TODO: Real check via CrossRef
+                            val isInFolder = uiState.cardFolderIds.contains(folder.id)
                             FilterChip(
                                 selected = isInFolder,
                                 onClick = { 
