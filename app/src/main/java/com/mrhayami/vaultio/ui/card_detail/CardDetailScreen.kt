@@ -1,6 +1,8 @@
 package com.mrhayami.vaultio.ui.card_detail
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -24,6 +26,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.theme.*
+import com.mrhayami.vaultio.ui.components.*
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
@@ -46,6 +49,7 @@ fun CardDetailScreen(
     var printing by remember { mutableStateOf("") }
     var finish by remember { mutableStateOf("") }
     var isInitialized by remember { mutableStateOf(false) }
+    var is3dViewEnabled by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.cardWithDetails) {
         if (uiState.cardWithDetails != null && !isInitialized) {
@@ -152,6 +156,9 @@ fun CardDetailScreen(
                 }
             }
 
+            val isHolo = finish == "Holo" || finish == "Reverse Holo"
+            val isGold = finish == "Gold"
+
             Box(modifier = Modifier.fillMaxSize()) {
                 // Background Gradient
                 Box(
@@ -167,6 +174,7 @@ fun CardDetailScreen(
                                 )
                             )
                         )
+                        .sparkleEffect(show = isHolo)
                 )
 
                 Column(
@@ -176,27 +184,56 @@ fun CardDetailScreen(
                         .padding(horizontal = 16.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Card Image Display (Transparent container instead of tile)
+                    // Card Image Display
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth(0.85f)
-                                .aspectRatio(0.718f), // Standard card ratio
-                            shape = RoundedCornerShape(12.dp),
-                            shadowElevation = 16.dp,
-                            color = Color.Transparent
-                        ) {
-                            AsyncImage(
-                                model = "${card.image}/high.webp",
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit
-                            )
+                        if (is3dViewEnabled) {
+                            Box(modifier = Modifier.fillMaxWidth().height(400.dp)) {
+                                ThreeDCard {
+                                    AsyncImage(
+                                        model = "${card.image}/high.webp",
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .sparkleEffect(show = isHolo)
+                                            .shimmerEffect(show = isGold),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { is3dViewEnabled = false },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(16.dp)
+                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), CircleShape)
+                                ) {
+                                    Icon(Icons.Rounded.Close, "Exit 3D View")
+                                }
+                            }
+                        } else {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .aspectRatio(0.718f)
+                                    .clickable { is3dViewEnabled = true },
+                                shape = RoundedCornerShape(12.dp),
+                                shadowElevation = 16.dp,
+                                color = Color.Transparent
+                            ) {
+                                AsyncImage(
+                                    model = "${card.image}/high.webp",
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .sparkleEffect(show = isHolo)
+                                        .shimmerEffect(show = isGold),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
                         }
                     }
 

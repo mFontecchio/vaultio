@@ -54,7 +54,7 @@ import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
-import com.mrhayami.vaultio.ui.components.MetadataModal
+import com.mrhayami.vaultio.ui.components.*
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import kotlinx.coroutines.launch
@@ -706,6 +706,8 @@ fun ListView(
     ) {
         items(userCards) { item ->
             val isSelected = selectedIds.contains(item.userCard.id)
+            val isNew = System.currentTimeMillis() - item.userCard.dateAdded < 60_000 // 1 minute
+            
             ListItem(
                 headlineContent = { Text(item.card.name, fontWeight = FontWeight.Bold) },
                 supportingContent = {
@@ -719,6 +721,7 @@ fun ListView(
                             .size(if (settings.isCompact) 48.dp else 64.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .shimmerEffect(show = isNew)
                     ) {
                         AsyncImage(
                             model = "${item.card.image}/low.webp",
@@ -772,6 +775,8 @@ fun GridView(
     ) {
         items(userCards) { item ->
             val isSelected = selectedIds.contains(item.userCard.id)
+            val isNew = System.currentTimeMillis() - item.userCard.dateAdded < 60_000 // 1 minute
+            
             Card(
                 modifier = Modifier.combinedClickable(
                     onClick = { onCardClick(item.userCard.id) },
@@ -787,7 +792,8 @@ fun GridView(
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(0.718f),
+                            .aspectRatio(0.718f)
+                            .shimmerEffect(show = isNew),
                         contentScale = ContentScale.FillBounds
                     )
                     if (isSelected) {
