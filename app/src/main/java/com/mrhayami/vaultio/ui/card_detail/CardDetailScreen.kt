@@ -133,15 +133,16 @@ fun CardDetailScreen(
                 it.condition == userCard.condition 
             } ?: uiState.prices.firstOrNull()
 
-            val energyColor = remember(card.types) {
-                val type = card.types?.let { 
-                    if (it.startsWith("[")) {
-                        it.substringAfter("\"").substringBefore("\"")
-                    } else {
-                        it.split(",").firstOrNull()?.trim()
-                    }
+            val primaryType = remember(card.types) {
+                if (card.types?.startsWith("[") == true) {
+                    card.types.substringAfter("\"").substringBefore("\"")
+                } else {
+                    card.types?.split(",")?.firstOrNull()?.trim()
                 }
-                when (type?.lowercase()) {
+            }
+
+            val energyColor = remember(primaryType) {
+                when (primaryType?.lowercase()) {
                     "grass" -> EnergyGrass
                     "fire" -> EnergyFire
                     "water" -> EnergyWater
@@ -158,9 +159,10 @@ fun CardDetailScreen(
 
             val isHolo = finish == "Holo" || finish == "Reverse Holo"
             val isGold = finish == "Gold"
+            val showFinishAnims = uiState.showFinishAnimations
 
             Box(modifier = Modifier.fillMaxSize()) {
-                // Background Gradient
+                // Background Gradient + Energy Effect
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -174,7 +176,8 @@ fun CardDetailScreen(
                                 )
                             )
                         )
-                        .sparkleEffect(show = isHolo)
+                        .energyEffect(type = primaryType, show = uiState.showEnergyAnimations)
+                        .sparkleEffect(show = isHolo && showFinishAnims)
                 )
 
                 Column(
@@ -199,8 +202,8 @@ fun CardDetailScreen(
                                         contentDescription = null,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .sparkleEffect(show = isHolo)
-                                            .shimmerEffect(show = isGold),
+                                            .sparkleEffect(show = isHolo && showFinishAnims)
+                                            .shimmerEffect(show = isGold && showFinishAnims),
                                         contentScale = ContentScale.Fit
                                     )
                                 }
@@ -229,8 +232,8 @@ fun CardDetailScreen(
                                     contentDescription = null,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .sparkleEffect(show = isHolo)
-                                        .shimmerEffect(show = isGold),
+                                        .sparkleEffect(show = isHolo && showFinishAnims)
+                                        .shimmerEffect(show = isGold && showFinishAnims),
                                     contentScale = ContentScale.Fit
                                 )
                             }

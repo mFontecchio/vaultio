@@ -90,6 +90,30 @@ fun SettingsScreen(
                 modifier = Modifier.clickable { showDarkConfigDialog = true }
             )
 
+            ListItem(
+                headlineContent = { Text("Energy Animations") },
+                supportingContent = { Text("Special background effects for card types") },
+                leadingContent = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
+                trailingContent = {
+                    Switch(
+                        checked = uiState.showEnergyAnimations,
+                        onCheckedChange = { viewModel.setShowEnergyAnimations(it) }
+                    )
+                }
+            )
+
+            ListItem(
+                headlineContent = { Text("Card Finish Animations") },
+                supportingContent = { Text("Holo sparkle and Gold shimmer effects") },
+                leadingContent = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
+                trailingContent = {
+                    Switch(
+                        checked = uiState.showFinishAnimations,
+                        onCheckedChange = { viewModel.setShowFinishAnimations(it) }
+                    )
+                }
+            )
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
             Text("Market Data", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

@@ -17,6 +17,8 @@ data class CardDetailUiState(
     val cardWithDetails: CardWithDetails? = null,
     val folders: List<FolderEntity> = emptyList(),
     val prices: List<PriceEntity> = emptyList(),
+    val showEnergyAnimations: Boolean = true,
+    val showFinishAnimations: Boolean = true,
     val isLoading: Boolean = true,
     val isDeleted: Boolean = false,
     val showSaveSuccess: Boolean = false,
@@ -39,13 +41,17 @@ class CardDetailViewModel(
             repository.getUserCardById(userCardId).flatMapLatest { cardWithDetails ->
                 combine(
                     repository.allFolders,
+                    repository.userPreferencesRepository.showEnergyAnimations,
+                    repository.userPreferencesRepository.showFinishAnimations,
                     if (cardWithDetails != null) repository.getPricesForCard(cardWithDetails.card.id) 
                     else flowOf(emptyList<PriceEntity>())
-                ) { folders, prices ->
+                ) { folders, showEnergyAnims, showFinishAnims, prices ->
                     _uiState.value.copy(
                         cardWithDetails = cardWithDetails,
                         folders = folders,
                         prices = prices,
+                        showEnergyAnimations = showEnergyAnims,
+                        showFinishAnimations = showFinishAnims,
                         isLoading = false
                     )
                 }

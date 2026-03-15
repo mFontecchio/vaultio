@@ -45,6 +45,9 @@ class UserPreferencesRepository(context: Context) {
 
         val THEME_BRAND = stringPreferencesKey("theme_brand")
         val DARK_THEME_CONFIG = stringPreferencesKey("dark_theme_config")
+        
+        val SHOW_ENERGY_ANIMATIONS = booleanPreferencesKey("show_energy_animations")
+        val SHOW_FINISH_ANIMATIONS = booleanPreferencesKey("show_finish_animations")
     }
 
     val viewMode: Flow<ViewMode> = dataStore.data.map {
@@ -130,6 +133,26 @@ class UserPreferencesRepository(context: Context) {
     suspend fun setDarkThemeConfig(config: DarkThemeConfig) {
         dataStore.edit {
             it[PreferencesKeys.DARK_THEME_CONFIG] = config.name
+        }
+    }
+
+    val showEnergyAnimations: Flow<Boolean> = dataStore.data.map {
+        it[PreferencesKeys.SHOW_ENERGY_ANIMATIONS] ?: true
+    }
+
+    suspend fun setShowEnergyAnimations(show: Boolean) {
+        dataStore.edit {
+            it[PreferencesKeys.SHOW_ENERGY_ANIMATIONS] = show
+        }
+    }
+
+    val showFinishAnimations: Flow<Boolean> = dataStore.data.map {
+        it[PreferencesKeys.SHOW_FINISH_ANIMATIONS] ?: true
+    }
+
+    suspend fun setShowFinishAnimations(show: Boolean) {
+        dataStore.edit {
+            it[PreferencesKeys.SHOW_FINISH_ANIMATIONS] = show
         }
     }
 }

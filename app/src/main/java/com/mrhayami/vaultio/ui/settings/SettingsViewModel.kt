@@ -18,6 +18,8 @@ import kotlinx.coroutines.launch
 data class SettingsUiState(
     val themeBrand: ThemeBrand = ThemeBrand.DEFAULT,
     val darkThemeConfig: DarkThemeConfig = DarkThemeConfig.FOLLOW_SYSTEM,
+    val showEnergyAnimations: Boolean = true,
+    val showFinishAnimations: Boolean = true,
     val apiUsage: Int = 0,
     val offlineSetsCount: Int = 0,
     val isLoading: Boolean = true
@@ -31,11 +33,15 @@ class SettingsViewModel(
     val uiState: StateFlow<SettingsUiState> = combine(
         userPreferencesRepository.themeBrand,
         userPreferencesRepository.darkThemeConfig,
+        userPreferencesRepository.showEnergyAnimations,
+        userPreferencesRepository.showFinishAnimations,
         repository.allSets.map { sets -> sets.count { it.isDownloaded } }
-    ) { themeBrand, darkThemeConfig, downloadedCount ->
+    ) { themeBrand, darkThemeConfig, showEnergyAnims, showFinishAnims, downloadedCount ->
         SettingsUiState(
             themeBrand = themeBrand,
             darkThemeConfig = darkThemeConfig,
+            showEnergyAnimations = showEnergyAnims,
+            showFinishAnimations = showFinishAnims,
             apiUsage = repository.getApiUsage(),
             offlineSetsCount = downloadedCount,
             isLoading = false
@@ -58,6 +64,18 @@ class SettingsViewModel(
         }
     }
 
+    fun setShowEnergyAnimations(show: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setShowEnergyAnimations(show)
+        }
+    }
+
+    fun setShowFinishAnimations(show: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setShowFinishAnimations(show)
+        }
+    }
+
     fun clearImageCache() {
         // TODO: Implement using Coil's ImageLoader if needed
     }
@@ -66,6 +84,8 @@ class SettingsViewModel(
         viewModelScope.launch {
             userPreferencesRepository.setThemeBrand(ThemeBrand.DEFAULT)
             userPreferencesRepository.setDarkThemeConfig(DarkThemeConfig.FOLLOW_SYSTEM)
+            userPreferencesRepository.setShowEnergyAnimations(true)
+            userPreferencesRepository.setShowFinishAnimations(true)
             userPreferencesRepository.setViewMode(ViewMode.GRID)
             userPreferencesRepository.setSortMode(SortMode.DATE_ADDED)
             userPreferencesRepository.setListSettings(ListSettings())

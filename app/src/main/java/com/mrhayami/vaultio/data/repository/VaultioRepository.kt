@@ -2,6 +2,7 @@ package com.mrhayami.vaultio.data.repository
 
 import android.util.Log
 import com.mrhayami.vaultio.data.PokemonUtils
+import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.*
 import com.mrhayami.vaultio.data.remote.JustTcgApi
 import com.mrhayami.vaultio.data.remote.TcgDexApi
@@ -21,7 +22,8 @@ class VaultioRepository(
     private val apiUsageDao: ApiUsageDao,
     private val telemetryDao: TelemetryDao,
     private val tcgDexApi: TcgDexApi,
-    val justTcgApi: JustTcgApi
+    val justTcgApi: JustTcgApi,
+    val userPreferencesRepository: UserPreferencesRepository
 ) {
     private val moshi = Moshi.Builder().build()
     private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Integer::class.java))
