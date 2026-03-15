@@ -138,6 +138,15 @@ class VaultioRepository(
         }
     }
 
+    suspend fun getCardDetail(cardId: String): TcgDexCard? {
+        return try {
+            tcgDexApi.getCardDetail(cardId)
+        } catch (e: Exception) {
+            Log.e("VaultioRepository", "Error fetching card detail for $cardId", e)
+            null
+        }
+    }
+
     suspend fun addUserCard(card: TcgDexCard, userCardEntity: UserCardEntity, folderIds: List<Long> = emptyList()) {
         Log.d("Vaultio", "Adding card to collection: ${card.name} (${card.id})")
         val setId = card.id.substringBefore("-")
@@ -300,6 +309,12 @@ class VaultioRepository(
 
     suspend fun updatePrice(price: PriceEntity) {
         priceDao.insertPrices(listOf(price))
+    }
+
+    suspend fun updatePrices(prices: List<PriceEntity>) {
+        if (prices.isNotEmpty()) {
+            priceDao.insertPrices(prices)
+        }
     }
 
     suspend fun getApiUsage(): Int {
