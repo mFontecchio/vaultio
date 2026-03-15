@@ -18,7 +18,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 enum class ViewMode { LIST, GRID, POKEDEX }
-enum class SortMode { NAME, SET, VALUE, DATE_ADDED }
+enum class SortMode { NAME, SET, VALUE, DATE_ADDED, RARITY, QUANTITY, NUMBER }
+enum class SortDirection { ASCENDING, DESCENDING }
 
 data class ListSettings(
     val showPrices: Boolean = true,
@@ -35,6 +36,14 @@ data class PokedexSettings(
     val useShinySprites: Boolean = false
 )
 
+data class FilterSettings(
+    val rarities: Set<String> = emptySet(),
+    val categories: Set<String> = emptySet(),
+    val types: Set<String> = emptySet(),
+    val conditions: Set<String> = emptySet(),
+    val finishes: Set<String> = emptySet()
+)
+
 data class PokedexEntry(
     val dexNumber: Int,
     val pokemonName: String?,
@@ -47,6 +56,8 @@ data class PokedexEntry(
 data class CollectionUiState(
     val viewMode: ViewMode = ViewMode.GRID,
     val sortMode: SortMode = SortMode.DATE_ADDED,
+    val sortDirection: SortDirection = SortDirection.DESCENDING,
+    val filterSettings: FilterSettings = FilterSettings(),
     val userCards: List<CardWithDetails> = emptyList(),
     val filteredUserCards: List<CardWithDetails> = emptyList(),
     val pokedexEntries: List<PokedexEntry> = emptyList(),
@@ -63,7 +74,11 @@ data class CollectionUiState(
     val gridSettings: GridSettings = GridSettings(),
     val pokedexSettings: PokedexSettings = PokedexSettings(),
     val sets: Map<String, SetEntity> = emptyMap(),
-    val showSaveSuccess: Boolean = false
+    val showSaveSuccess: Boolean = false,
+    // Available filter options based on current collection
+    val availableRarities: List<String> = emptyList(),
+    val availableCategories: List<String> = emptyList(),
+    val availableTypes: List<String> = emptyList()
 )
 
 class CollectionViewModel(
@@ -79,6 +94,8 @@ class CollectionViewModel(
     private val _isSearchBarVisible = MutableStateFlow(false)
     private val _viewMode = MutableStateFlow(ViewMode.GRID)
     private val _sortMode = MutableStateFlow(SortMode.DATE_ADDED)
+    private val _sortDirection = MutableStateFlow(SortDirection.DESCENDING)
+    private val _filterSettings = MutableStateFlow(FilterSettings())
     
     private val _listSettings = MutableStateFlow(ListSettings())
     private val _gridSettings = MutableStateFlow(GridSettings())
@@ -114,6 +131,8 @@ class CollectionViewModel(
         _isSearchBarVisible,
         _viewMode,
         _sortMode,
+        _sortDirection,
+        _filterSettings,
         _selectionState,
         _listSettings,
         _gridSettings,
@@ -132,38 +151,68 @@ class CollectionViewModel(
         val isSearchBarVisible = args[5] as Boolean
         val viewMode = args[6] as ViewMode
         val sortMode = args[7] as SortMode
+        val sortDirection = args[8] as SortDirection
+        val filterSettings = args[9] as FilterSettings
         @Suppress("UNCHECKED_CAST")
-        val selectedIds = args[8] as Set<Long>
-        val listSettings = args[9] as ListSettings
-        val gridSettings = args[10] as GridSettings
-        val pokedexSettings = args[11] as PokedexSettings
+        val selectedIds = args[10] as Set<Long>
+        val listSettings = args[11] as ListSettings
+        val gridSettings = args[12] as GridSettings
+        val pokedexSettings = args[13] as PokedexSettings
         @Suppress("UNCHECKED_CAST")
-        val sets = args[12] as Map<String, SetEntity>
-        val showSaveSuccess = args[13] as Boolean
+        val sets = args[14] as Map<String, SetEntity>
+        val showSaveSuccess = args[15] as Boolean
 
-        val filtered = userCards.filter { card ->
+        // Calculate available filter options from the base userCards
+        val availableRarities = userCards.mapNotNull { it.card.rarity }.distinct().sorted()
+        val availableCategories = userCards.mapNotNull { it.card.category }.distinct().sorted()
+        val availableTypes = userCards.flatMap { it.card.types?.split(",") ?: emptyList() }
+            .map { it.trim() }.distinct().sorted()
+
+        var filtered = userCards.filter { cardWithDetails ->
+            val card = cardWithDetails.card
+            val userCard = cardWithDetails.userCard
+            
             val matchesSearch = if (searchQuery.isBlank()) true 
-                else card.card.name.contains(searchQuery, ignoreCase = true) || 
-                     card.card.pokemonName?.contains(searchQuery, ignoreCase = true) == true ||
-                     card.set.name.contains(searchQuery, ignoreCase = true)
+                else card.name.contains(searchQuery, ignoreCase = true) || 
+                     card.pokemonName?.contains(searchQuery, ignoreCase = true) == true ||
+                     cardWithDetails.set.name.contains(searchQuery, ignoreCase = true)
             
             val matchesFolder = if (selectedFolderId == null) true
-                else crossRefs.any { it.folderId == selectedFolderId && it.userCardId == card.userCard.id }
+                else crossRefs.any { it.folderId == selectedFolderId && it.userCardId == userCard.id }
             
-            matchesSearch && matchesFolder
+            val matchesRarity = filterSettings.rarities.isEmpty() || filterSettings.rarities.contains(card.rarity)
+            val matchesCategory = filterSettings.categories.isEmpty() || filterSettings.categories.contains(card.category)
+            val matchesCondition = filterSettings.conditions.isEmpty() || filterSettings.conditions.contains(userCard.condition)
+            val matchesFinish = filterSettings.finishes.isEmpty() || filterSettings.finishes.contains(userCard.finish)
+            
+            val cardTypes = card.types?.split(",")?.map { it.trim() } ?: emptyList()
+            val matchesType = filterSettings.types.isEmpty() || cardTypes.any { filterSettings.types.contains(it) }
+            
+            matchesSearch && matchesFolder && matchesRarity && matchesCategory && matchesCondition && matchesFinish && matchesType
         }
 
-        // Apply folder filtering to Pokedex collection status
-        // We compute entries based on cards that match the current folder
-        val folderFilteredCards = if (selectedFolderId == null) userCards 
-                                 else userCards.filter { card -> crossRefs.any { it.folderId == selectedFolderId && it.userCardId == card.userCard.id } }
+        // Sorting
+        val comparator = when (sortMode) {
+            SortMode.NAME -> compareBy<CardWithDetails> { it.card.name }
+            SortMode.SET -> compareBy<CardWithDetails> { it.set.releaseDate }.thenBy { it.card.localId.padStart(5, '0') }
+            SortMode.VALUE -> compareBy<CardWithDetails> { it.userCard.manualPrice ?: 0.0 }
+            SortMode.DATE_ADDED -> compareBy<CardWithDetails> { it.userCard.dateAdded }
+            SortMode.RARITY -> compareBy<CardWithDetails> { it.card.rarity }
+            SortMode.QUANTITY -> compareBy<CardWithDetails> { it.userCard.quantity }
+            SortMode.NUMBER -> compareBy<CardWithDetails> { it.card.localId.padStart(5, '0') }
+        }
+
+        filtered = if (sortDirection == SortDirection.ASCENDING) {
+            filtered.sortedWith(comparator)
+        } else {
+            filtered.sortedWith(comparator.reversed())
+        }
+
+        // Pokedex entries should respect the folder filter and other filters if we want consistency
+        val pokedexUserCards = if (selectedFolderId == null && filterSettings == FilterSettings()) userCards else filtered
+        val effectivePokedexSettings = if (selectedFolderId != null || filterSettings != FilterSettings()) pokedexSettings.copy(showUncollected = false) else pokedexSettings
+        var pokedexEntries = computePokedexEntries(pokedexUserCards, effectivePokedexSettings)
         
-        // If a folder is selected, we only show entries that have cards in that folder.
-        // We override showUncollected to false when a folder is active to "filter" the view.
-        val effectivePokedexSettings = if (selectedFolderId != null) pokedexSettings.copy(showUncollected = false) else pokedexSettings
-        var pokedexEntries = computePokedexEntries(folderFilteredCards, effectivePokedexSettings)
-        
-        // Further filter the Pokédex entries list if there's a search query
         if (searchQuery.isNotBlank()) {
             pokedexEntries = pokedexEntries.filter { entry ->
                 entry.pokemonName?.contains(searchQuery, ignoreCase = true) == true ||
@@ -174,6 +223,8 @@ class CollectionViewModel(
         CollectionUiState(
             viewMode = viewMode,
             sortMode = sortMode,
+            sortDirection = sortDirection,
+            filterSettings = filterSettings,
             userCards = userCards,
             filteredUserCards = filtered,
             pokedexEntries = pokedexEntries,
@@ -188,7 +239,10 @@ class CollectionViewModel(
             gridSettings = gridSettings,
             pokedexSettings = pokedexSettings,
             sets = sets,
-            showSaveSuccess = showSaveSuccess
+            showSaveSuccess = showSaveSuccess,
+            availableRarities = availableRarities,
+            availableCategories = availableCategories,
+            availableTypes = availableTypes
         )
     }.stateIn(
         scope = viewModelScope,
@@ -283,6 +337,10 @@ class CollectionViewModel(
         }
     }
 
+    fun setSortDirection(direction: SortDirection) {
+        _sortDirection.value = direction
+    }
+
     fun toggleSearchBar() {
         _isSearchBarVisible.value = !_isSearchBarVisible.value
         if (!_isSearchBarVisible.value) {
@@ -314,6 +372,65 @@ class CollectionViewModel(
         viewModelScope.launch {
             userPreferencesRepository.setPokedexSettings(settings)
         }
+    }
+
+    fun toggleRarityFilter(rarity: String) {
+        _filterSettings.update { current ->
+            val newRarities = if (current.rarities.contains(rarity)) {
+                current.rarities - rarity
+            } else {
+                current.rarities + rarity
+            }
+            current.copy(rarities = newRarities)
+        }
+    }
+
+    fun toggleCategoryFilter(category: String) {
+        _filterSettings.update { current ->
+            val newCategories = if (current.categories.contains(category)) {
+                current.categories - category
+            } else {
+                current.categories + category
+            }
+            current.copy(categories = newCategories)
+        }
+    }
+
+    fun toggleTypeFilter(type: String) {
+        _filterSettings.update { current ->
+            val newTypes = if (current.types.contains(type)) {
+                current.types - type
+            } else {
+                current.types + type
+            }
+            current.copy(types = newTypes)
+        }
+    }
+
+    fun toggleConditionFilter(condition: String) {
+        _filterSettings.update { current ->
+            val newConditions = if (current.conditions.contains(condition)) {
+                current.conditions - condition
+            } else {
+                current.conditions + condition
+            }
+            current.copy(conditions = newConditions)
+        }
+    }
+
+    fun toggleFinishFilter(finish: String) {
+        _filterSettings.update { current ->
+            val newFinishes = if (current.finishes.contains(finish)) {
+                current.finishes - finish
+            } else {
+                current.finishes + finish
+            }
+            current.copy(finishes = newFinishes)
+        }
+    }
+
+    fun clearFilters() {
+        _filterSettings.value = FilterSettings()
     }
 
     fun addUserCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String, folderIds: List<Long> = emptyList()) {

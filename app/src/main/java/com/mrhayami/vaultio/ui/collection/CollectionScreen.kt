@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 
 package com.mrhayami.vaultio.ui.collection
 
@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.automirrored.rounded.Label
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -58,6 +59,7 @@ import com.mrhayami.vaultio.ui.components.*
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun CollectionScreen(
@@ -74,6 +76,7 @@ fun CollectionScreen(
     var showFolderDialog by remember { mutableStateOf<FolderEntity?>(null) }
     var showManageFolders by remember { mutableStateOf(false) }
     var showViewSettings by remember { mutableStateOf(false) }
+    var showSortFilterSheet by remember { mutableStateOf(false) }
     var selectedDexId by remember { mutableStateOf<Int?>(null) }
     var showMoveToFolderSheet by remember { mutableStateOf(false) }
     
@@ -231,7 +234,8 @@ fun CollectionScreen(
             StickyControls(
                 uiState = uiState,
                 onViewModeChange = viewModel::setViewMode,
-                onFolderSelect = viewModel::selectFolder
+                onFolderSelect = viewModel::selectFolder,
+                onSortClick = { showSortFilterSheet = true }
             )
 
             Box(modifier = Modifier.fillMaxSize()) {
@@ -285,6 +289,22 @@ fun CollectionScreen(
                 onUpdateList = viewModel::updateListSettings,
                 onUpdateGrid = viewModel::updateGridSettings,
                 onUpdatePokedex = viewModel::updatePokedexSettings
+            )
+        }
+    }
+
+    if (showSortFilterSheet) {
+        ModalBottomSheet(onDismissRequest = { showSortFilterSheet = false }) {
+            SortFilterSheet(
+                uiState = uiState,
+                onSortModeChange = viewModel::setSortMode,
+                onSortDirectionChange = viewModel::setSortDirection,
+                onToggleRarity = viewModel::toggleRarityFilter,
+                onToggleCategory = viewModel::toggleCategoryFilter,
+                onToggleType = viewModel::toggleTypeFilter,
+                onToggleCondition = viewModel::toggleConditionFilter,
+                onToggleFinish = viewModel::toggleFinishFilter,
+                onClearFilters = viewModel::clearFilters
             )
         }
     }
@@ -447,6 +467,149 @@ fun CollectionScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+}
+
+@Composable
+fun SortFilterSheet(
+    uiState: CollectionUiState,
+    onSortModeChange: (SortMode) -> Unit,
+    onSortDirectionChange: (SortDirection) -> Unit,
+    onToggleRarity: (String) -> Unit,
+    onToggleCategory: (String) -> Unit,
+    onToggleType: (String) -> Unit,
+    onToggleCondition: (String) -> Unit,
+    onToggleFinish: (String) -> Unit,
+    onClearFilters: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Sort & Filter", style = MaterialTheme.typography.titleLarge)
+            TextButton(onClick = onClearFilters) { Text("Clear All") }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("Sort By", style = MaterialTheme.typography.labelLarge)
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = Modifier.padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SortMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = uiState.sortMode == mode,
+                    onClick = { onSortModeChange(mode) },
+                    label = { Text(mode.name.replace("_", " ").lowercase(Locale.getDefault()).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }) },
+                )
+            }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Direction", style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.width(16.dp))
+            SingleChoiceSegmentedButtonRow {
+                SegmentedButton(
+                    selected = uiState.sortDirection == SortDirection.ASCENDING,
+                    onClick = { onSortDirectionChange(SortDirection.ASCENDING) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                ) { Text("Asc") }
+                SegmentedButton(
+                    selected = uiState.sortDirection == SortDirection.DESCENDING,
+                    onClick = { onSortDirectionChange(SortDirection.DESCENDING) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                ) { Text("Desc") }
+            }
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        if (uiState.availableRarities.isNotEmpty()) {
+            Text("Rarity", style = MaterialTheme.typography.labelLarge)
+            androidx.compose.foundation.layout.FlowRow(
+                modifier = Modifier.padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                uiState.availableRarities.forEach { rarity ->
+                    FilterChip(
+                        selected = uiState.filterSettings.rarities.contains(rarity),
+                        onClick = { onToggleRarity(rarity) },
+                        label = { Text(rarity) },
+                    )
+                }
+            }
+        }
+
+        if (uiState.availableCategories.isNotEmpty()) {
+            Text("Category", style = MaterialTheme.typography.labelLarge)
+            androidx.compose.foundation.layout.FlowRow(
+                modifier = Modifier.padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                uiState.availableCategories.forEach { category ->
+                    FilterChip(
+                        selected = uiState.filterSettings.categories.contains(category),
+                        onClick = { onToggleCategory(category) },
+                        label = { Text(category) },
+                    )
+                }
+            }
+        }
+
+        if (uiState.availableTypes.isNotEmpty()) {
+            Text("Type", style = MaterialTheme.typography.labelLarge)
+            androidx.compose.foundation.layout.FlowRow(
+                modifier = Modifier.padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                uiState.availableTypes.forEach { type ->
+                    FilterChip(
+                        selected = uiState.filterSettings.types.contains(type),
+                        onClick = { onToggleType(type) },
+                        label = { Text(type) },
+                    )
+                }
+            }
+        }
+
+        Text("Condition", style = MaterialTheme.typography.labelLarge)
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = Modifier.padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("Mint", "Near Mint", "Lightly Played", "Moderately Played", "Heavily Played", "Damaged").forEach { cond ->
+                FilterChip(
+                    selected = uiState.filterSettings.conditions.contains(cond),
+                    onClick = { onToggleCondition(cond) },
+                    label = { Text(cond) },
+                )
+            }
+        }
+
+        Text("Finish", style = MaterialTheme.typography.labelLarge)
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = Modifier.padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("Non Holo", "Holo", "Reverse Holo", "Textured", "Gold").forEach { finish ->
+                FilterChip(
+                    selected = uiState.filterSettings.finishes.contains(finish),
+                    onClick = { onToggleFinish(finish) },
+                    label = { Text(finish) },
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
@@ -620,15 +783,31 @@ fun getIconFromName(name: String?): ImageVector {
 fun StickyControls(
     uiState: CollectionUiState,
     onViewModeChange: (ViewMode) -> Unit,
-    onFolderSelect: (Long?) -> Unit
+    onFolderSelect: (Long?) -> Unit,
+    onSortClick: () -> Unit
 ) {
     Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            item {
+                FilterChip(
+                    selected = uiState.filterSettings != FilterSettings() || uiState.sortMode != SortMode.DATE_ADDED,
+                    onClick = onSortClick,
+                    label = { Text("Sort & Filter") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Sort, null, Modifier.size(18.dp)) },
+                    shape = CircleShape
+                )
+            }
+            
+            item {
+                VerticalDivider(modifier = Modifier.height(24.dp).padding(horizontal = 4.dp))
+            }
+
             item {
                 FilterChip(
                     selected = uiState.selectedFolderId == null,
