@@ -37,6 +37,7 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showThemeBrandDialog by remember { mutableStateOf(false) }
     var showDarkConfigDialog by remember { mutableStateOf(false) }
+    var animationsExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -92,28 +93,43 @@ fun SettingsScreen(
             )
 
             ListItem(
-                headlineContent = { Text("Energy Animations") },
-                supportingContent = { Text("Special background effects for card types") },
+                headlineContent = { Text("Animations") },
+                supportingContent = { Text("Visual effects for cards") },
                 leadingContent = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
                 trailingContent = {
-                    Switch(
-                        checked = uiState.showEnergyAnimations,
-                        onCheckedChange = { viewModel.setShowEnergyAnimations(it) }
+                    Icon(
+                        if (animationsExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                        contentDescription = null
                     )
-                }
+                },
+                modifier = Modifier.clickable { animationsExpanded = !animationsExpanded }
             )
 
-            ListItem(
-                headlineContent = { Text("Card Finish Animations") },
-                supportingContent = { Text("Holo sparkle and Gold shimmer effects") },
-                leadingContent = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
-                trailingContent = {
-                    Switch(
-                        checked = uiState.showFinishAnimations,
-                        onCheckedChange = { viewModel.setShowFinishAnimations(it) }
-                    )
-                }
-            )
+            if (animationsExpanded) {
+                ListItem(
+                    headlineContent = { Text("Energy Animations") },
+                    supportingContent = { Text("Special background effects for card types") },
+                    trailingContent = {
+                        Switch(
+                            checked = uiState.showEnergyAnimations,
+                            onCheckedChange = { viewModel.setShowEnergyAnimations(it) }
+                        )
+                    },
+                    modifier = Modifier.padding(start = 32.dp)
+                )
+
+                ListItem(
+                    headlineContent = { Text("Card Finish Animations") },
+                    supportingContent = { Text("Holo sparkle and Gold shimmer effects") },
+                    trailingContent = {
+                        Switch(
+                            checked = uiState.showFinishAnimations,
+                            onCheckedChange = { viewModel.setShowFinishAnimations(it) }
+                        )
+                    },
+                    modifier = Modifier.padding(start = 32.dp)
+                )
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
