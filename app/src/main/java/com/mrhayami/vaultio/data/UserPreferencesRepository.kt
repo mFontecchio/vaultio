@@ -48,6 +48,8 @@ class UserPreferencesRepository(context: Context) {
         
         val SHOW_ENERGY_ANIMATIONS = booleanPreferencesKey("show_energy_animations")
         val SHOW_FINISH_ANIMATIONS = booleanPreferencesKey("show_finish_animations")
+        
+        val JUST_TCG_API_KEY = stringPreferencesKey("just_tcg_api_key")
     }
 
     val viewMode: Flow<ViewMode> = dataStore.data.map {
@@ -153,6 +155,16 @@ class UserPreferencesRepository(context: Context) {
     suspend fun setShowFinishAnimations(show: Boolean) {
         dataStore.edit {
             it[PreferencesKeys.SHOW_FINISH_ANIMATIONS] = show
+        }
+    }
+
+    val justTcgApiKey: Flow<String?> = dataStore.data.map {
+        it[PreferencesKeys.JUST_TCG_API_KEY]
+    }
+
+    suspend fun setJustTcgApiKey(apiKey: String) {
+        dataStore.edit {
+            it[PreferencesKeys.JUST_TCG_API_KEY] = apiKey
         }
     }
 }

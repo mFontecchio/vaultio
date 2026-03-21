@@ -24,6 +24,39 @@ data class TcgDexSet(
 )
 
 @JsonClass(generateAdapter = true)
+data class TcgDexPriceItem(
+    val low: Double? = null,
+    val mid: Double? = null,
+    val high: Double? = null,
+    val market: Double? = null,
+    val directLow: Double? = null,
+    @param:Json(name = "lowPrice") val lowPrice: Double? = null,
+    @param:Json(name = "midPrice") val midPrice: Double? = null,
+    @param:Json(name = "highPrice") val highPrice: Double? = null,
+    @param:Json(name = "marketPrice") val marketPrice: Double? = null
+) {
+    fun resolveLow() = low ?: lowPrice
+    fun resolveMid() = mid ?: midPrice
+    fun resolveHigh() = high ?: highPrice
+    fun resolveMarket() = market ?: marketPrice
+}
+
+@JsonClass(generateAdapter = true)
+data class TcgDexTcgPlayerPricing(
+    val url: String? = null,
+    val updated: String? = null,
+    val normal: TcgDexPriceItem? = null,
+    val holofoil: TcgDexPriceItem? = null,
+    val reverse: TcgDexPriceItem? = null,
+    @param:Json(name = "firstEdition") val firstEdition: TcgDexPriceItem? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TcgDexPricing(
+    val tcgplayer: TcgDexTcgPlayerPricing? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class TcgDexCard(
     val id: String,
     val localId: String,
@@ -36,8 +69,7 @@ data class TcgDexCard(
     val types: List<String>? = null,
     val stage: String? = null,
     val variants: TcgDexVariants? = null,
-    val tcgplayer: TcgDexMarket? = null,
-    val cardmarket: TcgDexMarket? = null
+    val pricing: TcgDexPricing? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -47,33 +79,6 @@ data class TcgDexVariants(
     val normal: Boolean = true,
     val reverse: Boolean = false,
     val wPromo: Boolean = false
-)
-
-@JsonClass(generateAdapter = true)
-data class TcgDexMarket(
-    val url: String?,
-    val updatedAt: String?,
-    val prices: TcgDexPrices?
-)
-
-@JsonClass(generateAdapter = true)
-data class TcgDexPrices(
-    val low: Double?,
-    val average: Double?,
-    val high: Double?,
-    val market: Double?,
-    val reverseHoloLow: Double?,
-    val reverseHoloAvg: Double?,
-    val reverseHoloHigh: Double?,
-    val reverseHoloMarket: Double?,
-    val holoLow: Double?,
-    val holoAvg: Double?,
-    val holoHigh: Double?,
-    val holoMarket: Double?,
-    val firstEditionLow: Double?,
-    val firstEditionAvg: Double?,
-    val firstEditionHigh: Double?,
-    val firstEditionMarket: Double?
 )
 
 @JsonClass(generateAdapter = true)

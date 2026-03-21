@@ -20,6 +20,7 @@ data class SettingsUiState(
     val darkThemeConfig: DarkThemeConfig = DarkThemeConfig.FOLLOW_SYSTEM,
     val showEnergyAnimations: Boolean = true,
     val showFinishAnimations: Boolean = true,
+    val justTcgApiKey: String = "",
     val apiUsage: Int = 0,
     val offlineSetsCount: Int = 0,
     val isLoading: Boolean = true
@@ -30,18 +31,32 @@ class SettingsViewModel(
     private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
+    private data class PreferenceValues(
+        val themeBrand: ThemeBrand,
+        val darkThemeConfig: DarkThemeConfig,
+        val showEnergy: Boolean,
+        val showFinish: Boolean,
+        val apiKey: String?
+    )
+
     val uiState: StateFlow<SettingsUiState> = combine(
-        userPreferencesRepository.themeBrand,
-        userPreferencesRepository.darkThemeConfig,
-        userPreferencesRepository.showEnergyAnimations,
-        userPreferencesRepository.showFinishAnimations,
+        combine(
+            userPreferencesRepository.themeBrand,
+            userPreferencesRepository.darkThemeConfig,
+            userPreferencesRepository.showEnergyAnimations,
+            userPreferencesRepository.showFinishAnimations,
+            userPreferencesRepository.justTcgApiKey
+        ) { themeBrand: ThemeBrand, darkThemeConfig: DarkThemeConfig, showEnergy: Boolean, showFinish: Boolean, apiKey: String? ->
+            PreferenceValues(themeBrand, darkThemeConfig, showEnergy, showFinish, apiKey)
+        },
         repository.allSets.map { sets -> sets.count { it.isDownloaded } }
-    ) { themeBrand, darkThemeConfig, showEnergyAnims, showFinishAnims, downloadedCount ->
+    ) { prefs: PreferenceValues, downloadedCount: Int ->
         SettingsUiState(
-            themeBrand = themeBrand,
-            darkThemeConfig = darkThemeConfig,
-            showEnergyAnimations = showEnergyAnims,
-            showFinishAnimations = showFinishAnims,
+            themeBrand = prefs.themeBrand,
+            darkThemeConfig = prefs.darkThemeConfig,
+            showEnergyAnimations = prefs.showEnergy,
+            showFinishAnimations = prefs.showFinish,
+            justTcgApiKey = prefs.apiKey ?: "",
             apiUsage = repository.getApiUsage(),
             offlineSetsCount = downloadedCount,
             isLoading = false
@@ -76,6 +91,12 @@ class SettingsViewModel(
         }
     }
 
+    fun setJustTcgApiKey(apiKey: String) {
+        viewModelScope.launch {
+            userPreferencesRepository.setJustTcgApiKey(apiKey)
+        }
+    }
+
     fun clearImageCache() {
         // TODO: Implement using Coil's ImageLoader if needed
     }
@@ -86,6 +107,7 @@ class SettingsViewModel(
             userPreferencesRepository.setDarkThemeConfig(DarkThemeConfig.FOLLOW_SYSTEM)
             userPreferencesRepository.setShowEnergyAnimations(true)
             userPreferencesRepository.setShowFinishAnimations(true)
+            userPreferencesRepository.setJustTcgApiKey("")
             userPreferencesRepository.setViewMode(ViewMode.GRID)
             userPreferencesRepository.setSortMode(SortMode.DATE_ADDED)
             userPreferencesRepository.setListSettings(ListSettings())

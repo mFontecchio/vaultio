@@ -2,9 +2,12 @@ package com.mrhayami.vaultio.data.repository
 
 import android.util.Log
 import com.mrhayami.vaultio.data.PokemonUtils
+import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.UserPreferencesRepository
+import com.mrhayami.vaultio.data.VintageSets
 import com.mrhayami.vaultio.data.local.*
 import com.mrhayami.vaultio.data.remote.JustTcgApi
+import com.mrhayami.vaultio.data.remote.JustTcgBatchRequestItem
 import com.mrhayami.vaultio.data.remote.TcgDexApi
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import kotlinx.coroutines.flow.Flow
@@ -12,6 +15,8 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.firstOrNull
 
 class VaultioRepository(
     private val setDao: SetDao,
@@ -26,7 +31,7 @@ class VaultioRepository(
     val userPreferencesRepository: UserPreferencesRepository
 ) {
     private val moshi = Moshi.Builder().build()
-    private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Integer::class.java))
+    private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Int::class.javaObjectType))
 
     val allSets: Flow<List<SetEntity>> = setDao.getAllSets()
     val allUserCards: Flow<List<CardWithDetails>> = userCardDao.getAllUserCardsWithDetails()
@@ -43,6 +48,10 @@ class VaultioRepository(
 
     fun getPricesForCard(cardId: String): Flow<List<PriceEntity>> {
         return priceDao.getPricesForCard(cardId)
+    }
+
+    fun getVintagePricesForCard(cardId: String): Flow<List<VintagePriceEntity>> {
+        return priceDao.getVintagePricesForCard(cardId)
     }
 
     suspend fun refreshSets() {
@@ -100,7 +109,7 @@ class VaultioRepository(
                     dexId = it.dexId?.firstOrNull()?.toString(),
                     dexIds = it.dexId?.let { ids -> listIntAdapter.toJson(ids) },
                     pokemonName = PokemonUtils.extractPokemonName(it.name),
-                    tcgPlayerId = extractTcgPlayerId(it.tcgplayer?.url)
+                    tcgPlayerId = extractTcgPlayerId(it.pricing?.tcgplayer?.url)
                 )
             }
             cardDao.insertCards(cardEntities)
@@ -166,7 +175,7 @@ class VaultioRepository(
                         officialCards = remoteSet.cardCount.official,
                         releaseDate = remoteSet.releaseDate
                     )
-                    setDao.insertSets(listOf(setEntity!!))
+                    setDao.insertSets(listOf(setEntity))
                 }
             } catch (e: Exception) { Log.e("Vaultio", "Failed to sync set", e) }
         }
@@ -248,7 +257,7 @@ class VaultioRepository(
                 dexId = dexIdString,
                 dexIds = dexIdsJson,
                 pokemonName = PokemonUtils.extractPokemonName(fullCard.name),
-                tcgPlayerId = extractTcgPlayerId(fullCard.tcgplayer?.url)
+                tcgPlayerId = extractTcgPlayerId(fullCard.pricing?.tcgplayer?.url)
             )
             Log.d("Vaultio", "Inserting CardEntity: id=${cardEntity.id}, name=${cardEntity.name}, dexId=${cardEntity.dexId}")
             cardDao.insertCards(listOf(cardEntity))
@@ -263,6 +272,9 @@ class VaultioRepository(
             userCardDao.insertFolderCardCrossRefs(crossRefs)
             Log.d("Vaultio", "Added UserCard $userCardIdResult to folders: $folderIds")
         }
+
+        // Trigger individual price update for the new card
+        updateCardPrice(card.id)
     }
 
     private fun extractTcgPlayerId(url: String?): String? {
@@ -307,13 +319,166 @@ class VaultioRepository(
         userCardDao.removeCardFromFolder(userCardId, folderId)
     }
 
-    suspend fun updatePrice(price: PriceEntity) {
-        priceDao.insertPrices(listOf(price))
+    // --- Pricing Logic Implementation ---
+
+    suspend fun updateCardPrice(cardId: String) {
+        val card = cardDao.getCardById(cardId) ?: return
+        
+        // 1. Vintage Logic (Base Set - Neo Destiny)
+        if (VintageSets.isVintageSet(card.setId)) {
+            Log.d("VaultioRepository", "Card ${card.id} is from a vintage set. Using JustTCG.")
+            updateVintageCardPrice(card)
+            return
+        }
+
+        // 2. Primary Source: TCGdex
+        try {
+            val startTime = System.currentTimeMillis()
+            val tcgDexCard = tcgDexApi.getCardDetail(cardId)
+            logTelemetry("tcgdex", "cards/$cardId", 200, System.currentTimeMillis() - startTime)
+            
+            val tcgPlayerPricing = tcgDexCard.pricing?.tcgplayer
+            if (tcgPlayerPricing != null) {
+                val entities = PricingUtils.mapTcgDexPrices(cardId, tcgPlayerPricing)
+                if (entities.isNotEmpty()) {
+                    priceDao.insertPrices(entities)
+                    return // Success with TCGdex
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("VaultioRepository", "TCGdex fetch failed for $cardId", e)
+            logTelemetry("tcgdex", "cards/$cardId", 500, 0)
+        }
+
+        // 3. Fallback: JustTCG
+        updateCardPriceFromJustTCG(card)
     }
 
-    suspend fun updatePrices(prices: List<PriceEntity>) {
-        if (prices.isNotEmpty()) {
-            priceDao.insertPrices(prices)
+    private suspend fun getJustTcgApiKey(): String? {
+        return userPreferencesRepository.justTcgApiKey.firstOrNull()
+    }
+
+    private suspend fun updateVintageCardPrice(card: CardEntity) {
+        val apiKey = getJustTcgApiKey() ?: return
+        if (!canUseJustTcg()) return
+
+        try {
+            val startTime = System.currentTimeMillis()
+            // Vintage cards often need specific set mapping for 1st Ed / Shadowless
+            // For single card update, we try a search or direct TCGplayerID if we have it
+            val tcgPlayerId = card.tcgPlayerId
+            val response = if (tcgPlayerId != null) {
+                justTcgApi.getCardByTcgPlayerId(apiKey, tcgPlayerId)
+            } else {
+                val config = VintageSets.getVintageConfig(card.setId)
+                justTcgApi.searchCards(
+                    apiKey = apiKey,
+                    query = card.name,
+                    set = config?.justTcgSetId
+                )
+            }
+
+            logTelemetry("justtcg", "cards", 200, System.currentTimeMillis() - startTime)
+            incrementApiUsage()
+
+            val justTcgCard = response.data.firstOrNull()
+            if (justTcgCard != null) {
+                val vintagePrices = justTcgCard.variants.mapNotNull { 
+                    PricingUtils.mapJustTcgVariantToVintagePrice(card.id, it)
+                }
+                if (vintagePrices.isNotEmpty()) {
+                    priceDao.insertVintagePrices(vintagePrices)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("VaultioRepository", "JustTCG vintage fetch failed for ${card.id}", e)
+            logTelemetry("justtcg", "cards", 500, 0)
+        }
+    }
+
+    private suspend fun updateCardPriceFromJustTCG(card: CardEntity) {
+        val apiKey = getJustTcgApiKey() ?: return
+        if (!canUseJustTcg()) return
+
+        try {
+            val startTime = System.currentTimeMillis()
+            val tcgPlayerId = card.tcgPlayerId
+            val response = if (tcgPlayerId != null) {
+                justTcgApi.getCardByTcgPlayerId(apiKey, tcgPlayerId)
+            } else {
+                // Search by name + number as fallback
+                justTcgApi.searchCards(
+                    apiKey = apiKey,
+                    query = "${card.name} ${card.localId}"
+                )
+            }
+            
+            logTelemetry("justtcg", "cards", 200, System.currentTimeMillis() - startTime)
+            incrementApiUsage()
+
+            val justTcgCard = response.data.firstOrNull()
+            if (justTcgCard != null) {
+                val prices = justTcgCard.variants.mapNotNull { 
+                    PricingUtils.mapJustTcgVariantToPrice(card.id, it)
+                }
+                if (prices.isNotEmpty()) {
+                    priceDao.insertPrices(prices)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("VaultioRepository", "JustTCG fallback failed for ${card.id}", e)
+            logTelemetry("justtcg", "cards", 500, 0)
+        }
+    }
+
+    private suspend fun canUseJustTcg(): Boolean {
+        // Daily limit 100
+        return getApiUsage() < 100
+    }
+
+    suspend fun updatePricesBatch(cards: List<CardEntity>) {
+        val apiKey = getJustTcgApiKey()
+        // Split into Vintage and Modern
+        val (vintage, modern) = cards.partition { VintageSets.isVintageSet(it.setId) }
+
+        // Process Modern via TCGdex (Parallel or sequential)
+        modern.forEach { updateCardPrice(it.id) }
+
+        // Process Vintage via JustTCG Batch API (Much more efficient)
+        if (vintage.isNotEmpty() && apiKey != null && canUseJustTcg()) {
+            val vintageWithId = vintage.filter { it.tcgPlayerId != null }
+            vintageWithId.chunked(20).forEach { batch ->
+                try {
+                    val items = batch.map { JustTcgBatchRequestItem(it.tcgPlayerId!!) }
+                    val startTime = System.currentTimeMillis()
+                    val response = justTcgApi.getCardsBatch(apiKey, items)
+                    logTelemetry("justtcg", "cards/batch", 200, System.currentTimeMillis() - startTime)
+                    incrementApiUsage()
+
+                    val allVintagePrices = mutableListOf<VintagePriceEntity>()
+                    response.data.forEach { jCard ->
+                        // Map back to our card ID using tcgplayerId
+                        val originalCard = batch.find { it.tcgPlayerId == jCard.tcgplayerId }
+                        if (originalCard != null) {
+                            val prices = jCard.variants.mapNotNull { 
+                                PricingUtils.mapJustTcgVariantToVintagePrice(originalCard.id, it)
+                            }
+                            allVintagePrices.addAll(prices)
+                        }
+                    }
+                    if (allVintagePrices.isNotEmpty()) {
+                        priceDao.insertVintagePrices(allVintagePrices)
+                    }
+                    
+                    // Respect 10 req/min limit
+                    delay(6000) 
+                } catch (e: Exception) {
+                    Log.e("VaultioRepository", "JustTCG batch failed", e)
+                }
+            }
+            
+            // Handle vintage cards without TCGplayerID via individual search (as fallback)
+            vintage.filter { it.tcgPlayerId == null }.forEach { updateVintageCardPrice(it) }
         }
     }
 

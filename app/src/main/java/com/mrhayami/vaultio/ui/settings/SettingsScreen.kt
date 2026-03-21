@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
@@ -16,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mrhayami.vaultio.BuildConfig
@@ -37,6 +41,7 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showThemeBrandDialog by remember { mutableStateOf(false) }
     var showDarkConfigDialog by remember { mutableStateOf(false) }
+    var showApiKeyDialog by remember { mutableStateOf(false) }
     var animationsExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -137,11 +142,20 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             ListItem(
+                headlineContent = { Text("JustTCG API Key") },
+                supportingContent = { 
+                    Text(if (uiState.justTcgApiKey.isEmpty()) "Not set (required for some pricing)" else "••••••••••••••••") 
+                },
+                leadingContent = { Icon(Icons.Rounded.VpnKey, contentDescription = null) },
+                modifier = Modifier.clickable { showApiKeyDialog = true }
+            )
+
+            ListItem(
                 headlineContent = { Text("JustTCG API Usage") },
                 supportingContent = { 
                     Column {
                         LinearProgressIndicator(
-                            progress = { uiState.apiUsage / 100f },
+                            progress = { (uiState.apiUsage / 100f).coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                         )
                         Text("${uiState.apiUsage} / 100 requests used today")
@@ -273,6 +287,52 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showDarkConfigDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showApiKeyDialog) {
+        var tempKey by remember { mutableStateOf(uiState.justTcgApiKey) }
+        var passwordVisible by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showApiKeyDialog = false },
+            title = { Text("JustTCG API Key") },
+            text = {
+                Column {
+                    Text(
+                        "Enter your JustTCG API key to enable vintage pricing and fallback market data.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = tempKey,
+                        onValueChange = { tempKey = it },
+                        label = { Text("API Key") },
+                        modifier = Modifier.fillMaxWidth(),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                    contentDescription = null
+                                )
+                            }
+                        }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { 
+                    viewModel.setJustTcgApiKey(tempKey)
+                    showApiKeyDialog = false 
+                }) { 
+                    Text("Save") 
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showApiKeyDialog = false }) { Text("Cancel") }
             }
         )
     }

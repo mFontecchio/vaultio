@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.PriceEntity
+import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.local.FolderCardCrossRef
 import com.mrhayami.vaultio.data.repository.VaultioRepository
@@ -19,9 +20,11 @@ data class CardDetailUiState(
     val folders: List<FolderEntity> = emptyList(),
     val cardFolderIds: Set<Long> = emptySet(),
     val prices: List<PriceEntity> = emptyList(),
+    val vintagePrices: List<VintagePriceEntity> = emptyList(),
     val showEnergyAnimations: Boolean = true,
     val showFinishAnimations: Boolean = true,
     val isLoading: Boolean = true,
+    val isRefreshingPrice: Boolean = false,
     val isDeleted: Boolean = false,
     val showSaveSuccess: Boolean = false,
     val errorMessage: String? = null
@@ -41,28 +44,40 @@ class CardDetailViewModel(
     init {
         viewModelScope.launch {
             repository.getUserCardById(userCardId).flatMapLatest { cardWithDetails ->
-                combine(
-                    repository.allFolders,
-                    repository.allFolderCardCrossRefs,
-                    repository.userPreferencesRepository.showEnergyAnimations,
-                    repository.userPreferencesRepository.showFinishAnimations,
-                    if (cardWithDetails != null) repository.getPricesForCard(cardWithDetails.card.id) 
-                    else flowOf(emptyList<PriceEntity>())
-                ) { folders, crossRefs, showEnergyAnims, showFinishAnims, prices ->
-                    val cardFolderIds = crossRefs
-                        .filter { it.userCardId == userCardId }
-                        .map { it.folderId }
-                        .toSet()
+                if (cardWithDetails == null) {
+                    flowOf(CardDetailUiState(isLoading = false))
+                } else {
+                    combine(
+                        repository.allFolders,
+                        repository.allFolderCardCrossRefs,
+                        repository.userPreferencesRepository.showEnergyAnimations,
+                        repository.userPreferencesRepository.showFinishAnimations,
+                        repository.getPricesForCard(cardWithDetails.card.id),
+                        repository.getVintagePricesForCard(cardWithDetails.card.id)
+                    ) { flows ->
+                        val folders = flows[0] as List<FolderEntity>
+                        val crossRefs = flows[1] as List<FolderCardCrossRef>
+                        val showEnergyAnims = flows[2] as Boolean
+                        val showFinishAnims = flows[3] as Boolean
+                        val prices = flows[4] as List<PriceEntity>
+                        val vintagePrices = flows[5] as List<VintagePriceEntity>
 
-                    _uiState.value.copy(
-                        cardWithDetails = cardWithDetails,
-                        folders = folders,
-                        cardFolderIds = cardFolderIds,
-                        prices = prices,
-                        showEnergyAnimations = showEnergyAnims,
-                        showFinishAnimations = showFinishAnims,
-                        isLoading = false
-                    )
+                        val cardFolderIds = crossRefs
+                            .filter { it.userCardId == userCardId }
+                            .map { it.folderId }
+                            .toSet()
+
+                        CardDetailUiState(
+                            cardWithDetails = cardWithDetails,
+                            folders = folders,
+                            cardFolderIds = cardFolderIds,
+                            prices = prices,
+                            vintagePrices = vintagePrices,
+                            showEnergyAnimations = showEnergyAnims,
+                            showFinishAnimations = showFinishAnims,
+                            isLoading = false
+                        )
+                    }
                 }
             }.collect { _uiState.value = it }
         }
@@ -105,7 +120,15 @@ class CardDetailViewModel(
     }
 
     fun refreshPrice() {
-        // Trigger PriceUpdateWorker or direct repository call
+        val cardId = _uiState.value.cardWithDetails?.card?.id ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isRefreshingPrice = true)
+            try {
+                repository.updateCardPrice(cardId)
+            } finally {
+                _uiState.value = _uiState.value.copy(isRefreshingPrice = false)
+            }
+        }
     }
 }
 

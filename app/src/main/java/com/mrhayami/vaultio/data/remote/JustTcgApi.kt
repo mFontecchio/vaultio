@@ -2,8 +2,10 @@ package com.mrhayami.vaultio.data.remote
 
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
+import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.POST
 import retrofit2.http.Query
 
 @JsonClass(generateAdapter = true)
@@ -17,10 +19,14 @@ data class JustTcgPrice(
 @JsonClass(generateAdapter = true)
 data class JustTcgVariant(
     val id: String,
-    val name: String,
+    val name: String? = null,
     val printing: String,
     val condition: String,
-    val prices: JustTcgPrice?
+    val price: Double? = null,
+    val avgPrice: Double? = null,
+    val minPrice7d: Double? = null,
+    val maxPrice7d: Double? = null,
+    val prices: JustTcgPrice? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -32,8 +38,27 @@ data class JustTcgCard(
 )
 
 @JsonClass(generateAdapter = true)
+data class JustTcgMetadata(
+    val apiRequestLimit: Int,
+    val apiDailyLimit: Int,
+    val apiRateLimit: Int,
+    val apiRequestsUsed: Int,
+    val apiDailyRequestsUsed: Int,
+    val apiRequestsRemaining: Int,
+    val apiDailyRequestsRemaining: Int,
+    val apiPlan: String
+)
+
+@JsonClass(generateAdapter = true)
 data class JustTcgResponse<T>(
-    val data: T
+    val data: T,
+    @Json(name = "_metadata") val metadata: JustTcgMetadata? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class JustTcgBatchRequestItem(
+    val tcgplayerId: String,
+    val printing: String? = null
 )
 
 interface JustTcgApi {
@@ -47,6 +72,13 @@ interface JustTcgApi {
     suspend fun searchCards(
         @Header("x-api-key") apiKey: String,
         @Query("game") game: String = "pokemon",
-        @Query("q") query: String
+        @Query("q") query: String,
+        @Query("set") set: String? = null
+    ): JustTcgResponse<List<JustTcgCard>>
+
+    @POST("cards")
+    suspend fun getCardsBatch(
+        @Header("x-api-key") apiKey: String,
+        @Body items: List<JustTcgBatchRequestItem>
     ): JustTcgResponse<List<JustTcgCard>>
 }
