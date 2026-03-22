@@ -23,9 +23,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.mrhayami.vaultio.data.PricingUtils
+import com.mrhayami.vaultio.data.VintageSets
+import com.mrhayami.vaultio.data.local.PriceEntity
+import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.theme.*
 import com.mrhayami.vaultio.ui.components.*
@@ -129,10 +134,40 @@ fun CardDetailScreen(
             val set = details.set
             val userCard = details.userCard
 
-            val currentPrice = uiState.prices.find { 
-                it.finish == userCard.finish && 
-                it.condition == userCard.condition 
-            } ?: uiState.prices.firstOrNull()
+            val isVintage = VintageSets.isVintageSet(card.setId)
+            
+            // Resolve the price entity to show based on user's current selection or collection settings
+            val currentPrice = if (isVintage) {
+                uiState.vintagePrices.find { 
+                    it.finish == userCard.finish && 
+                    it.condition == userCard.condition &&
+                    it.printing == userCard.printing
+                } ?: uiState.vintagePrices.firstOrNull()
+            } else {
+                uiState.prices.find { 
+                    it.finish == userCard.finish && 
+                    it.condition == userCard.condition 
+                } ?: uiState.prices.firstOrNull()
+            }
+
+            // Extract values manually to avoid polymorphic access errors if currentPrice is Any?
+            val marketPriceValue = when (currentPrice) {
+                is PriceEntity -> currentPrice.marketPrice
+                is VintagePriceEntity -> currentPrice.marketPrice
+                else -> null
+            } ?: 0.0
+
+            val sourceStr = when (currentPrice) {
+                is PriceEntity -> currentPrice.source
+                is VintagePriceEntity -> currentPrice.source
+                else -> "Unknown"
+            }
+
+            val timestampValue = when (currentPrice) {
+                is PriceEntity -> currentPrice.timestamp
+                is VintagePriceEntity -> currentPrice.timestamp
+                else -> 0L
+            }
 
             val primaryType = remember(card.types) {
                 if (card.types?.startsWith("[") == true) {
@@ -158,8 +193,8 @@ fun CardDetailScreen(
                 }
             }
 
-            val isHolo = finish == "Holo" || finish == "Reverse Holo"
-            val isGold = finish == "Gold"
+            val isHolo = finish == PricingUtils.FINISH_HOLOFOIL || finish == PricingUtils.FINISH_REVERSE_HOLO
+            val isGold = finish == PricingUtils.FINISH_GOLD
             val showFinishAnims = uiState.showFinishAnimations
 
             Box(modifier = Modifier.fillMaxSize()) {
@@ -285,6 +320,7 @@ fun CardDetailScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // Main Price Section
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
@@ -292,25 +328,86 @@ fun CardDetailScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                val priceText = currentPrice?.marketPrice?.let {
-                                    NumberFormat.getCurrencyInstance(Locale.US).format(it)
-                                } ?: "$0.00"
+                                val priceText = NumberFormat.getCurrencyInstance(Locale.US).format(marketPriceValue)
                                 Text(priceText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
                                 Spacer(modifier = Modifier.weight(1f))
                                 IconButton(
                                     onClick = { viewModel.refreshPrice() },
                                     modifier = Modifier.background(MaterialTheme.colorScheme.surface, CircleShape)
                                 ) {
-                                    Icon(Icons.Rounded.Refresh, contentDescription = "Refresh Price", tint = MaterialTheme.colorScheme.primary)
+                                    if (uiState.isRefreshingPrice) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(Icons.Rounded.Refresh, contentDescription = "Refresh Price", tint = MaterialTheme.colorScheme.primary)
+                                    }
                                 }
                             }
                             Text("Estimated Market Value", style = MaterialTheme.typography.labelLarge)
                             if (currentPrice != null) {
                                 Text(
-                                    "Source: ${currentPrice.source.uppercase()} • Updated ${getRelativeTime(currentPrice.timestamp)}",
+                                    "Source: ${sourceStr.uppercase()} • Updated ${getRelativeTime(timestampValue)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.padding(top = 4.dp)
                                 )
+                            }
+                        }
+                    }
+
+                    // Vintage Edition Prices Table
+                    if (isVintage && uiState.vintagePrices.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Edition Pricing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                // Filter prices by the user's selected finish and condition
+                                val variantsByEdition = uiState.vintagePrices
+                                    .filter { it.condition == condition && it.finish == finish }
+                                    .groupBy { it.printing }
+
+                                if (variantsByEdition.isEmpty()) {
+                                    Text(
+                                        "No market data for current selection",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                } else {
+                                    val editions = listOf(
+                                        PricingUtils.PRINTING_1ST_EDITION,
+                                        PricingUtils.PRINTING_SHADOWLESS,
+                                        PricingUtils.PRINTING_UNLIMITED
+                                    )
+                                    
+                                    editions.forEach { edition ->
+                                        val price = variantsByEdition[edition]?.firstOrNull()?.marketPrice
+                                        if (price != null) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    edition.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = if (printing == edition) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (printing == edition) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    NumberFormat.getCurrencyInstance(Locale.US).format(price),
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -365,7 +462,13 @@ fun CardDetailScreen(
                             DetailDropdown(
                                 label = "Condition",
                                 value = condition,
-                                options = listOf("Near Mint", "Lightly Played", "Moderately Played", "Heavily Played", "Damaged"),
+                                options = listOf(
+                                    PricingUtils.CONDITION_NM,
+                                    PricingUtils.CONDITION_LP,
+                                    PricingUtils.CONDITION_MP,
+                                    PricingUtils.CONDITION_HP,
+                                    PricingUtils.CONDITION_DMG
+                                ),
                                 onSelected = { condition = it }
                             )
 
@@ -374,7 +477,12 @@ fun CardDetailScreen(
                             DetailDropdown(
                                 label = "Printing",
                                 value = printing,
-                                options = listOf("Standard", "First Edition", "Unlimited", "Promo"),
+                                options = listOf(
+                                    PricingUtils.PRINTING_UNLIMITED,
+                                    PricingUtils.PRINTING_SHADOWLESS,
+                                    PricingUtils.PRINTING_PROMO,
+                                    PricingUtils.PRINTING_1ST_EDITION
+                                ),
                                 onSelected = { printing = it }
                             )
 
@@ -383,7 +491,13 @@ fun CardDetailScreen(
                             DetailDropdown(
                                 label = "Finish",
                                 value = finish,
-                                options = listOf("Non Holo", "Holo", "Reverse Holo", "Textured", "Gold"),
+                                options = listOf(
+                                    PricingUtils.FINISH_NORMAL,
+                                    PricingUtils.FINISH_HOLOFOIL,
+                                    PricingUtils.FINISH_REVERSE_HOLO,
+                                    PricingUtils.FINISH_TEXTURED,
+                                    PricingUtils.FINISH_GOLD
+                                ),
                                 onSelected = { finish = it }
                             )
                         }

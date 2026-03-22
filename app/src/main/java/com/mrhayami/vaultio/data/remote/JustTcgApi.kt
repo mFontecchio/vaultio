@@ -58,7 +58,8 @@ data class JustTcgResponse<T>(
 @JsonClass(generateAdapter = true)
 data class JustTcgBatchRequestItem(
     val tcgplayerId: String,
-    val printing: String? = null
+    val printing: String? = null,
+    val condition: String? = null
 )
 
 interface JustTcgApi {
@@ -73,7 +74,9 @@ interface JustTcgApi {
         @Header("x-api-key") apiKey: String,
         @Query("game") game: String = "pokemon",
         @Query("q") query: String,
-        @Query("set") set: String? = null
+        @Query("number") number: String? = null,
+        @Query("set") set: String? = null,
+        @Query("limit") limit: Int? = 5
     ): JustTcgResponse<List<JustTcgCard>>
 
     @POST("cards")

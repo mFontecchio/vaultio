@@ -20,6 +20,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 
@@ -32,9 +33,9 @@ fun MetadataModal(
     onBack: () -> Unit
 ) {
     var quantity by remember { mutableIntStateOf(1) }
-    var condition by remember { mutableStateOf("Near Mint") }
-    var printing by remember { mutableStateOf("Standard") }
-    var finish by remember { mutableStateOf("Non Holo") }
+    var condition by remember { mutableStateOf(PricingUtils.CONDITION_NM) }
+    var printing by remember { mutableStateOf(PricingUtils.PRINTING_UNLIMITED) }
+    var finish by remember { mutableStateOf(PricingUtils.FINISH_NORMAL) }
     val selectedFolderIds = remember { mutableStateListOf<Long>() }
 
     Column(
@@ -119,17 +120,34 @@ fun MetadataModal(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                val conditions = listOf("Mint", "Near Mint", "Lightly Played", "Moderately Played", "Heavily Played", "Damaged")
+                val conditions = listOf(
+                    PricingUtils.CONDITION_NM,
+                    PricingUtils.CONDITION_LP,
+                    PricingUtils.CONDITION_MP,
+                    PricingUtils.CONDITION_HP,
+                    PricingUtils.CONDITION_DMG
+                )
                 DropdownSelector("Condition", condition, conditions) { condition = it }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                val printings = listOf("Standard", "Holo", "Reverse Holo", "1st Edition")
+                val printings = listOf(
+                    PricingUtils.PRINTING_UNLIMITED,
+                    PricingUtils.PRINTING_SHADOWLESS,
+                    PricingUtils.PRINTING_PROMO,
+                    PricingUtils.PRINTING_1ST_EDITION
+                )
                 DropdownSelector("Printing", printing, printings) { printing = it }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                val finishes = listOf("Non Holo", "Holo", "Reverse Holo", "Textured", "Gold")
+                val finishes = listOf(
+                    PricingUtils.FINISH_NORMAL,
+                    PricingUtils.FINISH_HOLOFOIL,
+                    PricingUtils.FINISH_REVERSE_HOLO,
+                    PricingUtils.FINISH_TEXTURED,
+                    PricingUtils.FINISH_GOLD
+                )
                 DropdownSelector("Finish", finish, finishes) { finish = it }
 
                 if (folders.isNotEmpty()) {

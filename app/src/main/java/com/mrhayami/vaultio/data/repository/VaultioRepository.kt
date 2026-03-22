@@ -8,6 +8,7 @@ import com.mrhayami.vaultio.data.VintageSets
 import com.mrhayami.vaultio.data.local.*
 import com.mrhayami.vaultio.data.remote.JustTcgApi
 import com.mrhayami.vaultio.data.remote.JustTcgBatchRequestItem
+import com.mrhayami.vaultio.data.remote.JustTcgVariant
 import com.mrhayami.vaultio.data.remote.TcgDexApi
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import kotlinx.coroutines.flow.Flow
@@ -363,28 +364,45 @@ class VaultioRepository(
         if (!canUseJustTcg()) return
 
         try {
-            val startTime = System.currentTimeMillis()
-            // Vintage cards often need specific set mapping for 1st Ed / Shadowless
-            // For single card update, we try a search or direct TCGplayerID if we have it
-            val tcgPlayerId = card.tcgPlayerId
-            val response = if (tcgPlayerId != null) {
-                justTcgApi.getCardByTcgPlayerId(apiKey, tcgPlayerId)
-            } else {
-                val config = VintageSets.getVintageConfig(card.setId)
-                justTcgApi.searchCards(
+            val config = VintageSets.getVintageConfig(card.setId) ?: return
+            val slugs = mutableSetOf<String>()
+            slugs.add(config.justTcgSetId)
+            config.shadowlessJustTcgSetId?.let { slugs.add(it) }
+
+            val allVariants = mutableListOf<Pair<JustTcgVariant, String>>() // Variant and the slug it came from
+            val normalizedNumber = PricingUtils.normalizeCardNumber(card.localId)
+
+            for (slug in slugs) {
+                val startTime = System.currentTimeMillis()
+                val response = justTcgApi.searchCards(
                     apiKey = apiKey,
                     query = card.name,
-                    set = config?.justTcgSetId
+                    number = normalizedNumber,
+                    set = slug
                 )
+                logTelemetry("justtcg", "cards/search", 200, System.currentTimeMillis() - startTime)
+                incrementApiUsage()
+                
+                response.data.forEach { jCard ->
+                    jCard.variants.forEach { variant ->
+                        allVariants.add(variant to slug)
+                    }
+                }
+                
+                if (slugs.size > 1) delay(500) 
             }
 
-            logTelemetry("justtcg", "cards", 200, System.currentTimeMillis() - startTime)
-            incrementApiUsage()
-
-            val justTcgCard = response.data.firstOrNull()
-            if (justTcgCard != null) {
-                val vintagePrices = justTcgCard.variants.mapNotNull { 
-                    PricingUtils.mapJustTcgVariantToVintagePrice(card.id, it)
+            if (allVariants.isNotEmpty()) {
+                val vintagePrices = allVariants.mapNotNull { (variant, slug) ->
+                    // Disambiguate Shadowless for Base Set
+                    val targetPrinting = if (slug == config.shadowlessJustTcgSetId) {
+                        val is1stEd = variant.printing.lowercase().contains("1st edition")
+                        if (is1stEd) PricingUtils.PRINTING_1ST_EDITION else PricingUtils.PRINTING_SHADOWLESS
+                    } else {
+                        null // use default parsing
+                    }
+                    
+                    PricingUtils.mapJustTcgVariantToVintagePrice(card.id, variant, targetPrinting)
                 }
                 if (vintagePrices.isNotEmpty()) {
                     priceDao.insertVintagePrices(vintagePrices)
@@ -402,14 +420,15 @@ class VaultioRepository(
 
         try {
             val startTime = System.currentTimeMillis()
-            val tcgPlayerId = card.tcgPlayerId
-            val response = if (tcgPlayerId != null) {
-                justTcgApi.getCardByTcgPlayerId(apiKey, tcgPlayerId)
+            val normalizedNumber = PricingUtils.normalizeCardNumber(card.localId)
+            
+            val response = if (card.tcgPlayerId != null) {
+                justTcgApi.getCardByTcgPlayerId(apiKey, card.tcgPlayerId)
             } else {
-                // Search by name + number as fallback
                 justTcgApi.searchCards(
                     apiKey = apiKey,
-                    query = "${card.name} ${card.localId}"
+                    query = card.name,
+                    number = normalizedNumber
                 )
             }
             
@@ -432,54 +451,29 @@ class VaultioRepository(
     }
 
     private suspend fun canUseJustTcg(): Boolean {
-        // Daily limit 100
         return getApiUsage() < 100
     }
 
     suspend fun updatePricesBatch(cards: List<CardEntity>) {
         val apiKey = getJustTcgApiKey()
-        // Split into Vintage and Modern
         val (vintage, modern) = cards.partition { VintageSets.isVintageSet(it.setId) }
 
-        // Process Modern via TCGdex (Parallel or sequential)
+        // Process Modern via TCGdex (Sequential for simplicity, could be parallel)
         modern.forEach { updateCardPrice(it.id) }
 
-        // Process Vintage via JustTCG Batch API (Much more efficient)
-        if (vintage.isNotEmpty() && apiKey != null && canUseJustTcg()) {
-            val vintageWithId = vintage.filter { it.tcgPlayerId != null }
-            vintageWithId.chunked(20).forEach { batch ->
-                try {
-                    val items = batch.map { JustTcgBatchRequestItem(it.tcgPlayerId!!) }
-                    val startTime = System.currentTimeMillis()
-                    val response = justTcgApi.getCardsBatch(apiKey, items)
-                    logTelemetry("justtcg", "cards/batch", 200, System.currentTimeMillis() - startTime)
-                    incrementApiUsage()
-
-                    val allVintagePrices = mutableListOf<VintagePriceEntity>()
-                    response.data.forEach { jCard ->
-                        // Map back to our card ID using tcgplayerId
-                        val originalCard = batch.find { it.tcgPlayerId == jCard.tcgplayerId }
-                        if (originalCard != null) {
-                            val prices = jCard.variants.mapNotNull { 
-                                PricingUtils.mapJustTcgVariantToVintagePrice(originalCard.id, it)
-                            }
-                            allVintagePrices.addAll(prices)
-                        }
-                    }
-                    if (allVintagePrices.isNotEmpty()) {
-                        priceDao.insertVintagePrices(allVintagePrices)
-                    }
-                    
-                    // Respect 10 req/min limit
-                    delay(6000) 
-                } catch (e: Exception) {
-                    Log.e("VaultioRepository", "JustTCG batch failed", e)
-                }
+        // Process Vintage individually to handle 1st Ed / Shadowless nuances
+        vintage.forEach { updateVintageCardPrice(it) }
+        
+        // If we wanted to use batch for modern cards with JustTCG:
+        /*
+        if (modern.isNotEmpty() && apiKey != null && canUseJustTcg()) {
+            val modernWithId = modern.filter { it.tcgPlayerId != null }
+            modernWithId.chunked(20).forEach { batch ->
+                // ... batch call logic ...
+                delay(6000)
             }
-            
-            // Handle vintage cards without TCGplayerID via individual search (as fallback)
-            vintage.filter { it.tcgPlayerId == null }.forEach { updateVintageCardPrice(it) }
         }
+        */
     }
 
     suspend fun getApiUsage(): Int {

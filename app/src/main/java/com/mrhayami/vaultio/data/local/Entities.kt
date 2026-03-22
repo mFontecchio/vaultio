@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.mrhayami.vaultio.data.PricingUtils
 
 @Entity(tableName = "sets")
 data class SetEntity(
@@ -47,9 +48,9 @@ data class UserCardEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val cardId: String,
     val quantity: Int = 1,
-    val condition: String = "Near Mint",
-    val printing: String = "Standard",
-    val finish: String = "Non Holo",
+    val condition: String = PricingUtils.CONDITION_NM,
+    val printing: String = PricingUtils.PRINTING_UNLIMITED,
+    val finish: String = PricingUtils.FINISH_NORMAL,
     val manualPrice: Double? = null,
     val dateAdded: Long = System.currentTimeMillis()
 )

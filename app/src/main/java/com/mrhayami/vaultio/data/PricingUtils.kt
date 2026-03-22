@@ -8,42 +8,79 @@ import com.mrhayami.vaultio.data.remote.TcgDexPriceItem
 import com.mrhayami.vaultio.data.remote.TcgDexTcgPlayerPricing
 
 object PricingUtils {
-    // Standardized Finishes
-    const val FINISH_NORMAL = "Normal"
-    const val FINISH_HOLOFOIL = "Holofoil"
-    const val FINISH_REVERSE_HOLOFOIL = "Reverse Holofoil"
+    // Standardized Finishes from Source Project
+    const val FINISH_NORMAL = "normal"
+    const val FINISH_HOLOFOIL = "holofoil"
+    const val FINISH_REVERSE_HOLO = "reverse holo"
+    const val FINISH_TEXTURED = "textured"
+    const val FINISH_GOLD = "gold"
 
-    // Standardized Conditions
+    // Standardized Printings from Source Project
+    const val PRINTING_UNLIMITED = "unlimited"
+    const val PRINTING_SHADOWLESS = "shadowless"
+    const val PRINTING_PROMO = "promo"
+    const val PRINTING_1ST_EDITION = "1st edition"
+
+    // Standardized Conditions from Source Project
     const val CONDITION_NM = "Near Mint"
     const val CONDITION_LP = "Lightly Played"
     const val CONDITION_MP = "Moderately Played"
     const val CONDITION_HP = "Heavily Played"
     const val CONDITION_DMG = "Damaged"
 
+    fun normalizeCardNumber(localId: String): String {
+        var cleaned = localId.split("/")[0]
+        val match = Regex("^([A-Za-z]*)0*(\\d+)([A-Za-z]*)$").find(cleaned)
+        if (match != null) {
+            val (prefix, num, suffix) = match.destructured
+            cleaned = "$prefix$num$suffix"
+        }
+        return cleaned
+    }
+
+    // OUR MODEL -> JUSTTCG (for queries and batch filters)
+    fun mapToJustTcgPrinting(finish: String, printing: String): String {
+        val f = finish.lowercase()
+        val p = printing.lowercase()
+
+        // JustTCG usually maps textured/gold to "Holofoil" for the sake of market pricing
+        val jtcgFinish = when (f) {
+            FINISH_REVERSE_HOLO -> "Reverse Holofoil"
+            FINISH_HOLOFOIL, FINISH_TEXTURED, FINISH_GOLD -> "Holofoil"
+            else -> "Normal"
+        }
+
+        return when (p) {
+            PRINTING_1ST_EDITION -> "1st Edition $jtcgFinish"
+            PRINTING_SHADOWLESS -> "Shadowless $jtcgFinish"
+            else -> jtcgFinish // Unlimited and Promo usually don't have a prefix in the printing string
+        }
+    }
+
+    // JUSTTCG -> OUR MODEL (for parsing responses)
+    fun parseJustTcgPrinting(jtcgPrinting: String): Pair<String, String> {
+        val lower = jtcgPrinting.lowercase()
+        
+        val edition = when {
+            lower.contains("1st edition") -> PRINTING_1ST_EDITION
+            lower.contains("shadowless") -> PRINTING_SHADOWLESS
+            else -> PRINTING_UNLIMITED
+        }
+        
+        val finish = when {
+            lower.contains("reverse") -> FINISH_REVERSE_HOLO
+            lower.contains("holofoil") || lower.contains("holo") -> FINISH_HOLOFOIL
+            else -> FINISH_NORMAL
+        }
+        
+        return Pair(finish, edition)
+    }
+
     fun mapTcgDexPrices(cardId: String, pricing: TcgDexTcgPlayerPricing): List<PriceEntity> {
         val result = mutableListOf<PriceEntity>()
-        
-        // Normal
-        pricing.normal?.let { item ->
-            if (hasAnyPrice(item)) {
-                result.add(createPriceEntity(cardId, FINISH_NORMAL, item))
-            }
-        }
-        
-        // Holofoil
-        pricing.holofoil?.let { item ->
-            if (hasAnyPrice(item)) {
-                result.add(createPriceEntity(cardId, FINISH_HOLOFOIL, item))
-            }
-        }
-
-        // Reverse
-        pricing.reverse?.let { item ->
-            if (hasAnyPrice(item)) {
-                result.add(createPriceEntity(cardId, FINISH_REVERSE_HOLOFOIL, item))
-            }
-        }
-
+        pricing.normal?.let { if (hasAnyPrice(it)) result.add(createPriceEntity(cardId, FINISH_NORMAL, it)) }
+        pricing.holofoil?.let { if (hasAnyPrice(it)) result.add(createPriceEntity(cardId, FINISH_HOLOFOIL, it)) }
+        pricing.reverse?.let { if (hasAnyPrice(it)) result.add(createPriceEntity(cardId, FINISH_REVERSE_HOLO, it)) }
         return result
     }
 
@@ -65,31 +102,14 @@ object PricingUtils {
     }
 
     fun mapJustTcgVariantToPrice(cardId: String, variant: JustTcgVariant): PriceEntity? {
-        val finish = mapJustTcgPrintingToFinish(variant.printing) ?: return null
-        val condition = variant.condition
+        val (finish, _) = parseJustTcgPrinting(variant.printing)
+        // Conditions are already 1:1 strings
         
         val marketPrice = variant.prices?.market ?: variant.price ?: variant.avgPrice
         
         return PriceEntity(
             cardId = cardId,
             finish = finish,
-            condition = condition,
-            marketPrice = marketPrice,
-            lowPrice = variant.prices?.low ?: variant.minPrice7d,
-            midPrice = variant.prices?.mid,
-            highPrice = variant.prices?.high ?: variant.maxPrice7d,
-            source = "justtcg"
-        )
-    }
-
-    fun mapJustTcgVariantToVintagePrice(cardId: String, variant: JustTcgVariant): VintagePriceEntity? {
-        val finish = mapJustTcgPrintingToFinish(variant.printing) ?: FINISH_NORMAL
-        val marketPrice = variant.prices?.market ?: variant.price ?: variant.avgPrice
-        
-        return VintagePriceEntity(
-            cardId = cardId,
-            finish = finish,
-            printing = variant.printing,
             condition = variant.condition,
             marketPrice = marketPrice,
             lowPrice = variant.prices?.low ?: variant.minPrice7d,
@@ -99,13 +119,26 @@ object PricingUtils {
         )
     }
 
-    private fun mapJustTcgPrintingToFinish(printing: String): String? {
-        val p = printing.lowercase()
-        return when {
-            p.contains("reverse") -> FINISH_REVERSE_HOLOFOIL
-            p.contains("holofoil") || p.contains("holo") -> FINISH_HOLOFOIL
-            p.contains("normal") || p.contains("unlimited") || p.contains("standard") -> FINISH_NORMAL
-            else -> FINISH_NORMAL
-        }
+    fun mapJustTcgVariantToVintagePrice(
+        cardId: String, 
+        variant: JustTcgVariant, 
+        targetPrinting: String? = null
+    ): VintagePriceEntity? {
+        val (finish, edition) = parseJustTcgPrinting(variant.printing)
+        val finalPrinting = targetPrinting ?: edition
+        
+        val marketPrice = variant.prices?.market ?: variant.price ?: variant.avgPrice
+        
+        return VintagePriceEntity(
+            cardId = cardId,
+            finish = finish,
+            printing = finalPrinting,
+            condition = variant.condition,
+            marketPrice = marketPrice,
+            lowPrice = variant.prices?.low ?: variant.minPrice7d,
+            midPrice = variant.prices?.mid,
+            highPrice = variant.prices?.high ?: variant.maxPrice7d,
+            source = "justtcg"
+        )
     }
 }
