@@ -63,15 +63,12 @@ class VaultioRepository(
             val remoteSets = tcgDexApi.getSets()
             val entities = remoteSets.map {
                 val setId = it.id
-                val rawLogo = it.logo ?: "https://assets.tcgdex.net/en/sets/$setId/logo"
-                val rawSymbol = it.symbol ?: "https://assets.tcgdex.net/en/sets/$setId/symbol"
-
                 SetEntity(
                     id = setId,
                     name = it.name,
                     series = it.series,
-                    logo = ensureImageUrl(rawLogo),
-                    symbol = ensureImageUrl(rawSymbol),
+                    logo = ensureImageUrl(it.logo ?: "https://assets.tcgdex.net/en/sets/$setId/logo"),
+                    symbol = ensureImageUrl(it.symbol ?: "https://assets.tcgdex.net/en/sets/$setId/symbol"),
                     totalCards = it.cardCount.total,
                     officialCards = it.cardCount.official,
                     releaseDate = it.releaseDate,
@@ -115,6 +112,12 @@ class VaultioRepository(
             }
             cardDao.insertCards(cardEntities)
             setDao.updateDownloadStatus(setId, true)
+            
+            // Ensure set entity has icons
+            val currentSet = setDao.getSetById(setId)
+            if (currentSet != null && (currentSet.logo == null || !currentSet.logo.contains("http"))) {
+                refreshSets() 
+            }
         } catch (e: Exception) {
             Log.e("VaultioRepository", "Error downloading set $setId", e)
         }
@@ -161,12 +164,12 @@ class VaultioRepository(
         Log.d("Vaultio", "Adding card to collection: ${card.name} (${card.id})")
         val setId = card.id.substringBefore("-")
         var setEntity = setDao.getSetById(setId)
-        if (setEntity == null) {
+        if (setEntity == null || setEntity.logo == null || !setEntity.logo.contains("http")) {
             try {
                 val remoteSets = tcgDexApi.getSets()
                 val remoteSet = remoteSets.find { it.id == setId }
                 if (remoteSet != null) {
-                    setEntity = SetEntity(
+                    val updatedEntity = SetEntity(
                         id = remoteSet.id,
                         name = remoteSet.name,
                         series = remoteSet.series,
@@ -174,9 +177,11 @@ class VaultioRepository(
                         symbol = ensureImageUrl(remoteSet.symbol ?: "https://assets.tcgdex.net/en/sets/$setId/symbol"),
                         totalCards = remoteSet.cardCount.total,
                         officialCards = remoteSet.cardCount.official,
-                        releaseDate = remoteSet.releaseDate
+                        releaseDate = remoteSet.releaseDate,
+                        isDownloaded = setEntity?.isDownloaded ?: false
                     )
-                    setDao.insertSets(listOf(setEntity))
+                    setDao.insertSets(listOf(updatedEntity))
+                    setEntity = updatedEntity
                 }
             } catch (e: Exception) { Log.e("Vaultio", "Failed to sync set", e) }
         }
@@ -395,14 +400,14 @@ class VaultioRepository(
             if (allVariants.isNotEmpty()) {
                 val vintagePrices = allVariants.mapNotNull { (variant, slug) ->
                     // Disambiguate Shadowless for Base Set
-                    val targetPrinting = if (slug == config.shadowlessJustTcgSetId) {
+                    val targetPrintingValue = if (slug == config.shadowlessJustTcgSetId) {
                         val is1stEd = variant.printing.lowercase().contains("1st edition")
                         if (is1stEd) PricingUtils.PRINTING_1ST_EDITION else PricingUtils.PRINTING_SHADOWLESS
                     } else {
                         null // use default parsing
                     }
                     
-                    PricingUtils.mapJustTcgVariantToVintagePrice(card.id, variant, targetPrinting)
+                    PricingUtils.mapJustTcgVariantToVintagePrice(card.id, variant, targetPrintingValue)
                 }
                 if (vintagePrices.isNotEmpty()) {
                     priceDao.insertVintagePrices(vintagePrices)

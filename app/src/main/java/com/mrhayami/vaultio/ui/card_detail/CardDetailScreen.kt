@@ -286,14 +286,20 @@ fun CardDetailScreen(
                             modifier = Modifier.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (set.symbol != null) {
-                                AsyncImage(
-                                    model = set.symbol,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
+                            // Aligning with SetDownloadsScreen logic which works better for Base Set
+                            val setIcon = remember(set.logo, set.symbol, set.id) {
+                                set.logo ?: set.symbol ?: "https://assets.tcgdex.net/en/sets/${set.id}/logo.png"
                             }
+                            
+                            AsyncImage(
+                                model = setIcon,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                                contentScale = ContentScale.Fit,
+                                error = rememberVectorPainter(Icons.Rounded.ImageNotSupported)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(set.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 Text(
@@ -602,3 +608,7 @@ fun getRelativeTime(timestamp: Long): String {
         else -> "${diff / 86400_000}d ago"
     }
 }
+
+@Composable
+fun rememberVectorPainter(image: androidx.compose.ui.graphics.vector.ImageVector) = 
+    androidx.compose.ui.graphics.vector.rememberVectorPainter(image)
