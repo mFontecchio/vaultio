@@ -50,6 +50,7 @@ class UserPreferencesRepository(context: Context) {
         val SHOW_FINISH_ANIMATIONS = booleanPreferencesKey("show_finish_animations")
         
         val JUST_TCG_API_KEY = stringPreferencesKey("just_tcg_api_key")
+        val PREFER_SET_LOGO = booleanPreferencesKey("prefer_set_logo")
     }
 
     val viewMode: Flow<ViewMode> = dataStore.data.map {
@@ -165,6 +166,16 @@ class UserPreferencesRepository(context: Context) {
     suspend fun setJustTcgApiKey(apiKey: String) {
         dataStore.edit {
             it[PreferencesKeys.JUST_TCG_API_KEY] = apiKey
+        }
+    }
+
+    val preferSetLogo: Flow<Boolean> = dataStore.data.map {
+        it[PreferencesKeys.PREFER_SET_LOGO] ?: true
+    }
+
+    suspend fun setPreferSetLogo(preferLogo: Boolean) {
+        dataStore.edit {
+            it[PreferencesKeys.PREFER_SET_LOGO] = preferLogo
         }
     }
 }

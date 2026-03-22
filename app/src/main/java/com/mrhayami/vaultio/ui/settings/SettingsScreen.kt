@@ -98,6 +98,19 @@ fun SettingsScreen(
             )
 
             ListItem(
+                headlineContent = { Text("Prefer Set Logos") },
+                supportingContent = { Text("Show large set logos instead of small icons where possible") },
+                leadingContent = { Icon(Icons.Rounded.Image, contentDescription = null) },
+                trailingContent = {
+                    Switch(
+                        checked = uiState.preferSetLogo,
+                        onCheckedChange = { viewModel.setPreferSetLogo(it) }
+                    )
+                },
+                modifier = Modifier.clickable { viewModel.setPreferSetLogo(!uiState.preferSetLogo) }
+            )
+
+            ListItem(
                 headlineContent = { Text("Animations") },
                 supportingContent = { Text("Visual effects for cards") },
                 leadingContent = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },

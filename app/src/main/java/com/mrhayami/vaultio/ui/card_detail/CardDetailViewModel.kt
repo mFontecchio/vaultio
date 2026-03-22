@@ -23,6 +23,7 @@ data class CardDetailUiState(
     val vintagePrices: List<VintagePriceEntity> = emptyList(),
     val showEnergyAnimations: Boolean = true,
     val showFinishAnimations: Boolean = true,
+    val preferSetLogo: Boolean = true,
     val isLoading: Boolean = true,
     val isRefreshingPrice: Boolean = false,
     val isDeleted: Boolean = false,
@@ -52,6 +53,7 @@ class CardDetailViewModel(
                         repository.allFolderCardCrossRefs,
                         repository.userPreferencesRepository.showEnergyAnimations,
                         repository.userPreferencesRepository.showFinishAnimations,
+                        repository.userPreferencesRepository.preferSetLogo,
                         repository.getPricesForCard(cardWithDetails.card.id),
                         repository.getVintagePricesForCard(cardWithDetails.card.id)
                     ) { flows ->
@@ -59,8 +61,9 @@ class CardDetailViewModel(
                         val crossRefs = flows[1] as List<FolderCardCrossRef>
                         val showEnergyAnims = flows[2] as Boolean
                         val showFinishAnims = flows[3] as Boolean
-                        val prices = flows[4] as List<PriceEntity>
-                        val vintagePrices = flows[5] as List<VintagePriceEntity>
+                        val preferLogo = flows[4] as Boolean
+                        val prices = flows[5] as List<PriceEntity>
+                        val vintagePrices = flows[6] as List<VintagePriceEntity>
 
                         val cardFolderIds = crossRefs
                             .filter { it.userCardId == userCardId }
@@ -75,6 +78,7 @@ class CardDetailViewModel(
                             vintagePrices = vintagePrices,
                             showEnergyAnimations = showEnergyAnims,
                             showFinishAnimations = showFinishAnims,
+                            preferSetLogo = preferLogo,
                             isLoading = false
                         )
                     }

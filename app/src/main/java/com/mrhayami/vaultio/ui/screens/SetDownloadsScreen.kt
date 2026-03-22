@@ -27,6 +27,7 @@ import java.util.Locale
 @Composable
 fun SetDownloadsScreen(repository: VaultioRepository) {
     val sets by repository.allSets.collectAsState(initial = emptyList())
+    val preferSetLogo by repository.userPreferencesRepository.preferSetLogo.collectAsState(initial = true)
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
 
@@ -162,6 +163,7 @@ fun SetDownloadsScreen(repository: VaultioRepository) {
                     items(sets, key = { it.id }) { set ->
                         SetItem(
                             set = set,
+                            preferSetLogo = preferSetLogo,
                             onDownload = {
                                 scope.launch {
                                     repository.downloadSet(set.id)
@@ -183,12 +185,17 @@ fun SetDownloadsScreen(repository: VaultioRepository) {
 @Composable
 fun SetItem(
     set: SetEntity,
+    preferSetLogo: Boolean,
     onDownload: () -> Unit,
     onDelete: () -> Unit
 ) {
     // TCGDex predictable asset URL fallback
-    val imageUrl = remember(set.logo, set.symbol, set.id) {
-        set.logo ?: set.symbol ?: "https://assets.tcgdex.net/en/sets/${set.id}/logo.png"
+    val imageUrl = remember(set.logo, set.symbol, set.id, preferSetLogo) {
+        if (preferSetLogo) {
+            set.logo ?: set.symbol ?: "https://assets.tcgdex.net/en/sets/${set.id}/logo.png"
+        } else {
+            set.symbol ?: set.logo ?: "https://assets.tcgdex.net/en/sets/${set.id}/symbol.png"
+        }
     }
 
     ListItem(

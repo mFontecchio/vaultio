@@ -20,6 +20,7 @@ data class SettingsUiState(
     val darkThemeConfig: DarkThemeConfig = DarkThemeConfig.FOLLOW_SYSTEM,
     val showEnergyAnimations: Boolean = true,
     val showFinishAnimations: Boolean = true,
+    val preferSetLogo: Boolean = true,
     val justTcgApiKey: String = "",
     val apiUsage: Int = 0,
     val offlineSetsCount: Int = 0,
@@ -36,7 +37,7 @@ class SettingsViewModel(
         val darkThemeConfig: DarkThemeConfig,
         val showEnergy: Boolean,
         val showFinish: Boolean,
-        val apiKey: String?
+        val preferSetLogo: Boolean
     )
 
     val uiState: StateFlow<SettingsUiState> = combine(
@@ -45,18 +46,20 @@ class SettingsViewModel(
             userPreferencesRepository.darkThemeConfig,
             userPreferencesRepository.showEnergyAnimations,
             userPreferencesRepository.showFinishAnimations,
-            userPreferencesRepository.justTcgApiKey
-        ) { themeBrand: ThemeBrand, darkThemeConfig: DarkThemeConfig, showEnergy: Boolean, showFinish: Boolean, apiKey: String? ->
-            PreferenceValues(themeBrand, darkThemeConfig, showEnergy, showFinish, apiKey)
+            userPreferencesRepository.preferSetLogo
+        ) { themeBrand, darkThemeConfig, showEnergy, showFinish, preferSetLogo ->
+            PreferenceValues(themeBrand, darkThemeConfig, showEnergy, showFinish, preferSetLogo)
         },
+        userPreferencesRepository.justTcgApiKey,
         repository.allSets.map { sets -> sets.count { it.isDownloaded } }
-    ) { prefs: PreferenceValues, downloadedCount: Int ->
+    ) { prefs, apiKey, downloadedCount ->
         SettingsUiState(
             themeBrand = prefs.themeBrand,
             darkThemeConfig = prefs.darkThemeConfig,
             showEnergyAnimations = prefs.showEnergy,
             showFinishAnimations = prefs.showFinish,
-            justTcgApiKey = prefs.apiKey ?: "",
+            preferSetLogo = prefs.preferSetLogo,
+            justTcgApiKey = apiKey ?: "",
             apiUsage = repository.getApiUsage(),
             offlineSetsCount = downloadedCount,
             isLoading = false
@@ -91,6 +94,12 @@ class SettingsViewModel(
         }
     }
 
+    fun setPreferSetLogo(preferLogo: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setPreferSetLogo(preferLogo)
+        }
+    }
+
     fun setJustTcgApiKey(apiKey: String) {
         viewModelScope.launch {
             userPreferencesRepository.setJustTcgApiKey(apiKey)
@@ -107,6 +116,7 @@ class SettingsViewModel(
             userPreferencesRepository.setDarkThemeConfig(DarkThemeConfig.FOLLOW_SYSTEM)
             userPreferencesRepository.setShowEnergyAnimations(true)
             userPreferencesRepository.setShowFinishAnimations(true)
+            userPreferencesRepository.setPreferSetLogo(true)
             userPreferencesRepository.setJustTcgApiKey("")
             userPreferencesRepository.setViewMode(ViewMode.GRID)
             userPreferencesRepository.setSortMode(SortMode.DATE_ADDED)

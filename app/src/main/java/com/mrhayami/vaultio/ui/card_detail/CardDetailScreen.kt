@@ -286,9 +286,12 @@ fun CardDetailScreen(
                             modifier = Modifier.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Aligning with SetDownloadsScreen logic which works better for Base Set
-                            val setIcon = remember(set.logo, set.symbol, set.id) {
-                                set.logo ?: set.symbol ?: "https://assets.tcgdex.net/en/sets/${set.id}/logo.png"
+                            val setIcon = remember(set.logo, set.symbol, set.id, uiState.preferSetLogo) {
+                                if (uiState.preferSetLogo) {
+                                    set.logo ?: set.symbol ?: "https://assets.tcgdex.net/en/sets/${set.id}/logo.png"
+                                } else {
+                                    set.symbol ?: set.logo ?: "https://assets.tcgdex.net/en/sets/${set.id}/symbol.png"
+                                }
                             }
                             
                             AsyncImage(
