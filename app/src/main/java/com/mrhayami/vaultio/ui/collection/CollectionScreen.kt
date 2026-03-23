@@ -258,6 +258,7 @@ fun CollectionScreen(
                             selectedIds = uiState.selectedIds,
                             isSelectionMode = uiState.isSelectionMode,
                             settings = uiState.listSettings,
+                            preferSetLogo = uiState.preferSetLogo,
                             onCardClick = { if (uiState.isSelectionMode) viewModel.toggleSelection(it) else onNavigateToCardDetail(it) },
                             onCardLongClick = viewModel::toggleSelection
                         )
@@ -880,6 +881,7 @@ fun ListView(
     selectedIds: Set<Long>,
     isSelectionMode: Boolean,
     settings: ListSettings,
+    preferSetLogo: Boolean,
     onCardClick: (Long) -> Unit,
     onCardLongClick: (Long) -> Unit
 ) {
@@ -920,7 +922,21 @@ fun ListView(
                         Checkbox(checked = isSelected, onCheckedChange = { onCardClick(item.userCard.id) })
                     } else {
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("x${item.userCard.quantity}", fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val setIcon = if (preferSetLogo) {
+                                    item.set.logo ?: item.set.symbol ?: "https://assets.tcgdex.net/en/sets/${item.set.id}/logo.png"
+                                } else {
+                                    item.set.symbol ?: item.set.logo ?: "https://assets.tcgdex.net/en/sets/${item.set.id}/symbol.png"
+                                }
+                                
+                                AsyncImage(
+                                    model = setIcon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp).padding(end = 4.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                                Text("x${item.userCard.quantity}", fontWeight = FontWeight.Bold)
+                            }
                             if (settings.showPrices) {
                                 Text("$0.00", style = MaterialTheme.typography.bodySmall) // Price placeholder
                             }

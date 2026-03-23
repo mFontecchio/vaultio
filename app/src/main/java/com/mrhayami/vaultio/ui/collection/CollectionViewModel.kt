@@ -73,6 +73,7 @@ data class CollectionUiState(
     val listSettings: ListSettings = ListSettings(),
     val gridSettings: GridSettings = GridSettings(),
     val pokedexSettings: PokedexSettings = PokedexSettings(),
+    val preferSetLogo: Boolean = true,
     val sets: Map<String, SetEntity> = emptyMap(),
     val showSaveSuccess: Boolean = false,
     // Available filter options based on current collection
@@ -100,6 +101,7 @@ class CollectionViewModel(
     private val _listSettings = MutableStateFlow(ListSettings())
     private val _gridSettings = MutableStateFlow(GridSettings())
     private val _pokedexSettings = MutableStateFlow(PokedexSettings())
+    private val _preferSetLogo = MutableStateFlow(true)
 
     private val _selectionState = MutableStateFlow(emptySet<Long>())
     private val _showSaveSuccess = MutableStateFlow(false)
@@ -120,6 +122,9 @@ class CollectionViewModel(
         viewModelScope.launch {
             userPreferencesRepository.pokedexSettings.collect { _pokedexSettings.value = it }
         }
+        viewModelScope.launch {
+            userPreferencesRepository.preferSetLogo.collect { _preferSetLogo.value = it }
+        }
     }
 
     val uiState: StateFlow<CollectionUiState> = combine(
@@ -137,6 +142,7 @@ class CollectionViewModel(
         _listSettings,
         _gridSettings,
         _pokedexSettings,
+        _preferSetLogo,
         repository.allSets.map { sets -> sets.associateBy { it.id } },
         _showSaveSuccess
     ) { args ->
@@ -158,9 +164,10 @@ class CollectionViewModel(
         val listSettings = args[11] as ListSettings
         val gridSettings = args[12] as GridSettings
         val pokedexSettings = args[13] as PokedexSettings
+        val preferSetLogo = args[14] as Boolean
         @Suppress("UNCHECKED_CAST")
-        val sets = args[14] as Map<String, SetEntity>
-        val showSaveSuccess = args[15] as Boolean
+        val sets = args[15] as Map<String, SetEntity>
+        val showSaveSuccess = args[16] as Boolean
 
         // Calculate available filter options from the base userCards
         val availableRarities = userCards.mapNotNull { it.card.rarity }.distinct().sorted()
@@ -238,6 +245,7 @@ class CollectionViewModel(
             listSettings = listSettings,
             gridSettings = gridSettings,
             pokedexSettings = pokedexSettings,
+            preferSetLogo = preferSetLogo,
             sets = sets,
             showSaveSuccess = showSaveSuccess,
             availableRarities = availableRarities,
