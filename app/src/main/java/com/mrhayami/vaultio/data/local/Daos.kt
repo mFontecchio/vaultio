@@ -162,6 +162,9 @@ interface ApiUsageDao {
     @Query("SELECT * FROM api_usage WHERE date = :date")
     suspend fun getUsageForDate(date: String): ApiUsageEntity?
 
+    @Query("SELECT * FROM api_usage WHERE date = :date")
+    fun getUsageFlow(date: String): Flow<ApiUsageEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUsage(usage: ApiUsageEntity): Long
 }

@@ -131,7 +131,13 @@ data class PriceMetaEntity(
 @Entity(tableName = "api_usage")
 data class ApiUsageEntity(
     @PrimaryKey val date: String, // "yyyy-MM-dd"
-    val count: Int = 0
+    val count: Int = 0,
+    val dailyLimit: Int = 100,
+    val dailyRemaining: Int = 100,
+    val planLimit: Int = 1000,
+    val planUsed: Int = 0,
+    val planRemaining: Int = 1000,
+    val planName: String = "Free"
 )
 
 @Entity(tableName = "telemetry_log")

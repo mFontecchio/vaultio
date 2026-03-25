@@ -166,12 +166,32 @@ fun SettingsScreen(
             ListItem(
                 headlineContent = { Text("JustTCG API Usage") },
                 supportingContent = { 
-                    Column {
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Text("Plan: ${uiState.planName}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Daily Usage", style = MaterialTheme.typography.labelSmall)
                         LinearProgressIndicator(
-                            progress = { (uiState.apiUsage / 100f).coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                            progress = { if (uiState.dailyLimit > 0) (uiState.dailyUsed.toFloat() / uiState.dailyLimit.toFloat()).coerceIn(0f, 1f) else 0f },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            color = if (uiState.dailyRemaining <= 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                         )
-                        Text("${uiState.apiUsage} / 100 requests used today")
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${uiState.dailyUsed} / ${uiState.dailyLimit} used", style = MaterialTheme.typography.bodySmall)
+                            Text("${uiState.dailyRemaining} remaining", style = MaterialTheme.typography.bodySmall)
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Plan Usage", style = MaterialTheme.typography.labelSmall)
+                        LinearProgressIndicator(
+                            progress = { if (uiState.planLimit > 0) (uiState.planUsed.toFloat() / uiState.planLimit.toFloat()).coerceIn(0f, 1f) else 0f },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            color = if (uiState.planRemaining <= 50) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+                        )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${uiState.planUsed} / ${uiState.planLimit} used", style = MaterialTheme.typography.bodySmall)
+                            Text("${uiState.planRemaining} remaining", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 },
                 leadingContent = { Icon(Icons.Rounded.Api, contentDescription = null) }

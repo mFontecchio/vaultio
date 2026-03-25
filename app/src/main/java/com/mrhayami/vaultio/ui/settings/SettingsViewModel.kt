@@ -22,7 +22,13 @@ data class SettingsUiState(
     val showFinishAnimations: Boolean = true,
     val preferSetLogo: Boolean = true,
     val justTcgApiKey: String = "",
-    val apiUsage: Int = 0,
+    val dailyUsed: Int = 0,
+    val dailyLimit: Int = 100,
+    val dailyRemaining: Int = 100,
+    val planUsed: Int = 0,
+    val planLimit: Int = 1000,
+    val planRemaining: Int = 1000,
+    val planName: String = "Free",
     val offlineSetsCount: Int = 0,
     val isLoading: Boolean = true
 )
@@ -51,8 +57,9 @@ class SettingsViewModel(
             PreferenceValues(themeBrand, darkThemeConfig, showEnergy, showFinish, preferSetLogo)
         },
         userPreferencesRepository.justTcgApiKey,
-        repository.allSets.map { sets -> sets.count { it.isDownloaded } }
-    ) { prefs, apiKey, downloadedCount ->
+        repository.allSets.map { sets -> sets.count { it.isDownloaded } },
+        repository.getApiUsageFlow()
+    ) { prefs, apiKey, downloadedCount, usage ->
         SettingsUiState(
             themeBrand = prefs.themeBrand,
             darkThemeConfig = prefs.darkThemeConfig,
@@ -60,7 +67,13 @@ class SettingsViewModel(
             showFinishAnimations = prefs.showFinish,
             preferSetLogo = prefs.preferSetLogo,
             justTcgApiKey = apiKey ?: "",
-            apiUsage = repository.getApiUsage(),
+            dailyUsed = usage?.count ?: 0,
+            dailyLimit = usage?.dailyLimit ?: 100,
+            dailyRemaining = usage?.dailyRemaining ?: 100,
+            planUsed = usage?.planUsed ?: 0,
+            planLimit = usage?.planLimit ?: 1000,
+            planRemaining = usage?.planRemaining ?: 1000,
+            planName = usage?.planName ?: "Free",
             offlineSetsCount = downloadedCount,
             isLoading = false
         )

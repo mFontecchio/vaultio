@@ -8,6 +8,7 @@ import com.mrhayami.vaultio.data.VintageSets
 import com.mrhayami.vaultio.data.local.*
 import com.mrhayami.vaultio.data.remote.JustTcgApi
 import com.mrhayami.vaultio.data.remote.JustTcgBatchRequestItem
+import com.mrhayami.vaultio.data.remote.JustTcgMetadata
 import com.mrhayami.vaultio.data.remote.JustTcgVariant
 import com.mrhayami.vaultio.data.remote.TcgDexApi
 import com.mrhayami.vaultio.data.remote.TcgDexCard
@@ -119,7 +120,7 @@ class VaultioRepository(
                 refreshSets() 
             }
         } catch (e: Exception) {
-            Log.e("VaultioRepository", "Error downloading set $setId", e)
+            Log.e("VaultioRepository", "Error download set $setId", e)
         }
     }
 
@@ -386,7 +387,7 @@ class VaultioRepository(
                     set = slug
                 )
                 logTelemetry("justtcg", "cards/search", 200, System.currentTimeMillis() - startTime)
-                incrementApiUsage()
+                syncApiUsage(response.metadata)
                 
                 response.data.forEach { jCard ->
                     jCard.variants.forEach { variant ->
@@ -438,7 +439,7 @@ class VaultioRepository(
             }
             
             logTelemetry("justtcg", "cards", 200, System.currentTimeMillis() - startTime)
-            incrementApiUsage()
+            syncApiUsage(response.metadata)
 
             val justTcgCard = response.data.firstOrNull()
             if (justTcgCard != null) {
@@ -456,7 +457,9 @@ class VaultioRepository(
     }
 
     private suspend fun canUseJustTcg(): Boolean {
-        return getApiUsage() < 100
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val usage = apiUsageDao.getUsageForDate(today)
+        return (usage?.dailyRemaining ?: 100) > 0
     }
 
     suspend fun updatePricesBatch(cards: List<CardEntity>) {
@@ -468,22 +471,37 @@ class VaultioRepository(
 
         // Process Vintage individually to handle 1st Ed / Shadowless nuances
         vintage.forEach { updateVintageCardPrice(it) }
-        
-        // If we wanted to use batch for modern cards with JustTCG:
-        /*
-        if (modern.isNotEmpty() && apiKey != null && canUseJustTcg()) {
-            val modernWithId = modern.filter { it.tcgPlayerId != null }
-            modernWithId.chunked(20).forEach { batch ->
-                // ... batch call logic ...
-                delay(6000)
-            }
-        }
-        */
     }
 
     suspend fun getApiUsage(): Int {
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
         return apiUsageDao.getUsageForDate(today)?.count ?: 0
+    }
+
+    fun getApiUsageFlow(): Flow<ApiUsageEntity?> {
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        return apiUsageDao.getUsageFlow(today)
+    }
+
+    suspend fun getApiUsageDetails(): ApiUsageEntity? {
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        return apiUsageDao.getUsageForDate(today)
+    }
+
+    suspend fun syncApiUsage(metadata: JustTcgMetadata?) {
+        if (metadata == null) return
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val entity = ApiUsageEntity(
+            date = today,
+            count = metadata.apiDailyRequestsUsed,
+            dailyLimit = metadata.apiDailyLimit,
+            dailyRemaining = metadata.apiDailyRequestsRemaining,
+            planLimit = metadata.apiRequestLimit,
+            planUsed = metadata.apiRequestsUsed,
+            planRemaining = metadata.apiRequestsRemaining,
+            planName = metadata.apiPlan
+        )
+        apiUsageDao.insertUsage(entity)
     }
 
     suspend fun incrementApiUsage() {
@@ -492,7 +510,12 @@ class VaultioRepository(
         if (currentUsage == null) {
             apiUsageDao.insertUsage(ApiUsageEntity(date = today, count = 1))
         } else {
-            apiUsageDao.insertUsage(currentUsage.copy(count = currentUsage.count + 1))
+            apiUsageDao.insertUsage(currentUsage.copy(
+                count = currentUsage.count + 1,
+                dailyRemaining = maxOf(0, currentUsage.dailyRemaining - 1),
+                planUsed = currentUsage.planUsed + 1,
+                planRemaining = maxOf(0, currentUsage.planRemaining - 1)
+            ))
         }
     }
 

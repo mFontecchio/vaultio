@@ -18,7 +18,7 @@ import androidx.room.RoomDatabase
         ApiUsageEntity::class,
         TelemetryLogEntity::class
     ],
-    version = 5,
+    version = 9,
     exportSchema = false
 )
 abstract class VaultioDatabase : RoomDatabase() {
