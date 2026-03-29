@@ -51,19 +51,6 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE localId = :localId")
     suspend fun getCardsByLocalId(localId: String): List<CardEntity>
 
-    /**
-     * Searches for cards by localId AND cross-checks the parent set's card count.
-     * Used by the scanner to narrow down the correct set when the OCR reads the
-     * "X/TOTAL" collector number (e.g. 123/191 → only sets with 191 cards).
-     */
-    @Query("""
-        SELECT cards.* FROM cards
-        INNER JOIN sets ON cards.setId = sets.id
-        WHERE cards.localId = :localId
-        AND (sets.totalCards = :total OR sets.officialCards = :total)
-    """)
-    suspend fun getCardsByLocalIdAndSetTotal(localId: String, total: Int): List<CardEntity>
-
     @Query("SELECT * FROM cards WHERE name LIKE '%' || :name || '%'")
     suspend fun searchCardsByName(name: String): List<CardEntity>
 
