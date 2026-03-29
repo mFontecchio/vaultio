@@ -1,6 +1,6 @@
 package com.mrhayami.vaultio.ui.scanner
 
-import android.graphics.*
+import android.graphics.Rect
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
@@ -20,7 +20,9 @@ class CameraAnalyzer(
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private var lastScanTime = 0L
-    private val scanIntervalMs = 500L
+    // Reduced from 500ms → 250ms: feeds the consensus buffer faster and improves
+    // time-to-match while the zero-allocation fromMediaImage path keeps CPU load low.
+    private val scanIntervalMs = 250L
 
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     override fun analyze(imageProxy: ImageProxy) {
@@ -30,37 +32,28 @@ class CameraAnalyzer(
             return
         }
 
-        // Use built-in toBitmap() from CameraX 1.4.0
-        val bitmap = imageProxy.toBitmap()
-
-        // 1. Rotate Bitmap
-        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-        val rotatedBitmap = if (rotationDegrees != 0) {
-            val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-        } else {
-            bitmap
+        // Null-guard: some device/OS combos return a null mediaImage on certain frames.
+        val mediaImage = imageProxy.image
+        if (mediaImage == null) {
+            imageProxy.close()
+            return
         }
 
-        // 2. Center Crop (70% area = 15% margin on all sides)
-        val cropMargin = 0.15f
-        val width = rotatedBitmap.width
-        val height = rotatedBitmap.height
-        val left = (width * cropMargin).toInt()
-        val top = (height * cropMargin).toInt()
-        val right = (width * (1 - cropMargin)).toInt()
-        val bottom = (height * (1 - cropMargin)).toInt()
-        
-        val croppedBitmap = Bitmap.createBitmap(
-            rotatedBitmap,
-            left,
-            top,
-            right - left,
-            bottom - top
-        )
+        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
-        // 3. Run ML Kit OCR on the cropped bitmap
-        val image = InputImage.fromBitmap(croppedBitmap, 0)
+        // fromMediaImage lets ML Kit operate directly on the native YUV_420_888 buffer —
+        // higher OCR fidelity than the lossy YUV→RGB bitmap conversion, and zero heap
+        // allocations (no toBitmap / rotation matrix / crop bitmaps).
+        val image = InputImage.fromMediaImage(mediaImage, rotationDegrees)
+
+        // Compute the logical (post-rotation) dimensions so that spatial filtering in the
+        // ViewModel can still reason about top/bottom percentages correctly.
+        val (logicalWidth, logicalHeight) = if (rotationDegrees == 90 || rotationDegrees == 270) {
+            mediaImage.height to mediaImage.width
+        } else {
+            mediaImage.width to mediaImage.height
+        }
+
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
                 lastScanTime = System.currentTimeMillis()
@@ -69,15 +62,15 @@ class CameraAnalyzer(
                         DetectedLine(
                             text = line.text,
                             boundingBox = line.boundingBox,
-                            imageWidth = croppedBitmap.width,
-                            imageHeight = croppedBitmap.height
+                            imageWidth = logicalWidth,
+                            imageHeight = logicalHeight
                         )
                     }
                 }
                 onLinesDetected(lines)
             }
             .addOnFailureListener { e -> e.printStackTrace() }
-            .addOnCompleteListener { 
+            .addOnCompleteListener {
                 imageProxy.close()
             }
     }
