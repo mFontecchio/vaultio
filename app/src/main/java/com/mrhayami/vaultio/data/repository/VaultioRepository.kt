@@ -133,6 +133,10 @@ class VaultioRepository(
         return cardDao.getCardsByLocalId(localId)
     }
 
+    suspend fun searchLocalCardsWithTotal(localId: String, total: Int): List<CardEntity> {
+        return cardDao.getCardsByLocalIdAndSetTotal(localId, total)
+    }
+
     suspend fun searchTcgDex(query: String): List<TcgDexCard> {
         return try {
             if (query.isBlank()) return emptyList()
@@ -439,7 +443,7 @@ class VaultioRepository(
             }
             
             logTelemetry("justtcg", "cards", 200, System.currentTimeMillis() - startTime)
-            syncApiUsage(response.metadata)
+            syncApiUsage(metadata = response.metadata)
 
             val justTcgCard = response.data.firstOrNull()
             if (justTcgCard != null) {

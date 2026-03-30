@@ -20,8 +20,6 @@ class CameraAnalyzer(
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private var lastScanTime = 0L
-    // Reduced from 500ms → 250ms: feeds the consensus buffer faster and improves
-    // time-to-match while the zero-allocation fromMediaImage path keeps CPU load low.
     private val scanIntervalMs = 250L
 
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
@@ -32,7 +30,6 @@ class CameraAnalyzer(
             return
         }
 
-        // Null-guard: some device/OS combos return a null mediaImage on certain frames.
         val mediaImage = imageProxy.image
         if (mediaImage == null) {
             imageProxy.close()
@@ -40,14 +37,10 @@ class CameraAnalyzer(
         }
 
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-
-        // fromMediaImage lets ML Kit operate directly on the native YUV_420_888 buffer —
-        // higher OCR fidelity than the lossy YUV→RGB bitmap conversion, and zero heap
-        // allocations (no toBitmap / rotation matrix / crop bitmaps).
         val image = InputImage.fromMediaImage(mediaImage, rotationDegrees)
 
-        // Compute the logical (post-rotation) dimensions so that spatial filtering in the
-        // ViewModel can still reason about top/bottom percentages correctly.
+        // Compute the logical (post-rotation) dimensions.
+        // These are used by the ViewModel to perform spatial filtering (top/bottom zones).
         val (logicalWidth, logicalHeight) = if (rotationDegrees == 90 || rotationDegrees == 270) {
             mediaImage.height to mediaImage.width
         } else {
