@@ -55,6 +55,8 @@ import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderEntity
+import com.mrhayami.vaultio.data.local.PriceEntity
+import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.components.*
@@ -81,6 +83,9 @@ fun CollectionScreen(
     var showSortFilterSheet by remember { mutableStateOf(false) }
     var selectedDexId by remember { mutableStateOf<Int?>(null) }
     var showMoveToFolderSheet by remember { mutableStateOf(false) }
+    
+    val allPrices by repository.allPrices.collectAsState(initial = emptyList())
+    val allVintagePrices by repository.allVintagePrices.collectAsState(initial = emptyList())
     
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
@@ -259,6 +264,8 @@ fun CollectionScreen(
                             isSelectionMode = uiState.isSelectionMode,
                             settings = uiState.listSettings,
                             preferSetLogo = uiState.preferSetLogo,
+                            allPrices = allPrices,
+                            allVintagePrices = allVintagePrices,
                             onCardClick = { if (uiState.isSelectionMode) viewModel.toggleSelection(it) else onNavigateToCardDetail(it) },
                             onCardLongClick = viewModel::toggleSelection
                         )
@@ -843,13 +850,22 @@ fun StickyControls(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                if (uiState.viewMode == ViewMode.POKEDEX) "${uiState.pokedexEntries.count { it.isCollected }} / ${uiState.pokedexEntries.size} Collected"
-                else "${uiState.filteredUserCards.size} Cards",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 16.dp)
-            )
+            Column(modifier = Modifier.padding(start = 16.dp)) {
+                Text(
+                    if (uiState.viewMode == ViewMode.POKEDEX) "${uiState.pokedexEntries.count { it.isCollected }} / ${uiState.pokedexEntries.size} Collected"
+                    else "${uiState.filteredUserCards.size} Cards",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                if (uiState.viewMode != ViewMode.POKEDEX) {
+                    Text(
+                        "$${String.format("%.2f", uiState.totalValue)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
 
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier.padding(end = 16.dp),
@@ -882,6 +898,8 @@ fun ListView(
     isSelectionMode: Boolean,
     settings: ListSettings,
     preferSetLogo: Boolean,
+    allPrices: List<PriceEntity>,
+    allVintagePrices: List<VintagePriceEntity>,
     onCardClick: (Long) -> Unit,
     onCardLongClick: (Long) -> Unit
 ) {
@@ -938,7 +956,21 @@ fun ListView(
                                 Text("x${item.userCard.quantity}", fontWeight = FontWeight.Bold)
                             }
                             if (settings.showPrices) {
-                                Text("$0.00", style = MaterialTheme.typography.bodySmall) // Price placeholder
+                                val price = item.userCard.manualPrice ?: run {
+                                    val cardId = item.card.id
+                                    val finish = item.userCard.finish
+                                    val condition = item.userCard.condition
+                                    val printing = item.userCard.printing
+                                    
+                                    val foundPrice = allPrices.find { 
+                                        it.cardId == cardId && it.finish == finish && it.condition == condition 
+                                    }?.marketPrice ?: allVintagePrices.find {
+                                        it.cardId == cardId && it.finish == finish && it.condition == condition && it.printing == printing
+                                    }?.marketPrice
+                                    
+                                    foundPrice ?: 0.0
+                                }
+                                Text("$${String.format("%.2f", price)}", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }

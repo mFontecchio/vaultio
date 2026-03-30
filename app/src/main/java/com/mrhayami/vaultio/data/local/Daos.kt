@@ -160,11 +160,17 @@ interface PriceDao {
     @Query("SELECT * FROM prices WHERE cardId = :cardId")
     fun getPricesForCard(cardId: String): Flow<List<PriceEntity>>
 
+    @Query("SELECT * FROM prices")
+    fun getAllPrices(): Flow<List<PriceEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPrices(prices: List<PriceEntity>): List<Long>
 
     @Query("SELECT * FROM vintage_prices WHERE cardId = :cardId")
     fun getVintagePricesForCard(cardId: String): Flow<List<VintagePriceEntity>>
+
+    @Query("SELECT * FROM vintage_prices")
+    fun getAllVintagePrices(): Flow<List<VintagePriceEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertVintagePrices(prices: List<VintagePriceEntity>): List<Long>

@@ -19,6 +19,7 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 
 class VaultioRepository(
     private val setDao: SetDao,
@@ -39,6 +40,8 @@ class VaultioRepository(
     val allUserCards: Flow<List<CardWithDetails>> = userCardDao.getAllUserCardsWithDetails()
     val allFolders: Flow<List<FolderEntity>> = folderDao.getAllFolders()
     val allFolderCardCrossRefs: Flow<List<FolderCardCrossRef>> = userCardDao.getAllFolderCardCrossRefs()
+    val allPrices: Flow<List<PriceEntity>> = priceDao.getAllPrices()
+    val allVintagePrices: Flow<List<VintagePriceEntity>> = priceDao.getAllVintagePrices()
 
     fun getUserCardById(userCardId: Long): Flow<CardWithDetails?> {
         return userCardDao.getUserCardById(userCardId)

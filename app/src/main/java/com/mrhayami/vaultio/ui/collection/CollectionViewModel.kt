@@ -10,6 +10,8 @@ import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.FolderCardCrossRef
+import com.mrhayami.vaultio.data.local.PriceEntity
+import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.squareup.moshi.Moshi
@@ -79,7 +81,10 @@ data class CollectionUiState(
     // Available filter options based on current collection
     val availableRarities: List<String> = emptyList(),
     val availableCategories: List<String> = emptyList(),
-    val availableTypes: List<String> = emptyList()
+    val availableTypes: List<String> = emptyList(),
+    val totalValue: Double = 0.0,
+    val totalCount: Int = 0,
+    val totalQuantity: Int = 0
 )
 
 class CollectionViewModel(
@@ -144,7 +149,9 @@ class CollectionViewModel(
         _pokedexSettings,
         _preferSetLogo,
         repository.allSets.map { sets -> sets.associateBy { it.id } },
-        _showSaveSuccess
+        _showSaveSuccess,
+        repository.allPrices,
+        repository.allVintagePrices
     ) { args ->
         @Suppress("UNCHECKED_CAST")
         val userCards = args[0] as List<CardWithDetails>
@@ -168,6 +175,10 @@ class CollectionViewModel(
         @Suppress("UNCHECKED_CAST")
         val sets = args[15] as Map<String, SetEntity>
         val showSaveSuccess = args[16] as Boolean
+        @Suppress("UNCHECKED_CAST")
+        val allPrices = args[17] as List<PriceEntity>
+        @Suppress("UNCHECKED_CAST")
+        val allVintagePrices = args[18] as List<VintagePriceEntity>
 
         // Calculate available filter options from the base userCards
         val availableRarities = userCards.mapNotNull { it.card.rarity }.distinct().sorted()
@@ -196,6 +207,29 @@ class CollectionViewModel(
             val matchesType = filterSettings.types.isEmpty() || cardTypes.any { filterSettings.types.contains(it) }
             
             matchesSearch && matchesFolder && matchesRarity && matchesCategory && matchesCondition && matchesFinish && matchesType
+        }
+
+        // Calculate total value for filtered cards
+        var totalValue = 0.0
+        var totalQuantity = 0
+        filtered.forEach { item ->
+            val quantity = item.userCard.quantity
+            totalQuantity += quantity
+            val price = item.userCard.manualPrice ?: run {
+                val cardId = item.card.id
+                val finish = item.userCard.finish
+                val condition = item.userCard.condition
+                val printing = item.userCard.printing
+                
+                val foundPrice = allPrices.find { 
+                    it.cardId == cardId && it.finish == finish && it.condition == condition 
+                }?.marketPrice ?: allVintagePrices.find {
+                    it.cardId == cardId && it.finish == finish && it.condition == condition && it.printing == printing
+                }?.marketPrice
+                
+                foundPrice ?: 0.0
+            }
+            totalValue += price * quantity
         }
 
         // Sorting
@@ -250,7 +284,10 @@ class CollectionViewModel(
             showSaveSuccess = showSaveSuccess,
             availableRarities = availableRarities,
             availableCategories = availableCategories,
-            availableTypes = availableTypes
+            availableTypes = availableTypes,
+            totalValue = totalValue,
+            totalCount = filtered.size,
+            totalQuantity = totalQuantity
         )
     }.stateIn(
         scope = viewModelScope,
