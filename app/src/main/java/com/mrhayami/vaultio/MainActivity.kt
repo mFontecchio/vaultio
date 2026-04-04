@@ -30,6 +30,7 @@ import com.mrhayami.vaultio.ui.settings.SettingsScreen
 import com.mrhayami.vaultio.ui.scanner.ScannerScreen
 import com.mrhayami.vaultio.ui.card_detail.CardDetailScreen
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.walkthrough.WalkthroughScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,6 +43,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeBrand by userPreferencesRepository.themeBrand.collectAsState(initial = ThemeBrand.DEFAULT)
             val darkThemeConfig by userPreferencesRepository.darkThemeConfig.collectAsState(initial = DarkThemeConfig.FOLLOW_SYSTEM)
+            val shouldShowWalkthrough by userPreferencesRepository.shouldShowWalkthrough.collectAsState(initial = null)
             
             val useDarkTheme = when (darkThemeConfig) {
                 DarkThemeConfig.FOLLOW_SYSTEM -> isSystemInDarkTheme()
@@ -87,37 +89,55 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { innerPadding ->
-                    NavHost(
-                        navController,
-                        startDestination = Screen.Collection.route,
-                        Modifier.padding(innerPadding)
-                    ) {
-                        composable(Screen.Collection.route) { 
-                            CollectionScreen(
-                                repository = repository,
-                                userPreferencesRepository = userPreferencesRepository,
-                                onNavigateToScanner = { navController.navigate(Screen.Scanner.route) },
-                                onNavigateToCardDetail = { id -> navController.navigate("card_detail/$id") }
-                            ) 
+                    if (shouldShowWalkthrough != null) {
+                        val startDestination = if (shouldShowWalkthrough == true) {
+                            Screen.Walkthrough.route
+                        } else {
+                            Screen.Collection.route
                         }
-                        composable(Screen.SetDownloads.route) { SetDownloadsScreen(repository) }
-                        composable(Screen.Settings.route) { SettingsScreen(repository, userPreferencesRepository) }
-                        composable(Screen.Scanner.route) { 
-                            ScannerScreen(
-                                repository = repository,
-                                onNavigateBack = { navController.popBackStack() }
-                            ) 
-                        }
-                        composable(
-                            route = "card_detail/{userCardId}",
-                            arguments = listOf(navArgument("userCardId") { type = NavType.LongType })
-                        ) { backStackEntry ->
-                            val userCardId = backStackEntry.arguments?.getLong("userCardId") ?: 0L
-                            CardDetailScreen(
-                                repository = repository,
-                                userCardId = userCardId,
-                                onNavigateBack = { navController.popBackStack() }
-                            )
+                        
+                        NavHost(
+                            navController,
+                            startDestination = startDestination,
+                            Modifier.padding(innerPadding)
+                        ) {
+                            composable(Screen.Walkthrough.route) {
+                                WalkthroughScreen(
+                                    userPreferencesRepository = userPreferencesRepository,
+                                    onFinish = {
+                                        navController.navigate(Screen.Collection.route) {
+                                            popUpTo(Screen.Walkthrough.route) { inclusive = true }
+                                        }
+                                    }
+                                )
+                            }
+                            composable(Screen.Collection.route) { 
+                                CollectionScreen(
+                                    repository = repository,
+                                    userPreferencesRepository = userPreferencesRepository,
+                                    onNavigateToScanner = { navController.navigate(Screen.Scanner.route) },
+                                    onNavigateToCardDetail = { id -> navController.navigate("card_detail/$id") }
+                                ) 
+                            }
+                            composable(Screen.SetDownloads.route) { SetDownloadsScreen(repository) }
+                            composable(Screen.Settings.route) { SettingsScreen(repository, userPreferencesRepository) }
+                            composable(Screen.Scanner.route) { 
+                                ScannerScreen(
+                                    repository = repository,
+                                    onNavigateBack = { navController.popBackStack() }
+                                ) 
+                            }
+                            composable(
+                                route = "card_detail/{userCardId}",
+                                arguments = listOf(navArgument("userCardId") { type = NavType.LongType })
+                            ) { backStackEntry ->
+                                val userCardId = backStackEntry.arguments?.getLong("userCardId") ?: 0L
+                                CardDetailScreen(
+                                    repository = repository,
+                                    userCardId = userCardId,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            }
                         }
                     }
                 }
