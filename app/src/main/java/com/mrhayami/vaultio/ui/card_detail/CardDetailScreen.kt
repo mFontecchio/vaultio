@@ -56,7 +56,6 @@ fun CardDetailScreen(
     var printing by remember { mutableStateOf("") }
     var finish by remember { mutableStateOf("") }
     var isInitialized by remember { mutableStateOf(false) }
-    var is3dViewEnabled by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.cardWithDetails) {
         if (uiState.cardWithDetails != null && !isInitialized) {
@@ -136,7 +135,11 @@ fun CardDetailScreen(
 
             val isVintage = VintageSets.isVintageSet(card.setId)
             
-            // Resolve the price entity to show based on user's current selection or collection settings
+            val isFullArt = card.rarity?.contains("Illustrated Rare", ignoreCase = true) == true || 
+                            card.rarity?.contains("Star", ignoreCase = true) == true ||
+                            card.rarity?.contains("2 Star", ignoreCase = true) == true ||
+                            card.rarity?.contains("3 Star", ignoreCase = true) == true
+            
             val currentPrice = if (isVintage) {
                 uiState.vintagePrices.find { 
                     it.finish == userCard.finish && 
@@ -150,7 +153,6 @@ fun CardDetailScreen(
                 } ?: uiState.prices.firstOrNull()
             }
 
-            // Extract values manually to avoid polymorphic access errors if currentPrice is Any?
             val marketPriceValue = when (currentPrice) {
                 is PriceEntity -> currentPrice.marketPrice
                 is VintagePriceEntity -> currentPrice.marketPrice
@@ -193,12 +195,10 @@ fun CardDetailScreen(
                 }
             }
 
-            val isHolo = finish == PricingUtils.FINISH_HOLOFOIL || finish == PricingUtils.FINISH_REVERSE_HOLO
             val isGold = finish == PricingUtils.FINISH_GOLD
             val showFinishAnims = uiState.showFinishAnimations
 
             Box(modifier = Modifier.fillMaxSize()) {
-                // Background Gradient + Energy Effect
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -213,7 +213,6 @@ fun CardDetailScreen(
                             )
                         )
                         .energyEffect(type = primaryType, show = uiState.showEnergyAnimations)
-                        .sparkleEffect(show = isHolo && showFinishAnims)
                 )
 
                 Column(
@@ -223,60 +222,42 @@ fun CardDetailScreen(
                         .padding(horizontal = 16.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Card Image Display
+                    // Card Image Display - Container with extra padding to allow 3D rotation without clipping
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp),
+                            .padding(vertical = 48.dp, horizontal = 12.dp), // Increased padding for 3D tilt
                         contentAlignment = Alignment.Center
                     ) {
-                        if (is3dViewEnabled) {
-                            Box(modifier = Modifier.fillMaxWidth().height(400.dp)) {
-                                ThreeDCard {
-                                    AsyncImage(
-                                        model = "${card.image}/high.webp",
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .sparkleEffect(show = isHolo && showFinishAnims)
-                                            .shimmerEffect(show = isGold && showFinishAnims),
-                                        contentScale = ContentScale.Fit
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { is3dViewEnabled = false },
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(16.dp)
-                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), CircleShape)
-                                ) {
-                                    Icon(Icons.Rounded.Close, "Exit 3D View")
-                                }
-                            }
-                        } else {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.85f)
-                                    .aspectRatio(0.718f)
-                                    .clickable { is3dViewEnabled = true },
-                                shape = RoundedCornerShape(12.dp),
-                                shadowElevation = 16.dp,
-                                color = Color.Transparent
-                            ) {
-                                AsyncImage(
-                                    model = "${card.image}/high.webp",
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .sparkleEffect(show = isHolo && showFinishAnims)
-                                        .shimmerEffect(show = isGold && showFinishAnims),
-                                    contentScale = ContentScale.Fit
+                        // The card container applies effects and rotation.
+                        // We use a Box instead of a Surface to avoid restrictive clipping.
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f) // Slightly smaller width for more rotation room
+                                .aspectRatio(0.718f)
+                                .holoEffect(
+                                    finish = finish,
+                                    show = showFinishAnims,
+                                    useGyro = true, // Enabled gyro for better tilting experience
+                                    isFullArt = isFullArt,
+                                    cornerRadius = 12.dp
                                 )
-                            }
+                                .shimmerEffect(
+                                    show = isGold && showFinishAnims,
+                                    cornerRadius = 12.dp
+                                )
+                        ) {
+                            AsyncImage(
+                                model = "${card.image}/high.webp",
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(12.dp)),
+                                contentScale = ContentScale.FillBounds
+                            )
                         }
                     }
 
-                    // Set and Rarity Row
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                         shape = RoundedCornerShape(20.dp),
@@ -329,7 +310,6 @@ fun CardDetailScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Main Price Section
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
@@ -362,7 +342,6 @@ fun CardDetailScreen(
                         }
                     }
 
-                    // Vintage Edition Prices Table
                     if (isVintage && uiState.vintagePrices.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text("Edition Pricing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -374,7 +353,6 @@ fun CardDetailScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                // Filter prices by the user's selected finish and condition
                                 val variantsByEdition = uiState.vintagePrices
                                     .filter { it.condition == condition && it.finish == finish }
                                     .groupBy { it.printing }
@@ -438,7 +416,6 @@ fun CardDetailScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            // Quantity Selector
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
