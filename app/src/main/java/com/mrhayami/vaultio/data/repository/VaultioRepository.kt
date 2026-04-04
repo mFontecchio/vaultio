@@ -506,10 +506,29 @@ class VaultioRepository(
             planLimit = metadata.apiRequestLimit,
             planUsed = metadata.apiRequestsUsed,
             planRemaining = metadata.apiRequestsRemaining,
-            planName = metadata.apiPlan
+            planName = metadata.apiPlan,
+            lastSyncedAt = System.currentTimeMillis()
         )
         apiUsageDao.insertUsage(entity)
     }
+
+    /** Makes a minimal 1-result search solely to read back `_metadata` quota counts. */
+    suspend fun refreshApiUsageFromApi(): Boolean {
+        val apiKey = getJustTcgApiKey() ?: return false
+        return try {
+            val response = justTcgApi.searchCards(
+                apiKey = apiKey,
+                query = "pikachu",
+                limit = 1
+            )
+            syncApiUsage(response.metadata)
+            true
+        } catch (e: Exception) {
+            Log.e("VaultioRepository", "Usage refresh failed", e)
+            false
+        }
+    }
+
 
     suspend fun incrementApiUsage() {
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)

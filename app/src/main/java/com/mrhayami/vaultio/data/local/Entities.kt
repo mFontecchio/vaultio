@@ -137,7 +137,9 @@ data class ApiUsageEntity(
     val planLimit: Int = 1000,
     val planUsed: Int = 0,
     val planRemaining: Int = 1000,
-    val planName: String = "Free"
+    val planName: String = "Free",
+    /** Epoch-millis of the last successful GET /health sync; 0 = never synced. */
+    val lastSyncedAt: Long = 0L
 )
 
 @Entity(tableName = "telemetry_log")

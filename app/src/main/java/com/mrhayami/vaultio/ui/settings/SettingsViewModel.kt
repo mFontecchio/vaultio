@@ -29,14 +29,33 @@ data class SettingsUiState(
     val planLimit: Int = 1000,
     val planRemaining: Int = 1000,
     val planName: String = "Free",
+    val lastSyncedAt: Long = 0L,
     val offlineSetsCount: Int = 0,
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false
 )
 
 class SettingsViewModel(
     private val repository: VaultioRepository,
     private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
+
+    private val _isRefreshing = MutableStateFlow(false)
+
+    init {
+        // Silently revalidate quota on screen open if key is set and data is stale (> 5 min)
+        viewModelScope.launch {
+            val apiKey = userPreferencesRepository.justTcgApiKey.firstOrNull()
+            if (!apiKey.isNullOrEmpty()) {
+                val lastSync = repository.getApiUsageDetails()?.lastSyncedAt ?: 0L
+                if (System.currentTimeMillis() - lastSync > 5 * 60_000L) {
+                    _isRefreshing.value = true
+                    repository.refreshApiUsageFromApi()
+                    _isRefreshing.value = false
+                }
+            }
+        }
+    }
 
     private data class PreferenceValues(
         val themeBrand: ThemeBrand,
@@ -46,20 +65,24 @@ class SettingsViewModel(
         val preferSetLogo: Boolean
     )
 
+    // Grouped so the outer combine stays within the typed 5-flow overload
+    private val prefsFlow: Flow<PreferenceValues> = combine(
+        userPreferencesRepository.themeBrand,
+        userPreferencesRepository.darkThemeConfig,
+        userPreferencesRepository.showEnergyAnimations,
+        userPreferencesRepository.showFinishAnimations,
+        userPreferencesRepository.preferSetLogo
+    ) { themeBrand, darkThemeConfig, showEnergy, showFinish, preferSetLogo ->
+        PreferenceValues(themeBrand, darkThemeConfig, showEnergy, showFinish, preferSetLogo)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
-        combine(
-            userPreferencesRepository.themeBrand,
-            userPreferencesRepository.darkThemeConfig,
-            userPreferencesRepository.showEnergyAnimations,
-            userPreferencesRepository.showFinishAnimations,
-            userPreferencesRepository.preferSetLogo
-        ) { themeBrand, darkThemeConfig, showEnergy, showFinish, preferSetLogo ->
-            PreferenceValues(themeBrand, darkThemeConfig, showEnergy, showFinish, preferSetLogo)
-        },
+        prefsFlow,
         userPreferencesRepository.justTcgApiKey,
         repository.allSets.map { sets -> sets.count { it.isDownloaded } },
-        repository.getApiUsageFlow()
-    ) { prefs, apiKey, downloadedCount, usage ->
+        repository.getApiUsageFlow(),
+        _isRefreshing
+    ) { prefs, apiKey, downloadedCount, usage, refreshing ->
         SettingsUiState(
             themeBrand = prefs.themeBrand,
             darkThemeConfig = prefs.darkThemeConfig,
@@ -74,8 +97,10 @@ class SettingsViewModel(
             planLimit = usage?.planLimit ?: 1000,
             planRemaining = usage?.planRemaining ?: 1000,
             planName = usage?.planName ?: "Free",
+            lastSyncedAt = usage?.lastSyncedAt ?: 0L,
             offlineSetsCount = downloadedCount,
-            isLoading = false
+            isLoading = false,
+            isRefreshing = refreshing
         )
     }.stateIn(
         scope = viewModelScope,
@@ -83,40 +108,37 @@ class SettingsViewModel(
         initialValue = SettingsUiState()
     )
 
-    fun setThemeBrand(brand: ThemeBrand) {
+    /** Manual refresh — hits GET /health which doesn't consume a request. */
+    fun refreshApiUsage() {
         viewModelScope.launch {
-            userPreferencesRepository.setThemeBrand(brand)
+            _isRefreshing.value = true
+            repository.refreshApiUsageFromApi()
+            _isRefreshing.value = false
         }
+    }
+
+    fun setThemeBrand(brand: ThemeBrand) {
+        viewModelScope.launch { userPreferencesRepository.setThemeBrand(brand) }
     }
 
     fun setDarkThemeConfig(config: DarkThemeConfig) {
-        viewModelScope.launch {
-            userPreferencesRepository.setDarkThemeConfig(config)
-        }
+        viewModelScope.launch { userPreferencesRepository.setDarkThemeConfig(config) }
     }
 
     fun setShowEnergyAnimations(show: Boolean) {
-        viewModelScope.launch {
-            userPreferencesRepository.setShowEnergyAnimations(show)
-        }
+        viewModelScope.launch { userPreferencesRepository.setShowEnergyAnimations(show) }
     }
 
     fun setShowFinishAnimations(show: Boolean) {
-        viewModelScope.launch {
-            userPreferencesRepository.setShowFinishAnimations(show)
-        }
+        viewModelScope.launch { userPreferencesRepository.setShowFinishAnimations(show) }
     }
 
     fun setPreferSetLogo(preferLogo: Boolean) {
-        viewModelScope.launch {
-            userPreferencesRepository.setPreferSetLogo(preferLogo)
-        }
+        viewModelScope.launch { userPreferencesRepository.setPreferSetLogo(preferLogo) }
     }
 
     fun setJustTcgApiKey(apiKey: String) {
-        viewModelScope.launch {
-            userPreferencesRepository.setJustTcgApiKey(apiKey)
-        }
+        viewModelScope.launch { userPreferencesRepository.setJustTcgApiKey(apiKey) }
     }
 
     fun clearImageCache() {
