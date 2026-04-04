@@ -512,15 +512,11 @@ class VaultioRepository(
         apiUsageDao.insertUsage(entity)
     }
 
-    /** Makes a minimal 1-result search solely to read back `_metadata` quota counts. */
+    /** Makes a minimal 1-result search to read back `_metadata` quota counts. */
     suspend fun refreshApiUsageFromApi(): Boolean {
         val apiKey = getJustTcgApiKey() ?: return false
         return try {
-            val response = justTcgApi.searchCards(
-                apiKey = apiKey,
-                query = "pikachu",
-                limit = 1
-            )
+            val response = justTcgApi.searchCards(apiKey = apiKey, query = "pikachu", limit = 1)
             syncApiUsage(response.metadata)
             true
         } catch (e: Exception) {

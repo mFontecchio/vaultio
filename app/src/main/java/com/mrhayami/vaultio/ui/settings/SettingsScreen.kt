@@ -165,10 +165,25 @@ fun SettingsScreen(
 
             ListItem(
                 headlineContent = { Text("JustTCG API Usage") },
-                supportingContent = { 
+                supportingContent = {
                     Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Text("Plan: ${uiState.planName}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Plan: ${uiState.planName}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                "Synced: ${formatLastSynced(uiState.lastSyncedAt)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("Daily Usage", style = MaterialTheme.typography.labelSmall)
                         LinearProgressIndicator(
@@ -194,7 +209,26 @@ fun SettingsScreen(
                         }
                     }
                 },
-                leadingContent = { Icon(Icons.Rounded.Api, contentDescription = null) }
+                leadingContent = { Icon(Icons.Rounded.Api, contentDescription = null) },
+                trailingContent = {
+                    if (uiState.isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    } else {
+                        IconButton(
+                            onClick = { viewModel.refreshApiUsage() },
+                            enabled = uiState.justTcgApiKey.isNotEmpty()
+                        ) {
+                            Icon(
+                                Icons.Rounded.Refresh,
+                                contentDescription = "Refresh API usage",
+                                tint = if (uiState.justTcgApiKey.isNotEmpty())
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            )
+                        }
+                    }
+                }
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -413,3 +447,16 @@ fun DarkConfigOption(label: String, selected: Boolean, onClick: () -> Unit) {
         Text(label)
     }
 }
+
+/** Returns a human-readable "X ago" string for the given epoch-millis timestamp. */
+private fun formatLastSynced(timestamp: Long): String {
+    if (timestamp == 0L) return "Never"
+    val diff = System.currentTimeMillis() - timestamp
+    return when {
+        diff < 60_000L      -> "Just now"
+        diff < 3_600_000L   -> "${diff / 60_000L}m ago"
+        diff < 86_400_000L  -> "${diff / 3_600_000L}h ago"
+        else                -> "${diff / 86_400_000L}d ago"
+    }
+}
+
