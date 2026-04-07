@@ -99,6 +99,12 @@ class VaultioRepository(
         try {
             val detail = tcgDexApi.getSetDetail(setId)
             val cardEntities = detail.cards.map {
+                // Use API dex IDs when present; fall back to static map for Pokémon cards
+                val apiDexIds = it.dexId?.takeIf { ids -> ids.isNotEmpty() }
+                val resolvedDexIds = apiDexIds
+                    ?: if (it.category == "Pokemon" || it.category == "Pokémon") {
+                        PokemonUtils.lookupDexIds(it.name).takeIf { ids -> ids.isNotEmpty() }
+                    } else null
                 CardEntity(
                     id = it.id,
                     localId = it.localId,
@@ -108,8 +114,8 @@ class VaultioRepository(
                     rarity = it.rarity,
                     category = it.category,
                     types = it.types?.joinToString(","),
-                    dexId = it.dexId?.firstOrNull()?.toString(),
-                    dexIds = it.dexId?.let { ids -> listIntAdapter.toJson(ids) },
+                    dexId = resolvedDexIds?.firstOrNull()?.toString(),
+                    dexIds = resolvedDexIds?.let { ids -> listIntAdapter.toJson(ids) },
                     pokemonName = PokemonUtils.extractPokemonName(it.name),
                     tcgPlayerId = extractTcgPlayerId(it.pricing?.tcgplayer?.url)
                 )
@@ -213,41 +219,46 @@ class VaultioRepository(
             var dexIdString = fullCard.dexId?.firstOrNull()?.toString()
             var dexIdsJson = fullCard.dexId?.let { listIntAdapter.toJson(it) }
 
-            // Recovery: If dexId is missing in API, check local and then network for a valid dexId for this name
+            // Recovery: If dexId is missing in API, try a cascade of fallbacks
             if (dexIdString == null && (fullCard.category == "Pokemon" || fullCard.category == "Pokémon")) {
                 val normalizedName = PokemonUtils.extractPokemonName(fullCard.name)
-                Log.d("Vaultio", "DexID missing for ${fullCard.name}. Attempting recovery with normalized name: $normalizedName")
-                
-                val candidates = cardDao.searchCardsByName(normalizedName)
-                val localMatch = candidates.find { 
-                    (it.name.contains(normalizedName, ignoreCase = true) || it.pokemonName?.equals(normalizedName, ignoreCase = true) == true) 
-                    && it.dexId != null 
-                }
-                
+                Log.d("Vaultio", "DexID missing for ${fullCard.name}. Attempting recovery (normalized: $normalizedName)")
+
+                // Layer 1: Exact pokemonName match in local DB (fast, precise)
+                val exactMatches = cardDao.getCardsByPokemonName(normalizedName)
+                val localMatch = exactMatches.firstOrNull()
+                    ?: run {
+                        // Layer 1b: Fuzzy name search for cards already downloaded
+                        cardDao.searchCardsByName(normalizedName).find {
+                            (it.name.contains(normalizedName, ignoreCase = true) ||
+                                    it.pokemonName?.equals(normalizedName, ignoreCase = true) == true) &&
+                                    it.dexId != null
+                        }
+                    }
+
                 if (localMatch != null) {
                     dexIdString = localMatch.dexId
                     dexIdsJson = localMatch.dexIds
-                    Log.d("Vaultio", "Recovered dexId $dexIdString for ${fullCard.name} from local card ${localMatch.id}")
+                    Log.d("Vaultio", "Local DB recovery SUCCESS: dexId $dexIdString for ${fullCard.name} (via ${localMatch.id})")
                 } else {
-                    Log.d("Vaultio", "Local recovery failed for ${fullCard.name}. Trying network recovery with: $normalizedName")
+                    // Layer 2: Network search for any version of this Pokémon that has a dexId
+                    Log.d("Vaultio", "Local recovery failed. Trying network recovery for: $normalizedName")
                     try {
-                        // Try to find any version of this card on the network that has a dexId
                         val searchResults = tcgDexApi.searchCards(normalizedName)
-                        for (shortCard in searchResults.take(10)) { // Check top 10 results
+                        for (shortCard in searchResults.take(10)) {
                             if (shortCard.name.contains(normalizedName, ignoreCase = true)) {
                                 if (!shortCard.dexId.isNullOrEmpty()) {
                                     dexIdString = shortCard.dexId.first().toString()
                                     dexIdsJson = listIntAdapter.toJson(shortCard.dexId)
-                                    Log.d("Vaultio", "Network recovery SUCCESS: found dexId $dexIdString in search result for ${shortCard.id}")
+                                    Log.d("Vaultio", "Network recovery SUCCESS (search): dexId $dexIdString via ${shortCard.id}")
                                     break
                                 } else {
-                                    // Try fetching details for this other version to see if IT has a dexId
                                     val otherDetail = try { tcgDexApi.getCardDetail(shortCard.id) } catch (e: Exception) { null }
                                     val otherDexId = otherDetail?.dexId?.firstOrNull()?.toString()
                                     if (otherDexId != null) {
                                         dexIdString = otherDexId
                                         dexIdsJson = otherDetail.dexId?.let { listIntAdapter.toJson(it) }
-                                        Log.d("Vaultio", "Network recovery SUCCESS: found dexId $dexIdString via detail of ${shortCard.id}")
+                                        Log.d("Vaultio", "Network recovery SUCCESS (detail): dexId $dexIdString via ${shortCard.id}")
                                         break
                                     }
                                 }
@@ -255,6 +266,18 @@ class VaultioRepository(
                         }
                     } catch (e: Exception) {
                         Log.e("Vaultio", "Network recovery failed", e)
+                    }
+
+                    // Layer 3: Static Pokédex map — zero network cost, covers all 1025 species
+                    if (dexIdString == null) {
+                        val staticIds = PokemonUtils.lookupDexIds(fullCard.name)
+                        if (staticIds.isNotEmpty()) {
+                            dexIdString = staticIds.first().toString()
+                            dexIdsJson = listIntAdapter.toJson(staticIds)
+                            Log.d("Vaultio", "Static map recovery SUCCESS: dexId $dexIdString for ${fullCard.name}")
+                        } else {
+                            Log.w("Vaultio", "All recovery layers exhausted — dexId remains null for ${fullCard.name}")
+                        }
                     }
                 }
             }
