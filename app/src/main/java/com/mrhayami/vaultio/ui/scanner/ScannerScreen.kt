@@ -110,7 +110,7 @@ fun ScannerScreen(
                 Spacer(modifier = Modifier.width(48.dp))
             }
 
-            // Debug/Detected Info Overlay (Operational Transparency)
+            // Debug/Detected Info Overlay
             Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -129,7 +129,7 @@ fun ScannerScreen(
                 }
             }
 
-            // High Confidence Match / Quick Confirm Overlay
+            // High Confidence Match
             AnimatedVisibility(
                 visible = uiState.autoSelectedCard != null,
                 enter = fadeIn() + expandVertically(),
@@ -184,7 +184,7 @@ fun ScannerScreen(
                 }
             }
 
-            // Candidates List (Manual Selection)
+            // Candidates List
             if (uiState.candidates.isNotEmpty() && uiState.autoSelectedCard == null) {
                 ModalBottomSheet(
                     onDismissRequest = { viewModel.clearDetectedNumber() },
@@ -247,13 +247,12 @@ fun ScannerScreen(
 }
 
 @Composable
-fun CameraPreview(onLinesDetected: (List<DetectedLine>) -> Unit) {
+fun CameraPreview(onLinesDetected: (List<DetectedLine>, Long?) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val executor = remember { Executors.newSingleThreadExecutor() }
 
-    // Target Resolution 1080p for accuracy as per deep dive
     val resolutionSelector = ResolutionSelector.Builder()
         .setResolutionStrategy(
             ResolutionStrategy(
@@ -312,7 +311,6 @@ fun ScannerOverlay() {
         val left = (canvasWidth - rectWidth) / 2
         val top = (canvasHeight - rectHeight) / 2
 
-        // Dark background with cutout
         drawRect(color = Color.Black.copy(alpha = 0.5f))
         drawRoundRect(
             color = Color.Transparent,
@@ -322,7 +320,6 @@ fun ScannerOverlay() {
             blendMode = BlendMode.Clear
         )
 
-        // Frame border
         drawRoundRect(
             color = Color.White,
             topLeft = Offset(left, top),

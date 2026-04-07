@@ -3,6 +3,7 @@ package com.mrhayami.vaultio.ui.scanner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.mrhayami.vaultio.data.PHash
 import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
@@ -14,7 +15,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 /** One frame's worth of extracted OCR data used by the consensus buffer. */
-private data class FrameDetection(val number: String?, val total: String?, val name: String?)
+private data class FrameDetection(val number: String?, val total: String?, val name: String?, val pHash: Long? = null)
 
 data class ScannerUiState(
     val detectedText: String = "",
@@ -57,7 +58,7 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
         "EX", "GX", "BREAK", "MEGA", "TAG TEAM", "PRISM", "RADIANT", "TERA"
     )
 
-    fun onLinesDetected(lines: List<DetectedLine>) {
+    fun onLinesDetected(lines: List<DetectedLine>, pHash: Long?) {
         if (_uiState.value.isPaused || _uiState.value.isSearching) return
 
         // --- Name extraction: restrict to top 25% of the frame ---
@@ -82,7 +83,7 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
         }
         
         val combinedBottomText = numberCandidates.joinToString(" ") { it.text }
-        val normalizedBottom = normalizeOcrText(combinedBottomText)
+        val normalizedBottom = normalizeOcrTextForNumbers(combinedBottomText)
         val numMatch = numberRegex.find(normalizedBottom)
         
         if (numMatch != null) {
@@ -92,7 +93,7 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
 
         // --- Multi-frame consensus: update ring buffer ---
         if (detectionHistory.size >= 5) detectionHistory.removeFirst()
-        detectionHistory.addLast(FrameDetection(number = bestLocalId, total = bestTotal, name = bestName))
+        detectionHistory.addLast(FrameDetection(number = bestLocalId, total = bestTotal, name = bestName, pHash = pHash))
 
         if (bestLocalId == null) return
         
@@ -128,12 +129,12 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            delay(150)
-            searchCard(bestLocalId!!, consensusTotal, consensusName)
+            delay(100)
+            searchCard(bestLocalId!!, consensusTotal, consensusName, pHash)
         }
     }
 
-    private fun searchCard(localId: String, totalCount: String?, name: String?) {
+    private fun searchCard(localId: String, totalCount: String?, name: String?, pHash: Long?) {
         viewModelScope.launch {
             val numberNorm = if (localId.all { it.isDigit() }) localId.padStart(3, '0') else localId
             
@@ -149,7 +150,18 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
                 localResults = repository.searchLocalCards(numberNorm)
             }
 
-            // 3. Name Filtering on Local Results
+            // 3. Image Hash Disambiguation (NEW)
+            if (pHash != null && localResults.size > 1) {
+                val hashed = localResults.filter { it.pHash != null }
+                if (hashed.isNotEmpty()) {
+                    val bestMatch = hashed.minByOrNull { PHash.hammingDistance(it.pHash!!, pHash) }
+                    if (bestMatch != null && PHash.hammingDistance(bestMatch.pHash!!, pHash) < 12) {
+                        localResults = listOf(bestMatch)
+                    }
+                }
+            }
+
+            // 4. Name Filtering on Local Results
             if (name != null && localResults.size > 1) {
                 val filtered = localResults.filter { card ->
                     calculateSimilarity(card.name, name) > 0.6f
@@ -157,31 +169,25 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
                 if (filtered.isNotEmpty()) localResults = filtered
             }
 
-            // 4. API SEARCH: ONLY if local results are inconclusive or empty
+            // 5. API SEARCH: ONLY if local results are inconclusive or empty
             val finalCandidates = if (localResults.size == 1) {
-                // High confidence local match found - STOP HERE to avoid redundant API calls
                 localResults.map { mapToTcgDexCard(it) }
             } else {
-                // Inconclusive local data, supplement with API
                 val remoteResults = try {
                     repository.searchTcgDexByLocalId(localId)
                 } catch (e: Exception) {
                     emptyList()
                 }
                 
-                // Combine and de-duplicate
                 val all = (localResults.map { mapToTcgDexCard(it) } + remoteResults).distinctBy { it.id }
                 
-                // Final filtering by Total and Name
                 var filtered = all
                 if (totalInt != null) {
-                    // Note: TCGdex API doesn't always return set total in the search list, 
-                    // so we filter by ID prefix if possible or just use name fuzzy matching
                     filtered = all.filter { card ->
                         val cardTotal = card.id.substringAfterLast("-").toIntOrNull()
                         cardTotal == null || cardTotal == totalInt
                     }
-                    if (filtered.isEmpty()) filtered = all // fallback if filtering was too aggressive
+                    if (filtered.isEmpty()) filtered = all 
                 }
                 
                 if (name != null && filtered.size > 1) {
@@ -190,7 +196,7 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
                 filtered
             }
 
-            // 5. Update UI
+            // 6. Update UI
             if (finalCandidates.size == 1) {
                 lastMatchedNumber = localId
                 _uiState.update { it.copy(
@@ -217,9 +223,9 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
         dexId = entity.dexId?.let { listOf(it.toInt()) }
     )
 
-    private fun normalizeOcrText(text: String): String {
+    private fun normalizeOcrTextForNumbers(text: String): String {
         return text.split(Regex("\\s+")).joinToString(" ") { token ->
-            if (token.any { it.isDigit() || it == '/' || it == 'I' || it == 'l' || it == 'O' || it == 'o' }) {
+            if (token.any { it.isDigit() || it == '/' } || token.length <= 5) {
                 token.uppercase()
                     .replace("O", "0")
                     .replace("I", "1")
@@ -229,8 +235,7 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
                     .replace("G", "6")
                     .replace("D", "0")
                     .replace("Z", "2")
-                    .replace("b", "6")
-                    .replace("q", "9")
+                    .replace("Q", "9")
             } else {
                 token
             }

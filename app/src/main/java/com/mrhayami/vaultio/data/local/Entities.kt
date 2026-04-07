@@ -37,6 +37,7 @@ data class CardEntity(
     val dexIds: String? = null, // JSON array of all dex IDs for multi-Pokemon cards
     val pokemonName: String? = null, // Extracted Pokemon base name
     val tcgPlayerId: String? = null,
+    val pHash: Long? = null, // Perceptual hash for image-based disambiguation
     val lastUpdated: Long = System.currentTimeMillis()
 )
 

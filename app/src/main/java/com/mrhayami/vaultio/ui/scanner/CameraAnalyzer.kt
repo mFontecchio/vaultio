@@ -1,11 +1,12 @@
 package com.mrhayami.vaultio.ui.scanner
 
-import android.graphics.Rect
+import android.graphics.*
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.mrhayami.vaultio.data.PHash
 
 data class DetectedLine(
     val text: String,
@@ -15,12 +16,12 @@ data class DetectedLine(
 )
 
 class CameraAnalyzer(
-    private val onLinesDetected: (List<DetectedLine>) -> Unit
+    private val onLinesDetected: (List<DetectedLine>, Long?) -> Unit
 ) : ImageAnalysis.Analyzer {
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private var lastScanTime = 0L
-    private val scanIntervalMs = 250L
+    private val scanIntervalMs = 120L 
 
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     override fun analyze(imageProxy: ImageProxy) {
@@ -30,22 +31,43 @@ class CameraAnalyzer(
             return
         }
 
-        val mediaImage = imageProxy.image
-        if (mediaImage == null) {
+        val bitmap = try {
+            imageProxy.toBitmap()
+        } catch (e: Exception) {
             imageProxy.close()
             return
         }
 
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-        val image = InputImage.fromMediaImage(mediaImage, rotationDegrees)
-
-        // Compute the logical (post-rotation) dimensions.
-        // These are used by the ViewModel to perform spatial filtering (top/bottom zones).
-        val (logicalWidth, logicalHeight) = if (rotationDegrees == 90 || rotationDegrees == 270) {
-            mediaImage.height to mediaImage.width
-        } else {
-            mediaImage.width to mediaImage.height
+        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+        val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        
+        val rectW = rotated.width * 0.85f
+        val rectH = rectW * 1.397f
+        val left = (rotated.width - rectW) / 2
+        val top = (rotated.height - rectH) / 2
+        
+        val cropped = try {
+            Bitmap.createBitmap(
+                rotated,
+                left.toInt().coerceAtLeast(0),
+                top.toInt().coerceAtLeast(0),
+                rectW.toInt().coerceAtMost(rotated.width - left.toInt().coerceAtLeast(0)),
+                rectH.toInt().coerceAtMost(rotated.height - top.toInt().coerceAtLeast(0))
+            )
+        } catch (e: Exception) {
+            rotated
         }
+
+        // Compute perceptual hash for disambiguation
+        val pHash = try {
+            PHash.computeHash(cropped)
+        } catch (e: Exception) {
+            null
+        }
+
+        val enhanced = enhanceImage(cropped)
+        val image = InputImage.fromBitmap(enhanced, 0)
 
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
@@ -55,16 +77,37 @@ class CameraAnalyzer(
                         DetectedLine(
                             text = line.text,
                             boundingBox = line.boundingBox,
-                            imageWidth = logicalWidth,
-                            imageHeight = logicalHeight
+                            imageWidth = enhanced.width,
+                            imageHeight = enhanced.height
                         )
                     }
                 }
-                onLinesDetected(lines)
+                onLinesDetected(lines, pHash)
             }
             .addOnFailureListener { e -> e.printStackTrace() }
             .addOnCompleteListener {
+                if (rotated != bitmap) rotated.recycle()
+                if (cropped != rotated && cropped != enhanced) cropped.recycle()
+                if (enhanced != cropped) enhanced.recycle()
+                bitmap.recycle()
                 imageProxy.close()
             }
+    }
+
+    private fun enhanceImage(src: Bitmap): Bitmap {
+        val contrast = 1.4f
+        val brightness = 10f
+        val cm = ColorMatrix(floatArrayOf(
+            contrast, 0f, 0f, 0f, brightness,
+            0f, contrast, 0f, 0f, brightness,
+            0f, 0f, contrast, 0f, brightness,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        val ret = Bitmap.createBitmap(src.width, src.height, src.config ?: Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(ret)
+        val paint = Paint()
+        paint.colorFilter = ColorMatrixColorFilter(cm)
+        canvas.drawBitmap(src, 0f, 0f, paint)
+        return ret
     }
 }
