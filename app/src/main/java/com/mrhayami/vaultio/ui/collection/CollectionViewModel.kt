@@ -95,7 +95,7 @@ class CollectionViewModel(
 ) : ViewModel() {
 
     private val moshi = Moshi.Builder().build()
-    private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Integer::class.java))
+    private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Int::class.javaObjectType))
 
     private val _searchQuery = MutableStateFlow("")
     private val _selectedFolderId = MutableStateFlow<Long?>(null)
