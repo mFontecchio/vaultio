@@ -12,6 +12,7 @@ import com.mrhayami.vaultio.ui.collection.ListSettings
 import com.mrhayami.vaultio.ui.collection.PokedexSettings
 import com.mrhayami.vaultio.ui.collection.SortMode
 import com.mrhayami.vaultio.ui.collection.ViewMode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -102,7 +103,8 @@ class SettingsViewModel(
             isLoading = false,
             isRefreshing = refreshing
         )
-    }.stateIn(
+    }.flowOn(Dispatchers.Default)
+    .stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = SettingsUiState()
@@ -112,8 +114,13 @@ class SettingsViewModel(
     fun refreshApiUsage() {
         viewModelScope.launch {
             _isRefreshing.value = true
-            repository.refreshApiUsageFromApi()
-            _isRefreshing.value = false
+            try {
+                repository.refreshApiUsageFromApi()
+            } catch (e: Exception) {
+                // Potential error handling
+            } finally {
+                _isRefreshing.value = false
+            }
         }
     }
 

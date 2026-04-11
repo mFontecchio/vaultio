@@ -9,10 +9,13 @@ import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** One frame's worth of extracted OCR data used by the consensus buffer. */
 private data class FrameDetection(val number: String?, val total: String?, val name: String?, val pHash: Long? = null)
@@ -50,7 +53,10 @@ sealed interface ScannerEvent {
     ) : ScannerEvent
 }
 
-class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() {
+class ScannerViewModel(
+    private val repository: VaultioRepository,
+    private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScannerUiState())
     val uiState: StateFlow<ScannerUiState> = combine(
@@ -58,7 +64,8 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
         repository.allFolders
     ) { state, folders ->
         state.copy(folders = folders)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScannerUiState())
+    }.flowOn(defaultDispatcher)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScannerUiState())
 
     private var searchJob: Job? = null
     private var lastMatchedNumber: String? = null
@@ -95,154 +102,167 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
     private fun onLinesDetected(lines: List<DetectedLine>, pHash: Long?) {
         if (_uiState.value.isPaused || _uiState.value.isSearching) return
 
-        // --- Name extraction: restrict to top 25% of the frame ---
-        val topLines = lines
-            .filter { (it.boundingBox?.top?.toFloat() ?: Float.MAX_VALUE) / it.imageHeight < 0.25f }
-            .sortedBy { it.boundingBox?.top ?: Int.MAX_VALUE }
-            .take(3)
-        var bestName: String? = null
-        for (line in topLines) {
-            val cleaned = cleanCardName(line.text)
-            if (cleaned.length >= 3) {
-                bestName = cleaned
-                break
+        viewModelScope.launch(defaultDispatcher) {
+            // --- Name extraction: restrict to top 25% of the frame ---
+            val topLines = lines
+                .filter { (it.boundingBox?.top?.toFloat() ?: Float.MAX_VALUE) / it.imageHeight < 0.25f }
+                .sortedBy { it.boundingBox?.top ?: Int.MAX_VALUE }
+                .take(3)
+            var bestName: String? = null
+            for (line in topLines) {
+                val cleaned = cleanCardName(line.text)
+                if (cleaned.length >= 3) {
+                    bestName = cleaned
+                    break
+                }
             }
-        }
 
-        // --- Collector-number extraction: restrict to bottom 25% of the frame ---
-        var bestLocalId: String? = null
-        var bestTotal: String? = null
-        val numberCandidates = lines.filter {
-            (it.boundingBox?.centerY()?.toFloat() ?: 0f) / it.imageHeight > 0.75f
-        }
-        
-        val combinedBottomText = numberCandidates.joinToString(" ") { it.text }
-        val normalizedBottom = normalizeOcrTextForNumbers(combinedBottomText)
-        val numMatch = numberRegex.find(normalizedBottom)
-        
-        if (numMatch != null) {
-            bestLocalId = numMatch.groupValues[1]
-            bestTotal = numMatch.groupValues[2]
-        }
+            // --- Collector-number extraction: restrict to bottom 25% of the frame ---
+            var bestLocalId: String? = null
+            var bestTotal: String? = null
+            val numberCandidates = lines.filter {
+                (it.boundingBox?.centerY()?.toFloat() ?: 0f) / it.imageHeight > 0.75f
+            }
+            
+            val combinedBottomText = numberCandidates.joinToString(" ") { it.text }
+            val normalizedBottom = normalizeOcrTextForNumbers(combinedBottomText)
+            val numMatch = numberRegex.find(normalizedBottom)
+            
+            if (numMatch != null) {
+                bestLocalId = numMatch.groupValues[1]
+                bestTotal = numMatch.groupValues[2]
+            }
 
-        // --- Multi-frame consensus: update ring buffer ---
-        if (detectionHistory.size >= 5) detectionHistory.removeFirst()
-        detectionHistory.addLast(FrameDetection(number = bestLocalId, total = bestTotal, name = bestName, pHash = pHash))
+            // --- Multi-frame consensus: update ring buffer ---
+            synchronized(detectionHistory) {
+                if (detectionHistory.size >= 5) detectionHistory.removeFirst()
+                detectionHistory.addLast(FrameDetection(number = bestLocalId, total = bestTotal, name = bestName, pHash = pHash))
+            }
 
-        if (bestLocalId == null) return
-        
-        // Consensus for Number & Total
-        val consensusCount = detectionHistory.count { it.number == bestLocalId }
-        if (consensusCount < 3) return
+            if (bestLocalId == null) return@launch
+            
+            // Consensus for Number & Total
+            val (consensusTotal, consensusName) = synchronized(detectionHistory) {
+                val count = detectionHistory.count { it.number == bestLocalId }
+                if (count < 3) {
+                    return@launch
+                }
 
-        val consensusTotal = detectionHistory
-            .filter { it.number == bestLocalId }
-            .mapNotNull { it.total }
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key ?: bestTotal
+                val total = detectionHistory
+                    .filter { it.number == bestLocalId }
+                    .mapNotNull { it.total }
+                    .groupingBy { it }
+                    .eachCount()
+                    .maxByOrNull { it.value }
+                    ?.key ?: bestTotal
 
-        val consensusName = detectionHistory
-            .filter { it.number == bestLocalId }
-            .mapNotNull { it.name }
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key ?: bestName
+                val name = detectionHistory
+                    .filter { it.number == bestLocalId }
+                    .mapNotNull { it.name }
+                    .groupingBy { it }
+                    .eachCount()
+                    .maxByOrNull { it.value }
+                    ?.key ?: bestName
+                total to name
+            }
 
-        // Skip re-searching a card that is already the active match.
-        if (bestLocalId == lastMatchedNumber && consensusTotal == _uiState.value.detectedTotal) return
+            // Skip re-searching a card that is already the active match.
+            if (bestLocalId == lastMatchedNumber && consensusTotal == _uiState.value.detectedTotal) return@launch
 
-        _uiState.update { it.copy(
-            detectedNumber = bestLocalId,
-            detectedTotal = consensusTotal,
-            detectedName = consensusName,
-            isSearching = true
-        ) }
+            _uiState.update { it.copy(
+                detectedNumber = bestLocalId,
+                detectedTotal = consensusTotal,
+                detectedName = consensusName,
+                isSearching = true
+            ) }
 
-        searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            delay(100)
-            searchCard(bestLocalId!!, consensusTotal, consensusName, pHash)
+            searchJob?.cancel()
+            searchJob = launch {
+                delay(100)
+                searchCard(bestLocalId, consensusTotal, consensusName, pHash)
+            }
         }
     }
 
     private fun searchCard(localId: String, totalCount: String?, name: String?, pHash: Long?) {
-        viewModelScope.launch {
-            val numberNorm = if (localId.all { it.isDigit() }) localId.padStart(3, '0') else localId
-            
-            // 1. HIGH ACCURACY LOCAL SEARCH: Number + Set Total
-            var localResults = emptyList<CardEntity>()
-            val totalInt = totalCount?.toIntOrNull()
-            if (totalInt != null) {
-                localResults = repository.searchLocalCardsWithTotal(numberNorm, totalInt)
-            }
-            
-            // 2. FALLBACK LOCAL SEARCH: Just Number
-            if (localResults.isEmpty()) {
-                localResults = repository.searchLocalCards(numberNorm)
-            }
-
-            // 3. Image Hash Disambiguation (NEW)
-            if (pHash != null && localResults.size > 1) {
-                val hashed = localResults.filter { it.pHash != null }
-                if (hashed.isNotEmpty()) {
-                    val bestMatch = hashed.minByOrNull { PHash.hammingDistance(it.pHash!!, pHash) }
-                    if (bestMatch != null && PHash.hammingDistance(bestMatch.pHash!!, pHash) < 12) {
-                        localResults = listOf(bestMatch)
-                    }
-                }
-            }
-
-            // 4. Name Filtering on Local Results
-            if (name != null && localResults.size > 1) {
-                val filtered = localResults.filter { card ->
-                    calculateSimilarity(card.name, name) > 0.6f
-                }
-                if (filtered.isNotEmpty()) localResults = filtered
-            }
-
-            // 5. API SEARCH: ONLY if local results are inconclusive or empty
-            val finalCandidates = if (localResults.size == 1) {
-                localResults.map { mapToTcgDexCard(it) }
-            } else {
-                val remoteResults = try {
-                    repository.searchTcgDexByLocalId(localId)
-                } catch (e: Exception) {
-                    emptyList()
-                }
+        viewModelScope.launch(defaultDispatcher) {
+            try {
+                val numberNorm = if (localId.all { it.isDigit() }) localId.padStart(3, '0') else localId
                 
-                val all = (localResults.map { mapToTcgDexCard(it) } + remoteResults).distinctBy { it.id }
-                
-                var filtered = all
+                // 1. HIGH ACCURACY LOCAL SEARCH: Number + Set Total
+                var localResults = emptyList<CardEntity>()
+                val totalInt = totalCount?.toIntOrNull()
                 if (totalInt != null) {
-                    filtered = all.filter { card ->
-                        val cardTotal = card.id.substringAfterLast("-").toIntOrNull()
-                        cardTotal == null || cardTotal == totalInt
-                    }
-                    if (filtered.isEmpty()) filtered = all 
+                    localResults = repository.searchLocalCardsWithTotal(numberNorm, totalInt)
                 }
                 
-                if (name != null && filtered.size > 1) {
-                    filtered = filtered.sortedByDescending { calculateSimilarity(it.name, name) }
+                // 2. FALLBACK LOCAL SEARCH: Just Number
+                if (localResults.isEmpty()) {
+                    localResults = repository.searchLocalCards(numberNorm)
                 }
-                filtered
-            }
 
-            // 6. Update UI
-            if (finalCandidates.size == 1) {
-                lastMatchedNumber = localId
-                _uiState.update { it.copy(
-                    autoSelectedCard = finalCandidates.first(),
-                    isSearching = false,
-                    isPaused = true
-                ) }
-            } else {
-                _uiState.update { it.copy(
-                    candidates = finalCandidates.take(5),
-                    isSearching = false
-                ) }
+                // 3. Image Hash Disambiguation (NEW)
+                if (pHash != null && localResults.size > 1) {
+                    val hashed = localResults.filter { it.pHash != null }
+                    if (hashed.isNotEmpty()) {
+                        val bestMatch = hashed.minByOrNull { PHash.hammingDistance(it.pHash!!, pHash) }
+                        if (bestMatch != null && PHash.hammingDistance(bestMatch.pHash!!, pHash) < 12) {
+                            localResults = listOf(bestMatch)
+                        }
+                    }
+                }
+
+                // 4. Name Filtering on Local Results
+                if (name != null && localResults.size > 1) {
+                    val filtered = localResults.filter { card ->
+                        calculateSimilarity(card.name, name) > 0.6f
+                    }
+                    if (filtered.isNotEmpty()) localResults = filtered
+                }
+
+                // 5. API SEARCH: ONLY if local results are inconclusive or empty
+                val finalCandidates = if (localResults.size == 1) {
+                    localResults.map { mapToTcgDexCard(it) }
+                } else {
+                    val remoteResults = try {
+                        repository.searchTcgDexByLocalId(localId)
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    
+                    val all = (localResults.map { mapToTcgDexCard(it) } + remoteResults).distinctBy { it.id }
+                    
+                    var filtered = all
+                    if (totalInt != null) {
+                        filtered = all.filter { card ->
+                            val cardTotal = card.id.substringAfterLast("-").toIntOrNull()
+                            cardTotal == null || cardTotal == totalInt
+                        }
+                        if (filtered.isEmpty()) filtered = all 
+                    }
+                    
+                    if (name != null && filtered.size > 1) {
+                        filtered = filtered.sortedByDescending { calculateSimilarity(it.name, name) }
+                    }
+                    filtered
+                }
+
+                // 6. Update UI
+                if (finalCandidates.size == 1) {
+                    lastMatchedNumber = localId
+                    _uiState.update { it.copy(
+                        autoSelectedCard = finalCandidates.first(),
+                        isSearching = false,
+                        isPaused = true
+                    ) }
+                } else {
+                    _uiState.update { it.copy(
+                        candidates = finalCandidates.take(5),
+                        isSearching = false
+                    ) }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isSearching = false, errorMessage = "Search failed: ${e.message}") }
             }
         }
     }
@@ -332,19 +352,23 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
 
     private fun saveScannedCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String, folderIds: List<Long> = emptyList()) {
         viewModelScope.launch {
-            repository.addUserCard(
-                card,
-                UserCardEntity(
-                    cardId = card.id,
-                    quantity = quantity,
-                    condition = condition,
-                    printing = printing,
-                    finish = finish
-                ),
-                folderIds = folderIds
-            )
-            _uiState.update { it.copy(showSaveSuccess = true) }
-            resumeScanning()
+            try {
+                repository.addUserCard(
+                    card,
+                    UserCardEntity(
+                        cardId = card.id,
+                        quantity = quantity,
+                        condition = condition,
+                        printing = printing,
+                        finish = finish
+                    ),
+                    folderIds = folderIds
+                )
+                _uiState.update { it.copy(showSaveSuccess = true) }
+                resumeScanning()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "Failed to save card: ${e.message}") }
+            }
         }
     }
 

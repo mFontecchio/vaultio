@@ -96,13 +96,17 @@ class CardDetailViewModel(
     private fun saveChanges(quantity: Int, condition: String, printing: String, finish: String) {
         val current = _uiState.value.cardWithDetails?.userCard ?: return
         viewModelScope.launch {
-            repository.updateUserCard(current.copy(
-                quantity = quantity, 
-                condition = condition,
-                printing = printing,
-                finish = finish
-            ))
-            _uiState.update { it.copy(showSaveSuccess = true) }
+            try {
+                repository.updateUserCard(current.copy(
+                    quantity = quantity, 
+                    condition = condition,
+                    printing = printing,
+                    finish = finish
+                ))
+                _uiState.update { it.copy(showSaveSuccess = true) }
+            } catch (e: Exception) {
+                // Potential for error side effect here
+            }
         }
     }
 
@@ -112,20 +116,32 @@ class CardDetailViewModel(
 
     private fun deleteUserCard() {
         viewModelScope.launch {
-            repository.deleteUserCard(userCardId)
-            _sideEffects.send(CardDetailEffect.Navigation.Back)
+            try {
+                repository.deleteUserCard(userCardId)
+                _sideEffects.send(CardDetailEffect.Navigation.Back)
+            } catch (e: Exception) {
+                // Potential for error side effect
+            }
         }
     }
 
     private fun addCardToFolder(folderId: Long) {
         viewModelScope.launch {
-            repository.addCardToFolder(userCardId, folderId)
+            try {
+                repository.addCardToFolder(userCardId, folderId)
+            } catch (e: Exception) {
+                // Potential for error side effect
+            }
         }
     }
 
     private fun removeCardFromFolder(folderId: Long) {
         viewModelScope.launch {
-            repository.removeCardFromFolder(userCardId, folderId)
+            try {
+                repository.removeCardFromFolder(userCardId, folderId)
+            } catch (e: Exception) {
+                // Potential for error side effect
+            }
         }
     }
 

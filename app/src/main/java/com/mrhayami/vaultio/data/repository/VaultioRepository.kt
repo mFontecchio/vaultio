@@ -7,7 +7,13 @@ import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.VintageSets
 import com.mrhayami.vaultio.data.local.*
 import com.mrhayami.vaultio.data.remote.*
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.async
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import com.squareup.moshi.Moshi
@@ -28,7 +34,9 @@ class VaultioRepository(
     private val telemetryDao: TelemetryDao,
     private val tcgDexApi: TcgDexApi,
     val justTcgApi: JustTcgApi,
-    val userPreferencesRepository: UserPreferencesRepository
+    val userPreferencesRepository: UserPreferencesRepository,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
     private val moshi = Moshi.Builder().build()
     private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Int::class.javaObjectType))
@@ -417,10 +425,18 @@ class VaultioRepository(
         return (usage?.dailyRemaining ?: 100) > 0
     }
 
-    suspend fun updatePricesBatch(cards: List<CardEntity>) {
+    suspend fun updatePricesBatch(cards: List<CardEntity>) = supervisorScope {
         val (vintage, modern) = cards.partition { VintageSets.isVintageSet(it.setId) }
-        modern.forEach { updateCardPrice(it.id) }
-        vintage.forEach { updateVintageCardPrice(it) }
+        
+        val modernDeferred = modern.map { card ->
+            async(ioDispatcher) { updateCardPrice(card.id) }
+        }
+        
+        val vintageDeferred = vintage.map { card ->
+            async(ioDispatcher) { updateVintageCardPrice(card) }
+        }
+        
+        (modernDeferred + vintageDeferred).forEach { it.await() }
     }
 
     suspend fun getApiUsage(): Int {
