@@ -28,6 +28,7 @@ import com.mrhayami.vaultio.data.remote.TcgDexCard
 @Composable
 fun MetadataModal(
     card: TcgDexCard,
+    modifier: Modifier = Modifier,
     folders: List<FolderEntity> = emptyList(),
     onConfirm: (Int, String, String, String, List<Long>) -> Unit,
     onBack: () -> Unit
@@ -39,7 +40,7 @@ fun MetadataModal(
     val selectedFolderIds = remember { mutableStateListOf<Long>() }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
@@ -158,21 +159,23 @@ fun MetadataModal(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    FlowRow(
+                    androidx.compose.foundation.layout.FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         folders.forEach { folder ->
-                            val isSelected = selectedFolderIds.contains(folder.id)
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = {
-                                    if (isSelected) selectedFolderIds.remove(folder.id)
-                                    else selectedFolderIds.add(folder.id)
-                                },
-                                label = { Text(folder.name) },
-                                shape = CircleShape
-                            )
+                            key(folder.id) {
+                                val isSelected = selectedFolderIds.contains(folder.id)
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = {
+                                        if (isSelected) selectedFolderIds.remove(folder.id)
+                                        else selectedFolderIds.add(folder.id)
+                                    },
+                                    label = { Text(folder.name) },
+                                    shape = CircleShape
+                                )
+                            }
                         }
                     }
                 }
@@ -207,13 +210,15 @@ fun DropdownSelector(
     label: String,
     value: String,
     options: List<String>,
+    modifier: Modifier = Modifier,
     onSelected: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     
     ExposedDropdownMenuBox(
         expanded = expanded,
-        onExpandedChange = { expanded = !expanded }
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
     ) {
         OutlinedTextField(
             value = value,
@@ -222,7 +227,7 @@ fun DropdownSelector(
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
-                .menuAnchor()
+                .menuAnchor(MenuAnchorType.PrimaryEditable, true)
                 .fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = TextFieldDefaults.colors(
@@ -248,5 +253,30 @@ fun DropdownSelector(
                 )
             }
         }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+fun MetadataModalPreview() {
+    MaterialTheme {
+        MetadataModal(
+            card = TcgDexCard(
+                id = "swsh1-1",
+                localId = "1",
+                name = "Charizard",
+                image = "https://assets.tcgdex.net/en/swsh/swsh1/1",
+                rarity = "Rare Holo",
+                category = "Pokemon",
+                dexId = listOf(6),
+                types = listOf("Fire")
+            ),
+            folders = listOf(
+                FolderEntity(id = 1L, name = "Favorites", icon = "star"),
+                FolderEntity(id = 2L, name = "Trade", icon = "swap")
+            ),
+            onConfirm = { _, _, _, _, _ -> },
+            onBack = {}
+        )
     }
 }

@@ -18,49 +18,64 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.material3.Text
 
+/**
+ * A container that provides 3D rotation effects to its content.
+ * It uses the device's rotation vector sensor (gyroscope) to tilt the card
+ * and supports touch gestures for panning and zooming.
+ */
 @Composable
 fun ThreeDCard(
     modifier: Modifier = Modifier,
     content: @Composable (rotationX: Float, rotationY: Float) -> Unit
 ) {
     val context = LocalContext.current
+    val isPreview = LocalInspectionMode.current
     var rotationX by remember { mutableFloatStateOf(0f) }
     var rotationY by remember { mutableFloatStateOf(0f) }
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
 
-    // Gyroscope/Rotation Vector Sensor Logic
-    DisposableEffect(Unit) {
-        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-        
-        val listener = object : SensorEventListener {
-            override fun onSensorChanged(event: SensorEvent) {
-                if (event.sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
-                    val rotationMatrix = FloatArray(9)
-                    SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                    val orientation = FloatArray(3)
-                    SensorManager.getOrientation(rotationMatrix, orientation)
-                    
-                    // orientation[1] is pitch (rotation around X axis)
-                    // orientation[2] is roll (rotation around Y axis)
-                    val pitch = Math.toDegrees(orientation[1].toDouble()).toFloat()
-                    val roll = Math.toDegrees(orientation[2].toDouble()).toFloat()
-                    
-                    // Constrain to reasonable viewing angles
-                    rotationX = -pitch.coerceIn(-30f, 30f)
-                    rotationY = roll.coerceIn(-30f, 30f)
+    // Gyroscope/Rotation Vector Sensor Logic - Skip in Preview
+    if (!isPreview) {
+        DisposableEffect(Unit) {
+            val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+            val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+            
+            val listener = object : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent) {
+                    if (event.sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
+                        val rotationMatrix = FloatArray(9)
+                        SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+                        val orientation = FloatArray(3)
+                        SensorManager.getOrientation(rotationMatrix, orientation)
+                        
+                        // orientation[1] is pitch (rotation around X axis)
+                        // orientation[2] is roll (rotation around Y axis)
+                        val pitch = Math.toDegrees(orientation[1].toDouble()).toFloat()
+                        val roll = Math.toDegrees(orientation[2].toDouble()).toFloat()
+                        
+                        // Constrain to reasonable viewing angles
+                        rotationX = -pitch.coerceIn(-30f, 30f)
+                        rotationY = roll.coerceIn(-30f, 30f)
+                    }
                 }
+                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
             }
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+            
+            sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
+            onDispose {
+                sensorManager.unregisterListener(listener)
+            }
         }
-        
-        sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
-        onDispose {
-            sensorManager.unregisterListener(listener)
-        }
+    } else {
+        // Sample rotation for preview mode
+        rotationX = 15f
+        rotationY = -15f
     }
     
     val animatedRotationX by animateFloatAsState(
@@ -115,9 +130,25 @@ fun ThreeDCard(
                 .aspectRatio(0.718f),
             shape = RoundedCornerShape(16.dp),
             shadowElevation = 32.dp,
-            color = Color.Transparent
+            color = Color.LightGray // Visible in preview
         ) {
             content(animatedRotationX, animatedRotationY)
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ThreeDCardPreview() {
+    ThreeDCard { rx, ry ->
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = "3D Card Content")
+                Text(text = "X: ${rx.toInt()}° Y: ${ry.toInt()}°")
+            }
         }
     }
 }

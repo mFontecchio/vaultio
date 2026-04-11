@@ -12,24 +12,9 @@ import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.local.FolderCardCrossRef
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-
-data class CardDetailUiState(
-    val cardWithDetails: CardWithDetails? = null,
-    val folders: List<FolderEntity> = emptyList(),
-    val cardFolderIds: Set<Long> = emptySet(),
-    val prices: List<PriceEntity> = emptyList(),
-    val vintagePrices: List<VintagePriceEntity> = emptyList(),
-    val showEnergyAnimations: Boolean = true,
-    val showFinishAnimations: Boolean = true,
-    val preferSetLogo: Boolean = true,
-    val isLoading: Boolean = true,
-    val isRefreshingPrice: Boolean = false,
-    val isDeleted: Boolean = false,
-    val showSaveSuccess: Boolean = false,
-    val errorMessage: String? = null
-)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CardDetailViewModel(
@@ -40,23 +25,33 @@ class CardDetailViewModel(
     private val _uiState = MutableStateFlow(CardDetailUiState())
     val uiState = _uiState.asStateFlow()
 
-    private val userCardId: Long = savedStateHandle.get<Long>("userCardId")!!
+    private val _sideEffects = Channel<CardDetailEffect>(Channel.BUFFERED)
+    val sideEffects = _sideEffects.receiveAsFlow()
+
+    private val userCardId: Long = checkNotNull(savedStateHandle.get<Long>("userCardId")) { 
+        "userCardId is required" 
+    }
 
     init {
+        observeCardDetails()
+    }
+
+    private fun observeCardDetails() {
         viewModelScope.launch {
             repository.getUserCardById(userCardId).flatMapLatest { cardWithDetails ->
                 if (cardWithDetails == null) {
                     flowOf(CardDetailUiState(isLoading = false))
                 } else {
+                    val preferences = repository.userPreferencesRepository
                     combine(
                         repository.allFolders,
                         repository.allFolderCardCrossRefs,
-                        repository.userPreferencesRepository.showEnergyAnimations,
-                        repository.userPreferencesRepository.showFinishAnimations,
-                        repository.userPreferencesRepository.preferSetLogo,
+                        preferences.showEnergyAnimations,
+                        preferences.showFinishAnimations,
+                        preferences.preferSetLogo,
                         repository.getPricesForCard(cardWithDetails.card.id),
                         repository.getVintagePricesForCard(cardWithDetails.card.id)
-                    ) { flows ->
+                    ) { flows: Array<Any?> ->
                         val folders = flows[0] as List<FolderEntity>
                         val crossRefs = flows[1] as List<FolderCardCrossRef>
                         val showEnergyAnims = flows[2] as Boolean
@@ -87,7 +82,18 @@ class CardDetailViewModel(
         }
     }
 
-    fun saveChanges(quantity: Int, condition: String, printing: String, finish: String) {
+    fun onEvent(event: CardDetailEvent) {
+        when (event) {
+            is CardDetailEvent.SaveChanges -> saveChanges(event.quantity, event.condition, event.printing, event.finish)
+            CardDetailEvent.DeleteCard -> deleteUserCard()
+            CardDetailEvent.RefreshPrice -> refreshPrice()
+            is CardDetailEvent.AddCardToFolder -> addCardToFolder(event.folderId)
+            is CardDetailEvent.RemoveCardFromFolder -> removeCardFromFolder(event.folderId)
+            CardDetailEvent.ConsumeSaveSuccess -> consumeSaveSuccess()
+        }
+    }
+
+    private fun saveChanges(quantity: Int, condition: String, printing: String, finish: String) {
         val current = _uiState.value.cardWithDetails?.userCard ?: return
         viewModelScope.launch {
             repository.updateUserCard(current.copy(
@@ -96,41 +102,41 @@ class CardDetailViewModel(
                 printing = printing,
                 finish = finish
             ))
-            _uiState.value = _uiState.value.copy(showSaveSuccess = true)
+            _uiState.update { it.copy(showSaveSuccess = true) }
         }
     }
 
-    fun consumeSaveSuccess() {
-        _uiState.value = _uiState.value.copy(showSaveSuccess = false)
+    private fun consumeSaveSuccess() {
+        _uiState.update { it.copy(showSaveSuccess = false) }
     }
 
-    fun deleteUserCard() {
+    private fun deleteUserCard() {
         viewModelScope.launch {
             repository.deleteUserCard(userCardId)
-            _uiState.value = _uiState.value.copy(isDeleted = true)
+            _sideEffects.send(CardDetailEffect.Navigation.Back)
         }
     }
 
-    fun addCardToFolder(folderId: Long) {
+    private fun addCardToFolder(folderId: Long) {
         viewModelScope.launch {
             repository.addCardToFolder(userCardId, folderId)
         }
     }
 
-    fun removeCardFromFolder(folderId: Long) {
+    private fun removeCardFromFolder(folderId: Long) {
         viewModelScope.launch {
             repository.removeCardFromFolder(userCardId, folderId)
         }
     }
 
-    fun refreshPrice() {
+    private fun refreshPrice() {
         val cardId = _uiState.value.cardWithDetails?.card?.id ?: return
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isRefreshingPrice = true)
+            _uiState.update { it.copy(isRefreshingPrice = true) }
             try {
                 repository.updateCardPrice(cardId)
             } finally {
-                _uiState.value = _uiState.value.copy(isRefreshingPrice = false)
+                _uiState.update { it.copy(isRefreshingPrice = false) }
             }
         }
     }

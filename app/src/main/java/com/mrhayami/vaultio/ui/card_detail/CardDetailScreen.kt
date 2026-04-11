@@ -26,29 +26,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.VintageSets
-import com.mrhayami.vaultio.data.local.PriceEntity
-import com.mrhayami.vaultio.data.local.VintagePriceEntity
+import androidx.compose.ui.tooling.preview.Preview
+import com.mrhayami.vaultio.data.local.*
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.theme.*
 import com.mrhayami.vaultio.ui.components.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CardDetailScreen(
-    repository: VaultioRepository,
-    userCardId: Long,
+fun CardDetailContent(
+    uiState: CardDetailUiState,
     onNavigateBack: () -> Unit,
+    onEvent: (CardDetailEvent) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val viewModel: CardDetailViewModel = viewModel(
-        factory = CardDetailViewModelFactory(repository, SavedStateHandle(mapOf("userCardId" to userCardId)))
-    )
-    val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
     var quantity by remember { mutableIntStateOf(0) }
@@ -59,7 +59,7 @@ fun CardDetailScreen(
 
     LaunchedEffect(uiState.cardWithDetails) {
         if (uiState.cardWithDetails != null && !isInitialized) {
-            val userCard = uiState.cardWithDetails!!.userCard
+            val userCard = uiState.cardWithDetails.userCard
             quantity = userCard.quantity
             condition = userCard.condition
             printing = userCard.printing
@@ -68,20 +68,15 @@ fun CardDetailScreen(
         }
     }
 
-    LaunchedEffect(uiState.isDeleted) {
-        if (uiState.isDeleted) {
-            onNavigateBack()
-        }
-    }
-
     LaunchedEffect(uiState.showSaveSuccess) {
         if (uiState.showSaveSuccess) {
             Toast.makeText(context, "Card updated successfully", Toast.LENGTH_SHORT).show()
-            viewModel.consumeSaveSuccess()
+            onEvent(CardDetailEvent.ConsumeSaveSuccess)
         }
     }
 
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text(uiState.cardWithDetails?.card?.name ?: "", fontWeight = FontWeight.Bold) },
@@ -91,7 +86,9 @@ fun CardDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.saveChanges(quantity, condition, printing, finish) }) {
+                    IconButton(onClick = { 
+                        onEvent(CardDetailEvent.SaveChanges(quantity, condition, printing, finish)) 
+                    }) {
                         Icon(Icons.Rounded.Done, contentDescription = "Save")
                     }
                     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -107,7 +104,7 @@ fun CardDetailScreen(
                             confirmButton = {
                                 TextButton(onClick = { 
                                     showDeleteDialog = false
-                                    viewModel.deleteUserCard() 
+                                    onEvent(CardDetailEvent.DeleteCard) 
                                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                             },
                             dismissButton = {
@@ -128,7 +125,7 @@ fun CardDetailScreen(
                 CircularProgressIndicator()
             }
         } else if (uiState.cardWithDetails != null) {
-            val details = uiState.cardWithDetails!!
+            val details = uiState.cardWithDetails
             val card = details.card
             val set = details.set
             val userCard = details.userCard
@@ -321,7 +318,7 @@ fun CardDetailScreen(
                                 Text(priceText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
                                 Spacer(modifier = Modifier.weight(1f))
                                 IconButton(
-                                    onClick = { viewModel.refreshPrice() },
+                                    onClick = { onEvent(CardDetailEvent.RefreshPrice) },
                                     modifier = Modifier.background(MaterialTheme.colorScheme.surface, CircleShape)
                                 ) {
                                     if (uiState.isRefreshingPrice) {
@@ -500,8 +497,8 @@ fun CardDetailScreen(
                             FilterChip(
                                 selected = isInFolder,
                                 onClick = { 
-                                    if (isInFolder) viewModel.removeCardFromFolder(folder.id)
-                                    else viewModel.addCardToFolder(folder.id)
+                                    if (isInFolder) onEvent(CardDetailEvent.RemoveCardFromFolder(folder.id))
+                                    else onEvent(CardDetailEvent.AddCardToFolder(folder.id))
                                 },
                                 label = { Text(folder.name) },
                                 modifier = Modifier.padding(end = 8.dp),
@@ -516,6 +513,56 @@ fun CardDetailScreen(
         }
     }
 }
+
+@Preview(showBackground = true)
+@Composable
+private fun CardDetailPreview() {
+    MaterialTheme {
+        val mockId = "swsh1-1"
+        CardDetailContent(
+            uiState = CardDetailUiState(
+                isLoading = false,
+                cardWithDetails = CardWithDetails(
+                    userCard = UserCardEntity(id = 1L, cardId = mockId, quantity = 2, condition = "Near Mint", finish = "Holo"),
+                    card = CardEntity(id = mockId, localId = "1", name = "Charizard", image = "url", setId = "swsh1", rarity = "Rare Holo", category = "Pokemon", types = "Fire", dexId = "6"),
+                    set = SetEntity(id = "swsh1", name = "Sword & Shield", series = "Sword & Shield", logo = "url", symbol = "url", totalCards = 202, officialCards = 202, releaseDate = "2020-02-07")
+                ),
+                folders = listOf(FolderEntity(id = 1L, name = "Favorites", icon = "star")),
+                cardFolderIds = setOf(1L),
+                prices = listOf(PriceEntity(cardId = mockId, finish = "Holo", condition = "Near Mint", marketPrice = 45.99, lowPrice = 40.0, midPrice = 45.0, highPrice = 50.0, source = "TCGPlayer", timestamp = System.currentTimeMillis()))
+            ),
+            onNavigateBack = {},
+            onEvent = {}
+        )
+    }
+}
+
+@Composable
+fun CardDetailScreen(
+    repository: VaultioRepository,
+    userCardId: Long,
+    onNavigateBack: () -> Unit,
+) {
+    val viewModel: CardDetailViewModel = viewModel(
+        factory = CardDetailViewModelFactory(repository, SavedStateHandle(mapOf("userCardId" to userCardId)))
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        viewModel.sideEffects.collect { effect ->
+            when (effect) {
+                CardDetailEffect.Navigation.Back -> onNavigateBack()
+            }
+        }
+    }
+
+    CardDetailContent(
+        uiState = uiState,
+        onNavigateBack = onNavigateBack,
+        onEvent = viewModel::onEvent
+    )
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

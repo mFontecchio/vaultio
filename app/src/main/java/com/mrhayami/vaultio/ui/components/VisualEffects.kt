@@ -19,6 +19,14 @@ import com.mrhayami.vaultio.data.PricingUtils
 import kotlin.math.*
 import kotlin.random.Random
 
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+
 /**
  * ADVANCED TCG HOLOFOIL SHADER
  * 
@@ -27,7 +35,7 @@ import kotlin.random.Random
  * 1. Dynamic Spectral Gradient (Color Dodge)
  * 2. Specular Flare bands (Screen)
  * 3. Static Galaxy/Cosmos grain pattern with clusters
- * 4. 3D Gyro tilt with integrated dynamic shadow
+ * 4. 3D Gyro tilt (simulated via drag) with integrated dynamic shadow
  */
 fun Modifier.holoEffect(
     finish: String,
@@ -549,5 +557,36 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGustsOfWind(pro
         path.moveTo(x - 30.dp.toPx(), y + 15.dp.toPx())
         path.cubicTo(x + size.width * 0.15f, y - 25.dp.toPx(), x + size.width * 0.35f, y + 55.dp.toPx(), x + size.width * 0.55f, y + 15.dp.toPx())
         drawPath(path = path, brush = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0f), Color.White.copy(alpha = alpha * 0.5f), Color.White.copy(alpha = 0f)), start = Offset(x - 30.dp.toPx(), y + 15.dp.toPx()), end = Offset(x + size.width * 0.55f, y + 15.dp.toPx())), style = Stroke(width = 0.8.dp.toPx(), cap = StrokeCap.Round))
+    }
+}
+
+@Preview(showBackground = true, name = "Holo Effect Preview")
+@Composable
+private fun HoloEffectPreview() {
+    Box(
+        modifier = Modifier
+            .padding(32.dp)
+            .size(width = 200.dp, height = 280.dp)
+            .holoEffect(finish = PricingUtils.FINISH_HOLOFOIL),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Holo Card")
+            Text("(Drag to tilt)", style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Energy Effect Preview")
+@Composable
+private fun EnergyEffectPreview() {
+    Box(
+        modifier = Modifier
+            .padding(32.dp)
+            .size(width = 200.dp, height = 280.dp)
+            .energyEffect(type = "fire"),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("Fire Energy")
     }
 }

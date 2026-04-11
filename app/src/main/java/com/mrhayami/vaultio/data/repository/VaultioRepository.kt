@@ -6,12 +6,7 @@ import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.VintageSets
 import com.mrhayami.vaultio.data.local.*
-import com.mrhayami.vaultio.data.remote.JustTcgApi
-import com.mrhayami.vaultio.data.remote.JustTcgBatchRequestItem
-import com.mrhayami.vaultio.data.remote.JustTcgMetadata
-import com.mrhayami.vaultio.data.remote.JustTcgVariant
-import com.mrhayami.vaultio.data.remote.TcgDexApi
-import com.mrhayami.vaultio.data.remote.TcgDexCard
+import com.mrhayami.vaultio.data.remote.*
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -20,6 +15,8 @@ import com.squareup.moshi.Types
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
+
+private const val TAG = "VaultioRepository"
 
 class VaultioRepository(
     private val setDao: SetDao,
@@ -43,244 +40,130 @@ class VaultioRepository(
     val allPrices: Flow<List<PriceEntity>> = priceDao.getAllPrices()
     val allVintagePrices: Flow<List<VintagePriceEntity>> = priceDao.getAllVintagePrices()
 
-    fun getUserCardById(userCardId: Long): Flow<CardWithDetails?> {
-        return userCardDao.getUserCardById(userCardId)
-    }
+    fun getUserCardById(userCardId: Long): Flow<CardWithDetails?> = userCardDao.getUserCardById(userCardId)
 
-    fun getUserCardsByFolder(folderId: Long): Flow<List<CardWithDetails>> {
-        return userCardDao.getUserCardsByFolder(folderId)
-    }
+    fun getUserCardsByFolder(folderId: Long): Flow<List<CardWithDetails>> = userCardDao.getUserCardsByFolder(folderId)
 
-    fun getPricesForCard(cardId: String): Flow<List<PriceEntity>> {
-        return priceDao.getPricesForCard(cardId)
-    }
+    fun getPricesForCard(cardId: String): Flow<List<PriceEntity>> = priceDao.getPricesForCard(cardId)
 
-    fun getVintagePricesForCard(cardId: String): Flow<List<VintagePriceEntity>> {
-        return priceDao.getVintagePricesForCard(cardId)
-    }
+    fun getVintagePricesForCard(cardId: String): Flow<List<VintagePriceEntity>> = priceDao.getVintagePricesForCard(cardId)
 
     suspend fun refreshSets() {
-        try {
+        runCatching {
             val currentSets = setDao.getSetsSync()
             val downloadedSetIds = currentSets.filter { it.isDownloaded }.map { it.id }.toSet()
             
             val remoteSets = tcgDexApi.getSets()
-            val entities = remoteSets.map {
-                val setId = it.id
-                SetEntity(
-                    id = setId,
-                    name = it.name,
-                    series = it.series,
-                    logo = ensureImageUrl(it.logo ?: "https://assets.tcgdex.net/en/sets/$setId/logo"),
-                    symbol = ensureImageUrl(it.symbol ?: "https://assets.tcgdex.net/en/sets/$setId/symbol"),
-                    totalCards = it.cardCount.total,
-                    officialCards = it.cardCount.official,
-                    releaseDate = it.releaseDate,
-                    isDownloaded = downloadedSetIds.contains(setId)
-                )
-            }
+            val entities = remoteSets.map { it.toEntity(downloadedSetIds.contains(it.id)) }
             setDao.insertSets(entities)
-        } catch (e: Exception) {
-            Log.e("VaultioRepository", "Error refreshing sets", e)
+        }.onFailure { e ->
+            Log.e(TAG, "Error refreshing sets", e)
         }
     }
+
+    private fun TcgDexSet.toEntity(isDownloaded: Boolean) = SetEntity(
+        id = id,
+        name = name,
+        series = series,
+        logo = ensureImageUrl(logo ?: "https://assets.tcgdex.net/en/sets/$id/logo"),
+        symbol = ensureImageUrl(symbol ?: "https://assets.tcgdex.net/en/sets/$id/symbol"),
+        totalCards = cardCount.total,
+        officialCards = cardCount.official,
+        releaseDate = releaseDate,
+        isDownloaded = isDownloaded
+    )
 
     private fun ensureImageUrl(url: String): String {
         if (url.isEmpty()) return url
         val extensions = listOf(".png", ".webp", ".jpg", ".jpeg")
-        return if (extensions.any { url.lowercase().endsWith(it) }) {
-            url
-        } else {
-            "$url.png"
-        }
+        return if (extensions.any { url.lowercase().endsWith(it) }) url else "$url.png"
     }
 
     suspend fun downloadSet(setId: String) {
-        try {
+        runCatching {
             val detail = tcgDexApi.getSetDetail(setId)
-            val cardEntities = detail.cards.map {
-                // Use API dex IDs when present; fall back to static map for Pokémon cards
-                val apiDexIds = it.dexId?.takeIf { ids -> ids.isNotEmpty() }
-                val resolvedDexIds = apiDexIds
-                    ?: if (it.category == "Pokemon" || it.category == "Pokémon") {
-                        PokemonUtils.lookupDexIds(it.name).takeIf { ids -> ids.isNotEmpty() }
-                    } else null
-                CardEntity(
-                    id = it.id,
-                    localId = it.localId,
-                    name = it.name,
-                    image = it.image,
-                    setId = setId,
-                    rarity = it.rarity,
-                    category = it.category,
-                    types = it.types?.joinToString(","),
-                    dexId = resolvedDexIds?.firstOrNull()?.toString(),
-                    dexIds = resolvedDexIds?.let { ids -> listIntAdapter.toJson(ids) },
-                    pokemonName = PokemonUtils.extractPokemonName(it.name),
-                    tcgPlayerId = extractTcgPlayerId(it.pricing?.tcgplayer?.url)
-                )
-            }
+            val cardEntities = detail.cards.map { it.toEntity(setId) }
             cardDao.insertCards(cardEntities)
             setDao.updateDownloadStatus(setId, true)
             
             // Ensure set entity has icons
             val currentSet = setDao.getSetById(setId)
-            if (currentSet != null && (currentSet.logo == null || !currentSet.logo.contains("http"))) {
+            if (currentSet?.logo?.contains("http") == false) {
                 refreshSets() 
             }
-        } catch (e: Exception) {
-            Log.e("VaultioRepository", "Error download set $setId", e)
+        }.onFailure { e ->
+            Log.e(TAG, "Error download set $setId", e)
         }
     }
+
+    private fun TcgDexCard.toEntity(setId: String): CardEntity {
+        val apiDexIds = dexId?.takeIf { it.isNotEmpty() }
+        val resolvedDexIds = apiDexIds ?: if (category?.isPokemonCategory() == true) {
+            PokemonUtils.lookupDexIds(name).takeIf { it.isNotEmpty() }
+        } else null
+        
+        return CardEntity(
+            id = id,
+            localId = localId,
+            name = name,
+            image = image,
+            setId = setId,
+            rarity = rarity,
+            category = category,
+            types = types?.joinToString(","),
+            dexId = resolvedDexIds?.firstOrNull()?.toString(),
+            dexIds = resolvedDexIds?.let { listIntAdapter.toJson(it) },
+            pokemonName = PokemonUtils.extractPokemonName(name),
+            tcgPlayerId = extractTcgPlayerId(pricing?.tcgplayer?.url)
+        )
+    }
+
+    private fun String.isPokemonCategory() = this == "Pokemon" || this == "Pokémon"
 
     suspend fun deleteDownloadedSet(setId: String) {
         setDao.updateDownloadStatus(setId, false)
         cardDao.deleteCardsBySet(setId)
     }
 
-    suspend fun searchLocalCards(localId: String): List<CardEntity> {
-        return cardDao.getCardsByLocalId(localId)
-    }
+    suspend fun searchLocalCards(localId: String): List<CardEntity> = cardDao.getCardsByLocalId(localId)
 
-    suspend fun searchLocalCardsWithTotal(localId: String, total: Int): List<CardEntity> {
-        return cardDao.getCardsByLocalIdAndSetTotal(localId, total)
-    }
+    suspend fun searchLocalCardsWithTotal(localId: String, total: Int): List<CardEntity> = 
+        cardDao.getCardsByLocalIdAndSetTotal(localId, total)
 
     suspend fun searchTcgDex(query: String): List<TcgDexCard> {
-        return try {
-            if (query.isBlank()) return emptyList()
+        if (query.isBlank()) return emptyList()
+        return runCatching {
             tcgDexApi.searchCards("$query*")
-        } catch (e: Exception) {
-            Log.e("VaultioRepository", "Error searching cards", e)
+        }.getOrElse { e ->
+            Log.e(TAG, "Error searching cards", e)
             emptyList()
         }
     }
 
-    suspend fun searchTcgDexByLocalId(localId: String): List<TcgDexCard> {
-        return try {
-            tcgDexApi.searchCardsByLocalId(localId)
-        } catch (e: Exception) {
-            Log.e("VaultioRepository", "Error searching by local ID", e)
-            emptyList()
-        }
+    suspend fun searchTcgDexByLocalId(localId: String): List<TcgDexCard> = runCatching {
+        tcgDexApi.searchCardsByLocalId(localId)
+    }.getOrElse { e ->
+        Log.e(TAG, "Error searching by local ID", e)
+        emptyList()
     }
 
-    suspend fun getCardDetail(cardId: String): TcgDexCard? {
-        return try {
-            tcgDexApi.getCardDetail(cardId)
-        } catch (e: Exception) {
-            Log.e("VaultioRepository", "Error fetching card detail for $cardId", e)
-            null
-        }
+    suspend fun getCardDetail(cardId: String): TcgDexCard? = runCatching {
+        tcgDexApi.getCardDetail(cardId)
+    }.getOrElse { e ->
+        Log.e(TAG, "Error fetching card detail for $cardId", e)
+        null
     }
 
     suspend fun addUserCard(card: TcgDexCard, userCardEntity: UserCardEntity, folderIds: List<Long> = emptyList()) {
         Log.d("Vaultio", "Adding card to collection: ${card.name} (${card.id})")
         val setId = card.id.substringBefore("-")
-        var setEntity = setDao.getSetById(setId)
-        if (setEntity == null || setEntity.logo == null || !setEntity.logo.contains("http")) {
-            try {
-                val remoteSets = tcgDexApi.getSets()
-                val remoteSet = remoteSets.find { it.id == setId }
-                if (remoteSet != null) {
-                    val updatedEntity = SetEntity(
-                        id = remoteSet.id,
-                        name = remoteSet.name,
-                        series = remoteSet.series,
-                        logo = ensureImageUrl(remoteSet.logo ?: "https://assets.tcgdex.net/en/sets/$setId/logo"),
-                        symbol = ensureImageUrl(remoteSet.symbol ?: "https://assets.tcgdex.net/en/sets/$setId/symbol"),
-                        totalCards = remoteSet.cardCount.total,
-                        officialCards = remoteSet.cardCount.official,
-                        releaseDate = remoteSet.releaseDate,
-                        isDownloaded = setEntity?.isDownloaded ?: false
-                    )
-                    setDao.insertSets(listOf(updatedEntity))
-                    setEntity = updatedEntity
-                }
-            } catch (e: Exception) { Log.e("Vaultio", "Failed to sync set", e) }
-        }
+        ensureSetIsSynced(setId)
 
         val existingCard = cardDao.getCardById(card.id)
         
-        // If the card doesn't exist or is missing its dexId, ensure we have full details and update the DB
-        if (existingCard == null || existingCard.dexId == null) {
-            val fullCard = if (card.dexId.isNullOrEmpty()) {
-                try {
-                    Log.d("Vaultio", "Fetching details for ${card.id} to ensure dexId presence")
-                    tcgDexApi.getCardDetail(card.id)
-                } catch (e: Exception) {
-                    Log.e("Vaultio", "Failed to fetch card details", e)
-                    card
-                }
-            } else {
-                card
-            }
-
-            var dexIdString = fullCard.dexId?.firstOrNull()?.toString()
-            var dexIdsJson = fullCard.dexId?.let { listIntAdapter.toJson(it) }
-
-            // Recovery: If dexId is missing in API, try a cascade of fallbacks
-            if (dexIdString == null && (fullCard.category == "Pokemon" || fullCard.category == "Pokémon")) {
-                val normalizedName = PokemonUtils.extractPokemonName(fullCard.name)
-                Log.d("Vaultio", "DexID missing for ${fullCard.name}. Attempting recovery (normalized: $normalizedName)")
-
-                // Layer 1: Exact pokemonName match in local DB (fast, precise)
-                val exactMatches = cardDao.getCardsByPokemonName(normalizedName)
-                val localMatch = exactMatches.firstOrNull()
-                    ?: run {
-                        // Layer 1b: Fuzzy name search for cards already downloaded
-                        cardDao.searchCardsByName(normalizedName).find {
-                            (it.name.contains(normalizedName, ignoreCase = true) ||
-                                    it.pokemonName?.equals(normalizedName, ignoreCase = true) == true) &&
-                                    it.dexId != null
-                        }
-                    }
-
-                if (localMatch != null) {
-                    dexIdString = localMatch.dexId
-                    dexIdsJson = localMatch.dexIds
-                    Log.d("Vaultio", "Local DB recovery SUCCESS: dexId $dexIdString for ${fullCard.name} (via ${localMatch.id})")
-                } else {
-                    // Layer 2: Network search for any version of this Pokémon that has a dexId
-                    Log.d("Vaultio", "Local recovery failed. Trying network recovery for: $normalizedName")
-                    try {
-                        val searchResults = tcgDexApi.searchCards(normalizedName)
-                        for (shortCard in searchResults.take(10)) {
-                            if (shortCard.name.contains(normalizedName, ignoreCase = true)) {
-                                if (!shortCard.dexId.isNullOrEmpty()) {
-                                    dexIdString = shortCard.dexId.first().toString()
-                                    dexIdsJson = listIntAdapter.toJson(shortCard.dexId)
-                                    Log.d("Vaultio", "Network recovery SUCCESS (search): dexId $dexIdString via ${shortCard.id}")
-                                    break
-                                } else {
-                                    val otherDetail = try { tcgDexApi.getCardDetail(shortCard.id) } catch (e: Exception) { null }
-                                    val otherDexId = otherDetail?.dexId?.firstOrNull()?.toString()
-                                    if (otherDexId != null) {
-                                        dexIdString = otherDexId
-                                        dexIdsJson = otherDetail.dexId?.let { listIntAdapter.toJson(it) }
-                                        Log.d("Vaultio", "Network recovery SUCCESS (detail): dexId $dexIdString via ${shortCard.id}")
-                                        break
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e("Vaultio", "Network recovery failed", e)
-                    }
-
-                    // Layer 3: Static Pokédex map — zero network cost, covers all 1025 species
-                    if (dexIdString == null) {
-                        val staticIds = PokemonUtils.lookupDexIds(fullCard.name)
-                        if (staticIds.isNotEmpty()) {
-                            dexIdString = staticIds.first().toString()
-                            dexIdsJson = listIntAdapter.toJson(staticIds)
-                            Log.d("Vaultio", "Static map recovery SUCCESS: dexId $dexIdString for ${fullCard.name}")
-                        } else {
-                            Log.w("Vaultio", "All recovery layers exhausted — dexId remains null for ${fullCard.name}")
-                        }
-                    }
-                }
-            }
+        if (existingCard?.dexId == null) {
+            val fullCard = fetchFullCardDetails(card)
+            val (dexIdString, dexIdsJson) = resolveDexIds(fullCard)
 
             val cardEntity = CardEntity(
                 id = fullCard.id,
@@ -296,22 +179,83 @@ class VaultioRepository(
                 pokemonName = PokemonUtils.extractPokemonName(fullCard.name),
                 tcgPlayerId = extractTcgPlayerId(fullCard.pricing?.tcgplayer?.url)
             )
-            Log.d("Vaultio", "Inserting CardEntity: id=${cardEntity.id}, name=${cardEntity.name}, dexId=${cardEntity.dexId}")
             cardDao.insertCards(listOf(cardEntity))
-        } else {
-            Log.d("Vaultio", "Card already exists in local DB with dexId: ${existingCard.dexId}")
         }
+
         val userCardIdResult = userCardDao.insertUserCard(userCardEntity.copy(cardId = card.id))
-        Log.d("Vaultio", "Inserted UserCard with result ID: $userCardIdResult")
 
         if (folderIds.isNotEmpty()) {
             val crossRefs = folderIds.map { FolderCardCrossRef(folderId = it, userCardId = userCardIdResult) }
             userCardDao.insertFolderCardCrossRefs(crossRefs)
-            Log.d("Vaultio", "Added UserCard $userCardIdResult to folders: $folderIds")
         }
 
-        // Trigger individual price update for the new card
         updateCardPrice(card.id)
+    }
+
+    private suspend fun ensureSetIsSynced(setId: String) {
+        val setEntity = setDao.getSetById(setId)
+        if (setEntity?.logo?.contains("http") != true) {
+            runCatching {
+                val remoteSets = tcgDexApi.getSets()
+                remoteSets.find { it.id == setId }?.let { remoteSet ->
+                    setDao.insertSets(listOf(remoteSet.toEntity(setEntity?.isDownloaded ?: false)))
+                }
+            }.onFailure { Log.e(TAG, "Failed to sync set", it) }
+        }
+    }
+
+    private suspend fun fetchFullCardDetails(card: TcgDexCard): TcgDexCard {
+        return if (card.dexId.isNullOrEmpty()) {
+            getCardDetail(card.id) ?: card
+        } else card
+    }
+
+    private suspend fun resolveDexIds(fullCard: TcgDexCard): Pair<String?, String?> {
+        var dexIdString = fullCard.dexId?.firstOrNull()?.toString()
+        var dexIdsJson = fullCard.dexId?.let { listIntAdapter.toJson(it) }
+
+        if (dexIdString == null && fullCard.category?.isPokemonCategory() == true) {
+            val normalizedName = PokemonUtils.extractPokemonName(fullCard.name)
+            
+            // Try local recovery
+            val localMatch = cardDao.getCardsByPokemonName(normalizedName).firstOrNull()
+                ?: cardDao.searchCardsByName(normalizedName).find { it.dexId != null }
+
+            if (localMatch != null) {
+                dexIdString = localMatch.dexId
+                dexIdsJson = localMatch.dexIds
+            } else {
+                // Try network recovery
+                val networkDex = attemptNetworkDexRecovery(normalizedName)
+                if (networkDex != null) {
+                    dexIdString = networkDex.first
+                    dexIdsJson = networkDex.second
+                } else {
+                    // Static fallback
+                    val staticIds = PokemonUtils.lookupDexIds(fullCard.name)
+                    if (staticIds.isNotEmpty()) {
+                        dexIdString = staticIds.first().toString()
+                        dexIdsJson = listIntAdapter.toJson(staticIds)
+                    }
+                }
+            }
+        }
+        return dexIdString to dexIdsJson
+    }
+
+    private suspend fun attemptNetworkDexRecovery(name: String): Pair<String, String>? {
+        return runCatching {
+            val searchResults = tcgDexApi.searchCards(name)
+            for (shortCard in searchResults.take(10)) {
+                if (shortCard.name.contains(name, ignoreCase = true)) {
+                    val detail = if (shortCard.dexId.isNullOrEmpty()) getCardDetail(shortCard.id) else shortCard
+                    detail?.dexId?.takeIf { it.isNotEmpty() }?.let { ids ->
+                        return ids.first().toString() to listIntAdapter.toJson(ids)
+                    }
+                }
+            }
+            null
+        }.getOrNull()
     }
 
     private fun extractTcgPlayerId(url: String?): String? {
@@ -356,56 +300,51 @@ class VaultioRepository(
         userCardDao.removeCardFromFolder(userCardId, folderId)
     }
 
-    // --- Pricing Logic Implementation ---
-
     suspend fun updateCardPrice(cardId: String) {
         val card = cardDao.getCardById(cardId) ?: return
         
-        // 1. Vintage Logic (Base Set - Neo Destiny)
         if (VintageSets.isVintageSet(card.setId)) {
-            Log.d("VaultioRepository", "Card ${card.id} is from a vintage set. Using JustTCG.")
             updateVintageCardPrice(card)
             return
         }
 
-        // 2. Primary Source: TCGdex
-        try {
+        val tcgDexSuccess = runCatching {
             val startTime = System.currentTimeMillis()
             val tcgDexCard = tcgDexApi.getCardDetail(cardId)
             logTelemetry("tcgdex", "cards/$cardId", 200, System.currentTimeMillis() - startTime)
             
-            val tcgPlayerPricing = tcgDexCard.pricing?.tcgplayer
-            if (tcgPlayerPricing != null) {
-                val entities = PricingUtils.mapTcgDexPrices(cardId, tcgPlayerPricing)
+            tcgDexCard.pricing?.tcgplayer?.let { pricing ->
+                val entities = PricingUtils.mapTcgDexPrices(cardId, pricing)
                 if (entities.isNotEmpty()) {
                     priceDao.insertPrices(entities)
-                    return // Success with TCGdex
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("VaultioRepository", "TCGdex fetch failed for $cardId", e)
+                    true
+                } else false
+            } ?: false
+        }.getOrElse { e ->
+            Log.e(TAG, "TCGdex fetch failed for $cardId", e)
             logTelemetry("tcgdex", "cards/$cardId", 500, 0)
+            false
         }
 
-        // 3. Fallback: JustTCG
-        updateCardPriceFromJustTCG(card)
+        if (!tcgDexSuccess) {
+            updateCardPriceFromJustTCG(card)
+        }
     }
 
-    private suspend fun getJustTcgApiKey(): String? {
-        return userPreferencesRepository.justTcgApiKey.firstOrNull()
-    }
+    private suspend fun getJustTcgApiKey(): String? = userPreferencesRepository.justTcgApiKey.firstOrNull()
 
     private suspend fun updateVintageCardPrice(card: CardEntity) {
         val apiKey = getJustTcgApiKey() ?: return
         if (!canUseJustTcg()) return
 
-        try {
+        runCatching {
             val config = VintageSets.getVintageConfig(card.setId) ?: return
-            val slugs = mutableSetOf<String>()
-            slugs.add(config.justTcgSetId)
-            config.shadowlessJustTcgSetId?.let { slugs.add(it) }
+            val slugs = mutableSetOf<String>().apply {
+                add(config.justTcgSetId)
+                config.shadowlessJustTcgSetId?.let { add(it) }
+            }
 
-            val allVariants = mutableListOf<Pair<JustTcgVariant, String>>() // Variant and the slug it came from
+            val allVariants = mutableListOf<Pair<JustTcgVariant, String>>()
             val normalizedNumber = PricingUtils.normalizeCardNumber(card.localId)
 
             for (slug in slugs) {
@@ -420,32 +359,23 @@ class VaultioRepository(
                 syncApiUsage(response.metadata)
                 
                 response.data.forEach { jCard ->
-                    jCard.variants.forEach { variant ->
-                        allVariants.add(variant to slug)
-                    }
+                    jCard.variants.forEach { variant -> allVariants.add(variant to slug) }
                 }
-                
                 if (slugs.size > 1) delay(500) 
             }
 
             if (allVariants.isNotEmpty()) {
                 val vintagePrices = allVariants.mapNotNull { (variant, slug) ->
-                    // Disambiguate Shadowless for Base Set
                     val targetPrintingValue = if (slug == config.shadowlessJustTcgSetId) {
-                        val is1stEd = variant.printing.lowercase().contains("1st edition")
-                        if (is1stEd) PricingUtils.PRINTING_1ST_EDITION else PricingUtils.PRINTING_SHADOWLESS
-                    } else {
-                        null // use default parsing
-                    }
-                    
+                        if (variant.printing.lowercase().contains("1st edition")) 
+                            PricingUtils.PRINTING_1ST_EDITION else PricingUtils.PRINTING_SHADOWLESS
+                    } else null
                     PricingUtils.mapJustTcgVariantToVintagePrice(card.id, variant, targetPrintingValue)
                 }
-                if (vintagePrices.isNotEmpty()) {
-                    priceDao.insertVintagePrices(vintagePrices)
-                }
+                if (vintagePrices.isNotEmpty()) priceDao.insertVintagePrices(vintagePrices)
             }
-        } catch (e: Exception) {
-            Log.e("VaultioRepository", "JustTCG vintage fetch failed for ${card.id}", e)
+        }.onFailure { e ->
+            Log.e(TAG, "JustTCG vintage fetch failed for ${card.id}", e)
             logTelemetry("justtcg", "cards", 500, 0)
         }
     }
@@ -454,7 +384,7 @@ class VaultioRepository(
         val apiKey = getJustTcgApiKey() ?: return
         if (!canUseJustTcg()) return
 
-        try {
+        runCatching {
             val startTime = System.currentTimeMillis()
             val normalizedNumber = PricingUtils.normalizeCardNumber(card.localId)
             
@@ -469,19 +399,14 @@ class VaultioRepository(
             }
             
             logTelemetry("justtcg", "cards", 200, System.currentTimeMillis() - startTime)
-            syncApiUsage(metadata = response.metadata)
+            syncApiUsage(response.metadata)
 
-            val justTcgCard = response.data.firstOrNull()
-            if (justTcgCard != null) {
-                val prices = justTcgCard.variants.mapNotNull { 
-                    PricingUtils.mapJustTcgVariantToPrice(card.id, it)
-                }
-                if (prices.isNotEmpty()) {
-                    priceDao.insertPrices(prices)
-                }
+            response.data.firstOrNull()?.let { justTcgCard ->
+                val prices = justTcgCard.variants.mapNotNull { PricingUtils.mapJustTcgVariantToPrice(card.id, it) }
+                if (prices.isNotEmpty()) priceDao.insertPrices(prices)
             }
-        } catch (e: Exception) {
-            Log.e("VaultioRepository", "JustTCG fallback failed for ${card.id}", e)
+        }.onFailure { e ->
+            Log.e(TAG, "JustTCG fallback failed for ${card.id}", e)
             logTelemetry("justtcg", "cards", 500, 0)
         }
     }
@@ -493,13 +418,8 @@ class VaultioRepository(
     }
 
     suspend fun updatePricesBatch(cards: List<CardEntity>) {
-        val apiKey = getJustTcgApiKey()
         val (vintage, modern) = cards.partition { VintageSets.isVintageSet(it.setId) }
-
-        // Process Modern via TCGdex (Sequential for simplicity, could be parallel)
         modern.forEach { updateCardPrice(it.id) }
-
-        // Process Vintage individually to handle 1st Ed / Shadowless nuances
         vintage.forEach { updateVintageCardPrice(it) }
     }
 
@@ -535,33 +455,29 @@ class VaultioRepository(
         apiUsageDao.insertUsage(entity)
     }
 
-    /** Makes a minimal 1-result search to read back `_metadata` quota counts. */
     suspend fun refreshApiUsageFromApi(): Boolean {
         val apiKey = getJustTcgApiKey() ?: return false
-        return try {
-            val response = justTcgApi.searchCards(apiKey = apiKey, query = "pikachu", limit = 1)
+        return runCatching {
+            val response = justTcgApi.searchCards(
+                apiKey = apiKey, 
+                query = "pikachu", 
+                limit = 1
+            )
             syncApiUsage(response.metadata)
             true
-        } catch (e: Exception) {
-            Log.e("VaultioRepository", "Usage refresh failed", e)
-            false
-        }
+        }.getOrElse { false }
     }
-
 
     suspend fun incrementApiUsage() {
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
         val currentUsage = apiUsageDao.getUsageForDate(today)
-        if (currentUsage == null) {
-            apiUsageDao.insertUsage(ApiUsageEntity(date = today, count = 1))
-        } else {
-            apiUsageDao.insertUsage(currentUsage.copy(
-                count = currentUsage.count + 1,
-                dailyRemaining = maxOf(0, currentUsage.dailyRemaining - 1),
-                planUsed = currentUsage.planUsed + 1,
-                planRemaining = maxOf(0, currentUsage.planRemaining - 1)
-            ))
-        }
+        val updated = currentUsage?.copy(
+            count = currentUsage.count + 1,
+            dailyRemaining = maxOf(0, currentUsage.dailyRemaining - 1),
+            planUsed = currentUsage.planUsed + 1,
+            planRemaining = maxOf(0, currentUsage.planRemaining - 1)
+        ) ?: ApiUsageEntity(date = today, count = 1)
+        apiUsageDao.insertUsage(updated)
     }
 
     suspend fun logTelemetry(api: String, endpoint: String, status: Int, latency: Long) {

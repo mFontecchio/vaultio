@@ -27,9 +27,28 @@ data class ScannerUiState(
     val isSearching: Boolean = false,
     val isPaused: Boolean = false,
     val autoSelectedCard: TcgDexCard? = null,
+    val selectedCard: TcgDexCard? = null,
     val showSaveSuccess: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val hasCameraPermission: Boolean = false
 )
+
+sealed interface ScannerEvent {
+    data object ResumeScanning : ScannerEvent
+    data object ClearDetectedNumber : ScannerEvent
+    data object ConsumeSaveSuccess : ScannerEvent
+    data class CardSelected(val card: TcgDexCard?) : ScannerEvent
+    data class PermissionResult(val granted: Boolean) : ScannerEvent
+    data class LinesDetected(val lines: List<DetectedLine>, val pHash: Long?) : ScannerEvent
+    data class SaveScannedCard(
+        val card: TcgDexCard,
+        val quantity: Int,
+        val condition: String,
+        val printing: String,
+        val finish: String,
+        val folderIds: List<Long>
+    ) : ScannerEvent
+}
 
 class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() {
 
@@ -58,7 +77,22 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
         "EX", "GX", "BREAK", "MEGA", "TAG TEAM", "PRISM", "RADIANT", "TERA"
     )
 
-    fun onLinesDetected(lines: List<DetectedLine>, pHash: Long?) {
+    fun onEvent(event: ScannerEvent) {
+        when (event) {
+            is ScannerEvent.LinesDetected -> onLinesDetected(event.lines, event.pHash)
+            ScannerEvent.ResumeScanning -> resumeScanning()
+            is ScannerEvent.CardSelected -> _uiState.update { it.copy(selectedCard = event.card) }
+            is ScannerEvent.SaveScannedCard -> saveScannedCard(
+                event.card, event.quantity, event.condition, 
+                event.printing, event.finish, event.folderIds
+            )
+            ScannerEvent.ConsumeSaveSuccess -> consumeSaveSuccess()
+            ScannerEvent.ClearDetectedNumber -> clearDetectedNumber()
+            is ScannerEvent.PermissionResult -> _uiState.update { it.copy(hasCameraPermission = event.granted) }
+        }
+    }
+
+    private fun onLinesDetected(lines: List<DetectedLine>, pHash: Long?) {
         if (_uiState.value.isPaused || _uiState.value.isSearching) return
 
         // --- Name extraction: restrict to top 25% of the frame ---
@@ -282,12 +316,13 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
         return prev[n]
     }
 
-    fun resumeScanning() {
+    private fun resumeScanning() {
         lastMatchedNumber = null
         detectionHistory.clear()
         _uiState.update { it.copy(
             isPaused = false,
             autoSelectedCard = null,
+            selectedCard = null,
             detectedNumber = null,
             detectedTotal = null,
             detectedName = null,
@@ -295,7 +330,7 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
         ) }
     }
 
-    fun saveScannedCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String, folderIds: List<Long> = emptyList()) {
+    private fun saveScannedCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String, folderIds: List<Long> = emptyList()) {
         viewModelScope.launch {
             repository.addUserCard(
                 card,
@@ -313,11 +348,11 @@ class ScannerViewModel(private val repository: VaultioRepository) : ViewModel() 
         }
     }
 
-    fun consumeSaveSuccess() {
+    private fun consumeSaveSuccess() {
         _uiState.update { it.copy(showSaveSuccess = false) }
     }
 
-    fun clearDetectedNumber() {
+    private fun clearDetectedNumber() {
         lastMatchedNumber = null
         detectionHistory.clear()
         _uiState.update { it.copy(

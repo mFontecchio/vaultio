@@ -5,7 +5,7 @@ import android.util.Size
 import android.widget.Toast
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
+import androidx.camera.core.Preview as CameraPreview
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -16,6 +16,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -41,12 +42,15 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -55,35 +59,58 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.components.MetadataModal
+import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import java.util.concurrent.Executors
 
-@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun ScannerScreen(
     repository: VaultioRepository,
     onNavigateBack: () -> Unit,
     viewModel: ScannerViewModel = viewModel(factory = ScannerViewModelFactory(repository))
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
-    val uiState by viewModel.uiState.collectAsState()
-    var selectedCard by remember { mutableStateOf<TcgDexCard?>(null) }
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
-        cameraPermissionState.launchPermissionRequest()
+        if (!cameraPermissionState.status.isGranted) {
+            cameraPermissionState.launchPermissionRequest()
+        }
+    }
+
+    LaunchedEffect(cameraPermissionState.status.isGranted) {
+        viewModel.onEvent(ScannerEvent.PermissionResult(cameraPermissionState.status.isGranted))
     }
 
     LaunchedEffect(uiState.showSaveSuccess) {
         if (uiState.showSaveSuccess) {
             Toast.makeText(context, "Card added to collection", Toast.LENGTH_SHORT).show()
-            viewModel.consumeSaveSuccess()
+            viewModel.onEvent(ScannerEvent.ConsumeSaveSuccess)
         }
     }
 
-    if (cameraPermissionState.status.isGranted) {
-        Box(modifier = Modifier.fillMaxSize()) {
+    ScannerContent(
+        uiState = uiState,
+        onEvent = viewModel::onEvent,
+        onNavigateBack = onNavigateBack
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ScannerContent(
+    uiState: ScannerUiState,
+    onEvent: (ScannerEvent) -> Unit,
+    onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.fillMaxSize()) {
+        if (uiState.hasCameraPermission) {
             CameraPreview(
-                onLinesDetected = viewModel::onLinesDetected
+                onLinesDetected = { lines, pHash ->
+                    onEvent(ScannerEvent.LinesDetected(lines, pHash))
+                }
             )
             
             ScannerOverlay(isSearching = uiState.isSearching)
@@ -125,7 +152,7 @@ fun ScannerScreen(
             Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 100.dp),
+                    .padding(top = 115.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 AnimatedVisibility(
@@ -205,12 +232,28 @@ fun ScannerScreen(
                             Spacer(modifier = Modifier.width(16.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = card.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
-                                )
+                                Row(horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = card.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        modifier = modifier.align(Alignment.CenterVertically)
+                                    )
+                                    FilledTonalIconButton(
+                                        onClick = { onEvent(ScannerEvent.ResumeScanning) },
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.Close, contentDescription = "Reject")
+                                    }
+                                }
+//                                Text(
+//                                    text = card.name,
+//                                    style = MaterialTheme.typography.titleMedium,
+//                                    fontWeight = FontWeight.Bold,
+//                                    maxLines = 1
+//                                )
                                 Text(
                                     text = card.id,
                                     style = MaterialTheme.typography.bodySmall,
@@ -229,14 +272,14 @@ fun ScannerScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FilledTonalIconButton(
-                                        onClick = viewModel::resumeScanning,
-                                        modifier = Modifier.size(40.dp)
-                                    ) {
-                                        Icon(Icons.Rounded.Close, contentDescription = "Reject")
-                                    }
+//                                    FilledTonalIconButton(
+//                                        onClick = { onEvent(ScannerEvent.ResumeScanning) },
+//                                        modifier = Modifier.size(40.dp)
+//                                    ) {
+//                                        Icon(Icons.Rounded.Close, contentDescription = "Reject")
+//                                    }
                                     Button(
-                                        onClick = { selectedCard = card },
+                                        onClick = { onEvent(ScannerEvent.CardSelected(card)) },
                                         modifier = Modifier.fillMaxWidth().height(40.dp),
                                         shape = RoundedCornerShape(12.dp),
                                         contentPadding = PaddingValues(horizontal = 16.dp)
@@ -253,7 +296,7 @@ fun ScannerScreen(
             // Candidates List
             if (uiState.candidates.isNotEmpty() && uiState.autoSelectedCard == null) {
                 ModalBottomSheet(
-                    onDismissRequest = { viewModel.clearDetectedNumber() },
+                    onDismissRequest = { onEvent(ScannerEvent.ClearDetectedNumber) },
                     shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
                     containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp
@@ -273,48 +316,64 @@ fun ScannerScreen(
                             modifier = Modifier.fillMaxWidth(),
                             contentPadding = PaddingValues(bottom = 24.dp)
                         ) {
-                            items(uiState.candidates) { card ->
-                                CandidateItem(card = card, onClick = { selectedCard = card })
+                            items(
+                                items = uiState.candidates,
+                                key = { it.id }
+                            ) { card ->
+                                CandidateItem(card = card, onClick = { onEvent(ScannerEvent.CardSelected(card)) })
                             }
                         }
                     }
                 }
             }
-        }
-    } else {
-        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Camera permission is required to scan cards.")
-                Spacer(modifier = Modifier.height(24.dp))
-                Button(onClick = { cameraPermissionState.launchPermissionRequest() }) {
-                    Text("Grant Permission")
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Rounded.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Camera permission is required to scan cards.")
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(onClick = { onEvent(ScannerEvent.PermissionResult(true)) }) { // Mock granting for preview
+                        Text("Grant Permission")
+                    }
                 }
             }
         }
-    }
 
-    if (selectedCard != null) {
-        ModalBottomSheet(
-            onDismissRequest = { selectedCard = null },
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        ) {
-            MetadataModal(
-                card = selectedCard!!,
-                folders = uiState.folders,
-                onConfirm = { q, c, p, f, folderIds ->
-                    viewModel.saveScannedCard(selectedCard!!, q, c, p, f, folderIds)
-                    selectedCard = null
-                },
-                onBack = { selectedCard = null }
-            )
+        if (uiState.selectedCard != null) {
+            ModalBottomSheet(
+                onDismissRequest = { onEvent(ScannerEvent.CardSelected(null)) },
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            ) {
+                MetadataModal(
+                    card = uiState.selectedCard,
+                    folders = uiState.folders,
+                    onConfirm = { q, c, p, f, folderIds ->
+                        onEvent(ScannerEvent.SaveScannedCard(uiState.selectedCard, q, c, p, f, folderIds))
+                    },
+                    onBack = { onEvent(ScannerEvent.CardSelected(null)) }
+                )
+            }
         }
     }
 }
 
 @Composable
-fun CandidateItem(card: TcgDexCard, onClick: () -> Unit) {
+fun CandidateItem(
+    card: TcgDexCard, 
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     ListItem(
         headlineContent = { Text(card.name, fontWeight = FontWeight.Bold) },
         supportingContent = { 
@@ -338,15 +397,110 @@ fun CandidateItem(card: TcgDexCard, onClick: () -> Unit) {
                 )
             }
         },
-        modifier = Modifier
+        modifier = modifier
             .padding(vertical = 2.dp, horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
     )
 }
 
+@Preview(showBackground = true)
+@Composable
+private fun CandidateItemPreview() {
+    VaultioTheme {
+        CandidateItem(
+            card = TcgDexCard(
+                id = "swsh1-1",
+                localId = "1",
+                name = "Bulbasaur",
+                image = "https://assets.tcgdex.net/en/swsh/swsh1/1",
+                rarity = "Common",
+                category = "Pokemon"
+            ),
+            onClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun ScannerOverlayPreview() {
+    VaultioTheme {
+        Box(modifier = Modifier.fillMaxSize()) {
+            ScannerOverlay(isSearching = true)
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ScannerContentPermissionPreview() {
+    VaultioTheme {
+        ScannerContent(
+            uiState = ScannerUiState(hasCameraPermission = false),
+            onEvent = {},
+            onNavigateBack = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ScannerContentSearchingPreview() {
+    VaultioTheme {
+        ScannerContent(
+            uiState = ScannerUiState(
+                hasCameraPermission = true,
+                isSearching = true,
+                detectedNumber = "123",
+                detectedName = "Bulbasaur"
+            ),
+            onEvent = {},
+            onNavigateBack = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ScannerContentAutoSelectedPreview() {
+    VaultioTheme {
+        ScannerContent(
+            uiState = ScannerUiState(
+                hasCameraPermission = true,
+                autoSelectedCard = TcgDexCard(
+                    id = "swsh1-1",
+                    localId = "1",
+                    name = "Bulbasaur",
+                    image = "https://assets.tcgdex.net/en/swsh/swsh1/1",
+                    rarity = "Common",
+                    category = "Pokemon"
+                )
+            ),
+            onEvent = {},
+            onNavigateBack = {}
+        )
+    }
+}
+
 @Composable
 fun CameraPreview(onLinesDetected: (List<DetectedLine>, Long?) -> Unit) {
+    if (LocalInspectionMode.current) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Camera Preview",
+                color = Color.White.copy(alpha = 0.5f),
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+        return
+    }
+
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
@@ -368,7 +522,7 @@ fun CameraPreview(onLinesDetected: (List<DetectedLine>, Long?) -> Unit) {
             }
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
-                val preview = Preview.Builder()
+                val preview = CameraPreview.Builder()
                     .setResolutionSelector(resolutionSelector)
                     .build().also {
                         it.surfaceProvider = previewView.surfaceProvider
