@@ -1,9 +1,10 @@
-@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 
 package com.mrhayami.vaultio.ui.collection
 
 import android.widget.Toast
 import androidx.compose.animation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -507,7 +508,7 @@ fun CollectionContent(
             val card = cardWithDetails.card
             val dexIds = try {
                 card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 listOfNotNull(card.dexId?.toIntOrNull())
             }
             dexIds.contains(selectedDexId)

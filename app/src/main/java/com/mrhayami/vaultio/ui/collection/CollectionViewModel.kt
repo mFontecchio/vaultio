@@ -17,7 +17,6 @@ import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -232,13 +231,14 @@ class CollectionViewModel(
         // Pokedex entries should respect the folder filter and other filters if we want consistency
         val pokedexUserCards = if (selectedFolderId == null && filterSettings == FilterSettings()) userCards else filtered
         val effectivePokedexSettings = if (selectedFolderId != null || filterSettings != FilterSettings()) pokedexSettings.copy(showUncollected = false) else pokedexSettings
-        var pokedexEntries = computePokedexEntries(pokedexUserCards, effectivePokedexSettings)
-        
-        if (searchQuery.isNotBlank()) {
-            pokedexEntries = pokedexEntries.filter { entry ->
+        val pokedexEntries = if (searchQuery.isNotBlank()) {
+            val entries = computePokedexEntries(pokedexUserCards, effectivePokedexSettings)
+            entries.filter { entry ->
                 entry.pokemonName?.contains(searchQuery, ignoreCase = true) == true ||
                 entry.dexNumber.toString() == searchQuery
             }
+        } else {
+            computePokedexEntries(pokedexUserCards, effectivePokedexSettings)
         }
 
         CollectionUiState(

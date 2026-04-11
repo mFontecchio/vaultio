@@ -1,7 +1,6 @@
 package com.mrhayami.vaultio.ui.card_detail
 
 import android.widget.Toast
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -37,7 +36,7 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CardDetailContent(
     uiState: CardDetailUiState,
@@ -608,19 +607,7 @@ fun DetailDropdown(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun FlowRow(
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
-    androidx.compose.foundation.layout.FlowRow(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.Start
-    ) {
-        content()
-    }
-}
+
 
 fun getRelativeTime(timestamp: Long): String {
     val now = System.currentTimeMillis()

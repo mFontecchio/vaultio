@@ -58,12 +58,16 @@ class CardDetailViewModel(
                         repository.getPricesForCard(cardWithDetails.card.id),
                         repository.getVintagePricesForCard(cardWithDetails.card.id)
                     ) { flows: Array<Any?> ->
+                        @Suppress("UNCHECKED_CAST")
                         val folders = flows[0] as List<FolderEntity>
+                        @Suppress("UNCHECKED_CAST")
                         val crossRefs = flows[1] as List<FolderCardCrossRef>
                         val showEnergyAnims = flows[2] as Boolean
                         val showFinishAnims = flows[3] as Boolean
                         val preferLogo = flows[4] as Boolean
+                        @Suppress("UNCHECKED_CAST")
                         val prices = flows[5] as List<PriceEntity>
+                        @Suppress("UNCHECKED_CAST")
                         val vintagePrices = flows[6] as List<VintagePriceEntity>
 
                         val cardFolderIds = crossRefs
