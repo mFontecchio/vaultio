@@ -37,13 +37,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -100,7 +101,6 @@ fun CollectionScreen(
         remoteSearchState = remoteSearchState,
         onNavigateToScanner = onNavigateToScanner,
         onNavigateToCardDetail = onNavigateToCardDetail,
-        onConsumeSaveSuccess = viewModel::consumeSaveSuccess,
         onClearSelection = viewModel::clearSelection,
         onSelectAll = viewModel::selectAll,
         onDeleteSelected = viewModel::deleteSelectedCards,
@@ -137,7 +137,6 @@ fun CollectionContent(
     remoteSearchState: Pair<List<TcgDexCard>, Boolean>,
     onNavigateToScanner: () -> Unit,
     onNavigateToCardDetail: (Long) -> Unit,
-    onConsumeSaveSuccess: () -> Unit,
     onClearSelection: () -> Unit,
     onSelectAll: () -> Unit,
     onDeleteSelected: () -> Unit,
@@ -593,7 +592,7 @@ fun SortFilterSheet(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text("Sort By", style = MaterialTheme.typography.labelLarge)
-        androidx.compose.foundation.layout.FlowRow(
+        FlowRow(
             modifier = Modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -601,7 +600,7 @@ fun SortFilterSheet(
                 FilterChip(
                     selected = uiState.sortMode == mode,
                     onClick = { onSortModeChange(mode) },
-                    label = { Text(mode.name.replace("_", " ").lowercase(Locale.getDefault()).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }) },
+                    label = { Text(mode.name.replace("_", " ").lowercase(Locale.US).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() }) },
                 )
             }
         }
@@ -627,7 +626,7 @@ fun SortFilterSheet(
 
         if (uiState.availableRarities.isNotEmpty()) {
             Text("Rarity", style = MaterialTheme.typography.labelLarge)
-            androidx.compose.foundation.layout.FlowRow(
+            FlowRow(
                 modifier = Modifier.padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -643,7 +642,7 @@ fun SortFilterSheet(
 
         if (uiState.availableCategories.isNotEmpty()) {
             Text("Category", style = MaterialTheme.typography.labelLarge)
-            androidx.compose.foundation.layout.FlowRow(
+            FlowRow(
                 modifier = Modifier.padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -659,7 +658,7 @@ fun SortFilterSheet(
 
         if (uiState.availableTypes.isNotEmpty()) {
             Text("Type", style = MaterialTheme.typography.labelLarge)
-            androidx.compose.foundation.layout.FlowRow(
+            FlowRow(
                 modifier = Modifier.padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -674,7 +673,7 @@ fun SortFilterSheet(
         }
 
         Text("Condition", style = MaterialTheme.typography.labelLarge)
-        androidx.compose.foundation.layout.FlowRow(
+        FlowRow(
             modifier = Modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -688,7 +687,7 @@ fun SortFilterSheet(
         }
 
         Text("Finish", style = MaterialTheme.typography.labelLarge)
-        androidx.compose.foundation.layout.FlowRow(
+        FlowRow(
             modifier = Modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -964,7 +963,6 @@ private fun CollectionContentPreview() {
             remoteSearchState = Pair(emptyList(), false),
             onNavigateToScanner = {},
             onNavigateToCardDetail = {},
-            onConsumeSaveSuccess = {},
             onClearSelection = {},
             onSelectAll = {},
             onDeleteSelected = {},
@@ -1009,7 +1007,6 @@ private fun CollectionContentEmptyPreview() {
             remoteSearchState = Pair(emptyList(), false),
             onNavigateToScanner = {},
             onNavigateToCardDetail = {},
-            onConsumeSaveSuccess = {},
             onClearSelection = {},
             onSelectAll = {},
             onDeleteSelected = {},
@@ -1111,7 +1108,7 @@ fun StickyControls(
                 )
                 if (uiState.viewMode != ViewMode.POKEDEX) {
                     Text(
-                        "$${String.format("%.2f", uiState.totalValue)}",
+                        "$${String.format(Locale.US, "%.2f", uiState.totalValue)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
@@ -1223,7 +1220,7 @@ fun ListView(
                                     
                                     foundPrice ?: 0.0
                                 }
-                                Text("$${String.format("%.2f", price)}", style = MaterialTheme.typography.bodySmall)
+                                Text("$${String.format(Locale.US, "%.2f", price)}", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -1347,8 +1344,8 @@ fun PokedexView(
                             modifier = Modifier.size(48.dp),
                             contentScale = ContentScale.Fit,
                             alpha = if (isCollected) 1f else 0.3f,
-                            colorFilter = if (isCollected) null else androidx.compose.ui.graphics.ColorFilter.colorMatrix(
-                                androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) }
+                            colorFilter = if (isCollected) null else ColorFilter.colorMatrix(
+                                ColorMatrix().apply { setToSaturation(0f) }
                             )
                         )
                     }

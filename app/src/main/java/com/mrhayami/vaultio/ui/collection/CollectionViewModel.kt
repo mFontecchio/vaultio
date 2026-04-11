@@ -18,7 +18,14 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class ViewMode { LIST, GRID, POKEDEX }
@@ -278,7 +285,7 @@ class CollectionViewModel(
             val card = cardWithDetails.card
             val dexIds = try {
                 card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 listOfNotNull(card.dexId?.toIntOrNull())
             }
 
@@ -298,7 +305,7 @@ class CollectionViewModel(
             val card = cardWithDetails.card
             val dexIds = try {
                 card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 listOfNotNull(card.dexId?.toIntOrNull())
             }
 

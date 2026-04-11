@@ -13,7 +13,13 @@ import com.mrhayami.vaultio.data.local.FolderCardCrossRef
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -104,7 +110,7 @@ class CardDetailViewModel(
                     finish = finish
                 ))
                 _uiState.update { it.copy(showSaveSuccess = true) }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Potential for error side effect here
             }
         }
@@ -119,7 +125,7 @@ class CardDetailViewModel(
             try {
                 repository.deleteUserCard(userCardId)
                 _sideEffects.send(CardDetailEffect.Navigation.Back)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Potential for error side effect
             }
         }
@@ -129,7 +135,7 @@ class CardDetailViewModel(
         viewModelScope.launch {
             try {
                 repository.addCardToFolder(userCardId, folderId)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Potential for error side effect
             }
         }
@@ -139,7 +145,7 @@ class CardDetailViewModel(
         viewModelScope.launch {
             try {
                 repository.removeCardFromFolder(userCardId, folderId)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Potential for error side effect
             }
         }

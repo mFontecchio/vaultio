@@ -262,12 +262,6 @@ private data class HoloGrain(
 /**
  * LEGACY / COMPATIBILITY WRAPPERS
  */
-fun Modifier.sparkleEffect(show: Boolean = true, cornerRadius: Dp = 12.dp): Modifier = this.holoEffect(
-    finish = PricingUtils.FINISH_HOLOFOIL,
-    show = show,
-    cornerRadius = cornerRadius
-)
-
 fun Modifier.shimmerEffect(
     show: Boolean = true,
     cornerRadius: Dp = 12.dp,

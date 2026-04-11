@@ -3,7 +3,6 @@ package com.mrhayami.vaultio.ui.card_detail
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,7 +22,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -35,8 +33,6 @@ import com.mrhayami.vaultio.data.local.*
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.theme.*
 import com.mrhayami.vaultio.ui.components.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
@@ -378,7 +374,7 @@ fun CardDetailContent(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Text(
-                                                    edition.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
+                                                    edition.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() },
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = if (printing == edition) FontWeight.Bold else FontWeight.Normal,
                                                     color = if (printing == edition) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -401,7 +397,7 @@ fun CardDetailContent(
                     Text("Collection Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     
                     Text(
-                        "Added on ${SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(userCard.dateAdded))}",
+                        "Added on ${SimpleDateFormat("MMM dd, yyyy", Locale.US).format(Date(userCard.dateAdded))}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 16.dp)
@@ -620,9 +616,10 @@ fun FlowRow(
 ) {
     androidx.compose.foundation.layout.FlowRow(
         modifier = modifier,
-        horizontalArrangement = Arrangement.Start,
-        content = { content() }
-    )
+        horizontalArrangement = Arrangement.Start
+    ) {
+        content()
+    }
 }
 
 fun getRelativeTime(timestamp: Long): String {

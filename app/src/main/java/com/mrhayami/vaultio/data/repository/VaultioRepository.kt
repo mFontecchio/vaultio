@@ -33,8 +33,7 @@ class VaultioRepository(
     private val tcgDexApi: TcgDexApi,
     val justTcgApi: JustTcgApi,
     val userPreferencesRepository: UserPreferencesRepository,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     private val moshi = Moshi.Builder().build()
     private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Int::class.javaObjectType))
@@ -47,8 +46,6 @@ class VaultioRepository(
     val allVintagePrices: Flow<List<VintagePriceEntity>> = priceDao.getAllVintagePrices()
 
     fun getUserCardById(userCardId: Long): Flow<CardWithDetails?> = userCardDao.getUserCardById(userCardId)
-
-    fun getUserCardsByFolder(folderId: Long): Flow<List<CardWithDetails>> = userCardDao.getUserCardsByFolder(folderId)
 
     fun getPricesForCard(cardId: String): Flow<List<PriceEntity>> = priceDao.getPricesForCard(cardId)
 
@@ -437,11 +434,6 @@ class VaultioRepository(
         (modernDeferred + vintageDeferred).forEach { it.await() }
     }
 
-    suspend fun getApiUsage(): Int {
-        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-        return apiUsageDao.getUsageForDate(today)?.count ?: 0
-    }
-
     fun getApiUsageFlow(): Flow<ApiUsageEntity?> {
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
         return apiUsageDao.getUsageFlow(today)
@@ -480,18 +472,6 @@ class VaultioRepository(
             syncApiUsage(response.metadata)
             true
         }.getOrElse { false }
-    }
-
-    suspend fun incrementApiUsage() {
-        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-        val currentUsage = apiUsageDao.getUsageForDate(today)
-        val updated = currentUsage?.copy(
-            count = currentUsage.count + 1,
-            dailyRemaining = maxOf(0, currentUsage.dailyRemaining - 1),
-            planUsed = currentUsage.planUsed + 1,
-            planRemaining = maxOf(0, currentUsage.planRemaining - 1)
-        ) ?: ApiUsageEntity(date = today, count = 1)
-        apiUsageDao.insertUsage(updated)
     }
 
     suspend fun logTelemetry(api: String, endpoint: String, status: Int, latency: Long) {

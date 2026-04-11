@@ -13,7 +13,15 @@ import com.mrhayami.vaultio.ui.collection.PokedexSettings
 import com.mrhayami.vaultio.ui.collection.SortMode
 import com.mrhayami.vaultio.ui.collection.ViewMode
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
@@ -116,7 +124,7 @@ class SettingsViewModel(
             _isRefreshing.value = true
             try {
                 repository.refreshApiUsageFromApi()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Potential error handling
             } finally {
                 _isRefreshing.value = false
