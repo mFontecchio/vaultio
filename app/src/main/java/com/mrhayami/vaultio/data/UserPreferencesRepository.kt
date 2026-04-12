@@ -53,6 +53,11 @@ class UserPreferencesRepository(context: Context) {
         val PREFER_SET_LOGO = booleanPreferencesKey("prefer_set_logo")
         
         val SHOULD_SHOW_WALKTHROUGH = booleanPreferencesKey("should_show_walkthrough")
+
+        val BULK_SCAN_CONDITION = stringPreferencesKey("bulk_scan_condition")
+        val BULK_SCAN_PRINTING = stringPreferencesKey("bulk_scan_printing")
+        val BULK_SCAN_FINISH = stringPreferencesKey("bulk_scan_finish")
+        val BULK_SCAN_FOLDER_IDS = stringPreferencesKey("bulk_scan_folder_ids")
     }
 
     val viewMode: Flow<ViewMode> = dataStore.data.map {
@@ -188,6 +193,46 @@ class UserPreferencesRepository(context: Context) {
     suspend fun setShouldShowWalkthrough(show: Boolean) {
         dataStore.edit {
             it[PreferencesKeys.SHOULD_SHOW_WALKTHROUGH] = show
+        }
+    }
+
+    val bulkScanCondition: Flow<String> = dataStore.data.map {
+        it[PreferencesKeys.BULK_SCAN_CONDITION] ?: PricingUtils.CONDITION_NM
+    }
+
+    suspend fun setBulkScanCondition(condition: String) {
+        dataStore.edit {
+            it[PreferencesKeys.BULK_SCAN_CONDITION] = condition
+        }
+    }
+
+    val bulkScanPrinting: Flow<String> = dataStore.data.map {
+        it[PreferencesKeys.BULK_SCAN_PRINTING] ?: PricingUtils.PRINTING_UNLIMITED
+    }
+
+    suspend fun setBulkScanPrinting(printing: String) {
+        dataStore.edit {
+            it[PreferencesKeys.BULK_SCAN_PRINTING] = printing
+        }
+    }
+
+    val bulkScanFinish: Flow<String> = dataStore.data.map {
+        it[PreferencesKeys.BULK_SCAN_FINISH] ?: PricingUtils.FINISH_NORMAL
+    }
+
+    suspend fun setBulkScanFinish(finish: String) {
+        dataStore.edit {
+            it[PreferencesKeys.BULK_SCAN_FINISH] = finish
+        }
+    }
+
+    val bulkScanFolderIds: Flow<List<Long>> = dataStore.data.map {
+        it[PreferencesKeys.BULK_SCAN_FOLDER_IDS]?.split(",")?.mapNotNull { id -> id.toLongOrNull() } ?: emptyList()
+    }
+
+    suspend fun setBulkScanFolderIds(ids: List<Long>) {
+        dataStore.edit {
+            it[PreferencesKeys.BULK_SCAN_FOLDER_IDS] = ids.joinToString(",")
         }
     }
 }

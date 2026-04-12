@@ -39,7 +39,11 @@ data class ScannerUiState(
     val selectedCard: TcgDexCard? = null,
     val showSaveSuccess: Boolean = false,
     val errorMessage: String? = null,
-    val hasCameraPermission: Boolean = false
+    val hasCameraPermission: Boolean = false,
+    val isBulkMode: Boolean = false,
+    val bulkDefaults: BulkScanDefaults = BulkScanDefaults(),
+    val bulkSessionLog: List<BulkScanEntry> = emptyList(),
+    val skippedCards: List<TcgDexCard> = emptyList()
 )
 
 sealed interface ScannerEvent {
@@ -49,6 +53,18 @@ sealed interface ScannerEvent {
     data class CardSelected(val card: TcgDexCard?) : ScannerEvent
     data class PermissionResult(val granted: Boolean) : ScannerEvent
     data class LinesDetected(val lines: List<DetectedLine>, val pHash: Long?) : ScannerEvent
+    data object ToggleBulkMode : ScannerEvent
+    data class SetBulkDefaults(val defaults: BulkScanDefaults) : ScannerEvent
+    data object UndoLastBulkScan : ScannerEvent
+    data object ClearBulkSession : ScannerEvent
+    data class ConfirmSkippedCard(
+        val card: TcgDexCard,
+        val quantity: Int,
+        val condition: String,
+        val printing: String,
+        val finish: String,
+        val folderIds: List<Long>
+    ) : ScannerEvent
     data class SaveScannedCard(
         val card: TcgDexCard,
         val quantity: Int,
@@ -67,9 +83,28 @@ class ScannerViewModel(
     private val _uiState = MutableStateFlow(ScannerUiState())
     val uiState: StateFlow<ScannerUiState> = combine(
         _uiState,
-        repository.allFolders
-    ) { state, folders ->
-        state.copy(folders = folders)
+        repository.allFolders,
+        repository.userPreferencesRepository.bulkScanCondition,
+        repository.userPreferencesRepository.bulkScanPrinting,
+        repository.userPreferencesRepository.bulkScanFinish,
+        repository.userPreferencesRepository.bulkScanFolderIds
+    ) { args ->
+        val state = args[0] as ScannerUiState
+        val folders = args[1] as List<FolderEntity>
+        val condition = args[2] as String
+        val printing = args[3] as String
+        val finish = args[4] as String
+        val folderIds = args[5] as List<Long>
+
+        state.copy(
+            folders = folders,
+            bulkDefaults = state.bulkDefaults.copy(
+                condition = condition,
+                printing = printing,
+                finish = finish,
+                folderIds = folderIds
+            )
+        )
     }.flowOn(defaultDispatcher)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScannerUiState())
 
@@ -102,6 +137,41 @@ class ScannerViewModel(
             ScannerEvent.ConsumeSaveSuccess -> consumeSaveSuccess()
             ScannerEvent.ClearDetectedNumber -> clearDetectedNumber()
             is ScannerEvent.PermissionResult -> _uiState.update { it.copy(hasCameraPermission = event.granted) }
+            ScannerEvent.ToggleBulkMode -> _uiState.update { it.copy(isBulkMode = !it.isBulkMode) }
+            is ScannerEvent.SetBulkDefaults -> {
+                viewModelScope.launch {
+                    repository.userPreferencesRepository.setBulkScanCondition(event.defaults.condition)
+                    repository.userPreferencesRepository.setBulkScanPrinting(event.defaults.printing)
+                    repository.userPreferencesRepository.setBulkScanFinish(event.defaults.finish)
+                    repository.userPreferencesRepository.setBulkScanFolderIds(event.defaults.folderIds)
+                }
+                _uiState.update { it.copy(bulkDefaults = event.defaults) }
+            }
+            ScannerEvent.UndoLastBulkScan -> undoLastBulkScan()
+            ScannerEvent.ClearBulkSession -> _uiState.update { it.copy(bulkSessionLog = emptyList(), skippedCards = emptyList()) }
+            is ScannerEvent.ConfirmSkippedCard -> {
+                saveScannedCard(event.card, event.quantity, event.condition, event.printing, event.finish, event.folderIds)
+                _uiState.update { it.copy(skippedCards = it.skippedCards.filter { c -> c.id != event.card.id }) }
+            }
+        }
+    }
+
+    private fun undoLastBulkScan() {
+        val lastEntry = _uiState.value.bulkSessionLog.lastOrNull { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS } ?: return
+        viewModelScope.launch {
+            try {
+                // If it's a new card, we delete the most recent UserCard record for this cardId.
+                // If it was a duplicate increment, we decrement the quantity.
+                // However, the current DAO might not expose the exact record ID.
+                // As a heuristic for "undo", we find the most recent user card for this ID and remove it.
+                repository.deleteLastUserCardInstance(lastEntry.card.id)
+
+                _uiState.update { it.copy(
+                    bulkSessionLog = it.bulkSessionLog.dropLast(1)
+                ) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "Undo failed: ${e.message}") }
+            }
         }
     }
 
@@ -255,17 +325,40 @@ class ScannerViewModel(
 
                 // 6. Update UI
                 if (finalCandidates.size == 1) {
-                    lastMatchedNumber = localId
-                    _uiState.update { it.copy(
-                        autoSelectedCard = finalCandidates.first(),
-                        isSearching = false,
-                        isPaused = true
-                    ) }
+                    val card = finalCandidates.first()
+                    if (_uiState.value.isBulkMode) {
+                        saveBulkCard(card)
+                    } else {
+                        lastMatchedNumber = localId
+                        _uiState.update {
+                            it.copy(
+                                autoSelectedCard = card,
+                                isSearching = false,
+                                isPaused = true
+                            )
+                        }
+                    }
                 } else {
-                    _uiState.update { it.copy(
-                        candidates = finalCandidates.take(5),
-                        isSearching = false
-                    ) }
+                    if (_uiState.value.isBulkMode && finalCandidates.isNotEmpty()) {
+                        _uiState.update { state ->
+                            state.copy(
+                                bulkSessionLog = state.bulkSessionLog + BulkScanEntry(
+                                    card = finalCandidates.first(), // Show one of them as skipped
+                                    status = BulkScanStatus.SKIPPED_AMBIGUOUS
+                                ),
+                                skippedCards = state.skippedCards + finalCandidates,
+                                isSearching = false
+                            )
+                        }
+                        resumeScanning()
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                candidates = finalCandidates.take(5),
+                                isSearching = false
+                            )
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSearching = false, errorMessage = "Search failed: ${e.message}") }
@@ -340,6 +433,49 @@ class ScannerViewModel(
             val tmp = prev; prev = curr; curr = tmp
         }
         return prev[n]
+    }
+
+    private fun saveBulkCard(card: TcgDexCard) {
+        viewModelScope.launch {
+            try {
+                val defaults = _uiState.value.bulkDefaults
+                repository.addUserCard(
+                    card,
+                    UserCardEntity(
+                        cardId = card.id,
+                        quantity = 1,
+                        condition = defaults.condition,
+                        printing = defaults.printing,
+                        finish = defaults.finish
+                    ),
+                    folderIds = defaults.folderIds
+                )
+                
+                _uiState.update { state ->
+                    val lastEntry = state.bulkSessionLog.lastOrNull()
+                    val isSameAsLast = lastEntry != null && 
+                                     lastEntry.card.id == card.id && 
+                                     lastEntry.status != BulkScanStatus.SKIPPED_AMBIGUOUS
+
+                    val newLog = if (isSameAsLast && lastEntry != null) {
+                        state.bulkSessionLog.dropLast(1) + lastEntry.copy(
+                            quantity = lastEntry.quantity + 1, 
+                            status = BulkScanStatus.DUPLICATE_INCREMENTED
+                        )
+                    } else {
+                        state.bulkSessionLog + BulkScanEntry(card = card, status = BulkScanStatus.SAVED)
+                    }
+                    
+                    state.copy(
+                        bulkSessionLog = newLog,
+                        isSearching = false
+                    )
+                }
+                resumeScanning()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isSearching = false, errorMessage = "Bulk save failed: ${e.message}") }
+            }
+        }
     }
 
     private fun resumeScanning() {

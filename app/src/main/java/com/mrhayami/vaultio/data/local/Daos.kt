@@ -122,6 +122,24 @@ interface UserCardDao {
         """)
     fun getUserCardsByFolder(folderId: Long): Flow<List<CardWithDetails>>
 
+    @Query("SELECT * FROM user_cards WHERE cardId = :cardId ORDER BY id DESC LIMIT 1")
+    suspend fun getLastUserCardByCardId(cardId: String): UserCardEntity?
+
+    @Query("""
+        SELECT * FROM user_cards 
+        WHERE cardId = :cardId 
+        AND condition = :condition 
+        AND printing = :printing 
+        AND finish = :finish 
+        LIMIT 1
+    """)
+    suspend fun findExistingUserCard(
+        cardId: String,
+        condition: String,
+        printing: String,
+        finish: String
+    ): UserCardEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUserCard(userCard: UserCardEntity): Long
 
@@ -139,6 +157,9 @@ interface UserCardDao {
 
     @Query("DELETE FROM folder_cards WHERE userCardId = :userCardId AND folderId = :folderId")
     suspend fun removeCardFromFolder(userCardId: Long, folderId: Long): Int
+
+    @Query("DELETE FROM folder_cards WHERE userCardId = :userCardId")
+    suspend fun deleteFolderCardCrossRefsForUserCard(userCardId: Long): Int
 
     @Query("SELECT * FROM folder_cards")
     fun getAllFolderCardCrossRefs(): Flow<List<FolderCardCrossRef>>

@@ -1,37 +1,64 @@
 package com.mrhayami.vaultio.ui.walkthrough
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.mrhayami.vaultio.data.UserPreferencesRepository
+import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import kotlinx.coroutines.launch
 
 @Composable
 fun WalkthroughScreen(
     userPreferencesRepository: UserPreferencesRepository,
-    onFinish: () -> Unit
+    onFinish: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+    
+    WalkthroughContent(
+        onFinish = {
+            scope.launch {
+                userPreferencesRepository.setShouldShowWalkthrough(false)
+                onFinish()
+            }
+        },
+        modifier = modifier
+    )
+}
+
+@Composable
+fun WalkthroughContent(
+    onFinish: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val pagerState = rememberPagerState(pageCount = { 4 })
     val scope = rememberCoroutineScope()
 
     Scaffold(
+        modifier = modifier.fillMaxSize(),
         bottomBar = {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(24.dp)
+                    .navigationBarsPadding(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -41,50 +68,54 @@ fun WalkthroughScreen(
                             pagerState.animateScrollToPage(pagerState.currentPage - 1)
                         }
                     }) {
-                        Icon(Icons.Default.ChevronLeft, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
                         Text("Back")
                     }
                 } else {
                     Spacer(modifier = Modifier.width(80.dp))
                 }
 
-                Row {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     repeat(4) { iteration ->
-                        val color = if (pagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                        val color = if (pagerState.currentPage == iteration) 
+                            MaterialTheme.colorScheme.primary 
+                        else 
+                            MaterialTheme.colorScheme.primaryContainer
+                        
                         Box(
                             modifier = Modifier
-                                .padding(2.dp)
                                 .size(8.dp)
-                                .padding(1.dp)
-                                .padding(1.dp) // Just to make it a bit smaller or use background
-                        ) {
-                           Surface(
-                               shape = MaterialTheme.shapes.extraSmall,
-                               color = color,
-                               modifier = Modifier.fillMaxSize()
-                           ) {}
-                        }
+                                .clip(CircleShape)
+                                .background(color)
+                        )
                     }
                 }
 
                 if (pagerState.currentPage < 3) {
-                    Button(onClick = {
-                        scope.launch {
-                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                        }
-                    }) {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
                         Text("Next")
-                        Icon(Icons.Default.ChevronRight, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
                     }
                 } else {
-                    Button(onClick = {
-                        scope.launch {
-                            userPreferencesRepository.setShouldShowWalkthrough(false)
-                            onFinish()
-                        }
-                    }) {
+                    Button(
+                        onClick = onFinish,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
                         Text("Get Started")
-                        Icon(Icons.Default.Done, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Rounded.Done, contentDescription = null)
                     }
                 }
             }
@@ -113,12 +144,20 @@ fun WalkthroughScreen(
                     imageText = "🔍"
                 )
                 3 -> WalkthroughPage(
-                    title = "Capabilities & Limitations",
-                    description = "Vaultio excels at organization and rapid scanning. Please note that data accuracy depends on the API provider, and some rare variants may require manual adjustment.",
-                    imageText = "🚀"
+                    title = "Bulk Scanning Mode",
+                    description = "Rapidly scan your collection with Bulk Mode. Configure default condition and printing, and auto-save high-confidence matches while logging ambiguous ones for later review.",
+                    imageText = "⚡"
                 )
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun WalkthroughContentPreview() {
+    VaultioTheme {
+        WalkthroughContent(onFinish = {})
     }
 }
 

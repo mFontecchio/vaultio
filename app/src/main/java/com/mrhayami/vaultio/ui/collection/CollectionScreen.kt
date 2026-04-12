@@ -1265,7 +1265,7 @@ fun GridView(
                     onClick = { onCardClick(item.userCard.id) },
                     onLongClick = { onCardLongClick(item.userCard.id) }
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(8.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 border = if (isSelected) androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
             ) {

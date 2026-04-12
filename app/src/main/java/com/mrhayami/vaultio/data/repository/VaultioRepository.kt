@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.async
 import java.time.LocalDate
@@ -184,7 +185,19 @@ class VaultioRepository(
             cardDao.insertCards(listOf(cardEntity))
         }
 
-        val userCardIdResult = userCardDao.insertUserCard(userCardEntity.copy(cardId = card.id))
+        val existingUserCard = userCardDao.findExistingUserCard(
+            cardId = card.id,
+            condition = userCardEntity.condition,
+            printing = userCardEntity.printing,
+            finish = userCardEntity.finish
+        )
+
+        val userCardIdResult: Long = if (existingUserCard != null) {
+            userCardDao.insertUserCard(existingUserCard.copy(quantity = existingUserCard.quantity + userCardEntity.quantity))
+            existingUserCard.id
+        } else {
+            userCardDao.insertUserCard(userCardEntity.copy(cardId = card.id))
+        }
 
         if (folderIds.isNotEmpty()) {
             val crossRefs = folderIds.map { FolderCardCrossRef(folderId = it, userCardId = userCardIdResult) }
@@ -270,11 +283,26 @@ class VaultioRepository(
     }
 
     suspend fun deleteUserCard(userCardId: Long) {
+        userCardDao.deleteFolderCardCrossRefsForUserCard(userCardId)
         userCardDao.deleteUserCard(userCardId)
     }
 
     suspend fun deleteUserCards(userCardIds: List<Long>) {
+        userCardIds.forEach { userCardDao.deleteFolderCardCrossRefsForUserCard(it) }
         userCardDao.deleteUserCards(userCardIds)
+    }
+
+    suspend fun deleteLastUserCardInstance(cardId: String) {
+        withContext(ioDispatcher) {
+            val lastCard = userCardDao.getLastUserCardByCardId(cardId)
+            if (lastCard != null) {
+                if (lastCard.quantity > 1) {
+                    userCardDao.insertUserCard(lastCard.copy(quantity = lastCard.quantity - 1))
+                } else {
+                    deleteUserCard(lastCard.id)
+                }
+            }
+        }
     }
 
     suspend fun addFolder(name: String, icon: String?, color: String?) {

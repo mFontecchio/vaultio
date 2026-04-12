@@ -23,8 +23,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.LayersClear
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -58,11 +63,12 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import com.mrhayami.vaultio.ui.components.DropdownSelector
 import com.mrhayami.vaultio.ui.components.MetadataModal
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import java.util.concurrent.Executors
 
-@OptIn(ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ScannerScreen(
     repository: VaultioRepository,
@@ -90,11 +96,42 @@ fun ScannerScreen(
         }
     }
 
+    var showBulkSettings by remember { mutableStateOf(false) }
+    var showSkippedReview by remember { mutableStateOf(false) }
+    
     ScannerContent(
         uiState = uiState,
         onEvent = viewModel::onEvent,
-        onNavigateBack = onNavigateBack
+        onNavigateBack = onNavigateBack,
+        onShowBulkSettings = { showBulkSettings = true },
+        onShowSkippedReview = { showSkippedReview = true }
     )
+
+    if (showBulkSettings) {
+        ModalBottomSheet(
+            onDismissRequest = { showBulkSettings = false },
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            BulkSettingsSheet(
+                uiState = uiState,
+                onEvent = viewModel::onEvent,
+                onDismiss = { showBulkSettings = false }
+            )
+        }
+    }
+
+    if (showSkippedReview) {
+        ModalBottomSheet(
+            onDismissRequest = { showSkippedReview = false },
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            SkippedReviewSheet(
+                uiState = uiState,
+                onEvent = viewModel::onEvent,
+                onDismiss = { showSkippedReview = false }
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,6 +140,8 @@ fun ScannerContent(
     uiState: ScannerUiState,
     onEvent: (ScannerEvent) -> Unit,
     onNavigateBack: () -> Unit,
+    onShowBulkSettings: () -> Unit,
+    onShowSkippedReview: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -133,19 +172,38 @@ fun ScannerContent(
                 }
                 
                 Surface(
-                    color = Color.Black.copy(alpha = 0.5f),
+                    color = if (uiState.isBulkMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.5f),
                     shape = CircleShape,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    modifier = Modifier.clickable { onEvent(ScannerEvent.ToggleBulkMode) }
                 ) {
-                    Text(
-                        "Card Scanner", 
-                        color = Color.White, 
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            if (uiState.isBulkMode) Icons.Rounded.Layers else Icons.Rounded.LayersClear,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (uiState.isBulkMode) "Bulk Mode ON" else "Bulk Mode OFF",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.width(48.dp))
+
+                IconButton(
+                    onClick = onShowBulkSettings,
+                    colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(Icons.Rounded.Settings, contentDescription = "Bulk Settings", tint = Color.White)
+                }
             }
 
             // HUD / Status Overlay
@@ -197,7 +255,7 @@ fun ScannerContent(
 
             // High Confidence Match
             AnimatedVisibility(
-                visible = uiState.autoSelectedCard != null,
+                visible = uiState.autoSelectedCard != null && !uiState.isBulkMode,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -239,7 +297,7 @@ fun ScannerContent(
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         maxLines = 1,
-                                        modifier = modifier.align(Alignment.CenterVertically)
+                                        modifier = Modifier.align(Alignment.CenterVertically)
                                     )
                                     FilledTonalIconButton(
                                         onClick = { onEvent(ScannerEvent.ResumeScanning) },
@@ -248,12 +306,6 @@ fun ScannerContent(
                                         Icon(Icons.Rounded.Close, contentDescription = "Reject")
                                     }
                                 }
-//                                Text(
-//                                    text = card.name,
-//                                    style = MaterialTheme.typography.titleMedium,
-//                                    fontWeight = FontWeight.Bold,
-//                                    maxLines = 1
-//                                )
                                 Text(
                                     text = card.id,
                                     style = MaterialTheme.typography.bodySmall,
@@ -272,12 +324,6 @@ fun ScannerContent(
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-//                                    FilledTonalIconButton(
-//                                        onClick = { onEvent(ScannerEvent.ResumeScanning) },
-//                                        modifier = Modifier.size(40.dp)
-//                                    ) {
-//                                        Icon(Icons.Rounded.Close, contentDescription = "Reject")
-//                                    }
                                     Button(
                                         onClick = { onEvent(ScannerEvent.CardSelected(card)) },
                                         modifier = Modifier.fillMaxWidth().height(40.dp),
@@ -293,8 +339,22 @@ fun ScannerContent(
                 }
             }
 
+            // Bulk Mode HUD
+            AnimatedVisibility(
+                visible = uiState.isBulkMode,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                BulkModeHUD(
+                    uiState = uiState,
+                    onEvent = onEvent,
+                    onShowSkippedReview = onShowSkippedReview
+                )
+            }
+
             // Candidates List
-            if (uiState.candidates.isNotEmpty() && uiState.autoSelectedCard == null) {
+            if (uiState.candidates.isNotEmpty() && uiState.autoSelectedCard == null && !uiState.isBulkMode) {
                 ModalBottomSheet(
                     onDismissRequest = { onEvent(ScannerEvent.ClearDetectedNumber) },
                     shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -404,82 +464,306 @@ fun CandidateItem(
     )
 }
 
-@Preview(showBackground = true)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun CandidateItemPreview() {
-    VaultioTheme {
-        CandidateItem(
-            card = TcgDexCard(
-                id = "swsh1-1",
-                localId = "1",
-                name = "Bulbasaur",
-                image = "https://assets.tcgdex.net/en/swsh/swsh1/1",
-                rarity = "Common",
-                category = "Pokemon"
-            ),
-            onClick = {}
-        )
+fun BulkSettingsSheet(
+    uiState: ScannerUiState,
+    onEvent: (ScannerEvent) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .navigationBarsPadding()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 16.dp)
+        ) {
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+            }
+            Text(
+                "Bulk Scanning Settings",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                val conditions = listOf(
+                    com.mrhayami.vaultio.data.PricingUtils.CONDITION_NM,
+                    com.mrhayami.vaultio.data.PricingUtils.CONDITION_LP,
+                    com.mrhayami.vaultio.data.PricingUtils.CONDITION_MP,
+                    com.mrhayami.vaultio.data.PricingUtils.CONDITION_HP,
+                    com.mrhayami.vaultio.data.PricingUtils.CONDITION_DMG
+                )
+                DropdownSelector(
+                    "Default Condition",
+                    uiState.bulkDefaults.condition,
+                    conditions
+                ) {
+                    onEvent(ScannerEvent.SetBulkDefaults(uiState.bulkDefaults.copy(condition = it)))
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val printings = listOf(
+                    com.mrhayami.vaultio.data.PricingUtils.PRINTING_UNLIMITED,
+                    com.mrhayami.vaultio.data.PricingUtils.PRINTING_SHADOWLESS,
+                    com.mrhayami.vaultio.data.PricingUtils.PRINTING_PROMO,
+                    com.mrhayami.vaultio.data.PricingUtils.PRINTING_1ST_EDITION
+                )
+                DropdownSelector(
+                    "Default Printing",
+                    uiState.bulkDefaults.printing,
+                    printings
+                ) {
+                    onEvent(ScannerEvent.SetBulkDefaults(uiState.bulkDefaults.copy(printing = it)))
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val finishes = listOf(
+                    com.mrhayami.vaultio.data.PricingUtils.FINISH_NORMAL,
+                    com.mrhayami.vaultio.data.PricingUtils.FINISH_HOLOFOIL,
+                    com.mrhayami.vaultio.data.PricingUtils.FINISH_REVERSE_HOLO,
+                    com.mrhayami.vaultio.data.PricingUtils.FINISH_TEXTURED,
+                    com.mrhayami.vaultio.data.PricingUtils.FINISH_GOLD
+                )
+                DropdownSelector(
+                    "Default Finish",
+                    uiState.bulkDefaults.finish,
+                    finishes
+                ) {
+                    onEvent(ScannerEvent.SetBulkDefaults(uiState.bulkDefaults.copy(finish = it)))
+                }
+
+                if (uiState.folders.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        "Add to Folders",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        uiState.folders.forEach { folder ->
+                            val isSelected = uiState.bulkDefaults.folderIds.contains(folder.id)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    val newIds = if (isSelected) {
+                                        uiState.bulkDefaults.folderIds.filter { it != folder.id }
+                                    } else {
+                                        uiState.bulkDefaults.folderIds + folder.id
+                                    }
+                                    onEvent(ScannerEvent.SetBulkDefaults(uiState.bulkDefaults.copy(folderIds = newIds)))
+                                },
+                                label = { Text(folder.name) },
+                                shape = CircleShape
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
-private fun ScannerOverlayPreview() {
-    VaultioTheme {
-        Box(modifier = Modifier.fillMaxSize()) {
-            ScannerOverlay(isSearching = true)
+fun BulkModeHUD(
+    uiState: ScannerUiState,
+    onEvent: (ScannerEvent) -> Unit,
+    onShowSkippedReview: () -> Unit
+) {
+    val lastSaved = uiState.bulkSessionLog.lastOrNull { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS }
+    val skippedCount = uiState.skippedCards.distinctBy { it.id }.size
+    val totalScanned = uiState.bulkSessionLog.filter { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS }.sumOf { it.quantity }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                shape = CircleShape
+            ) {
+                Text(
+                    text = "$totalScanned cards scanned",
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (skippedCount > 0) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = CircleShape,
+                    modifier = Modifier.clickable { onShowSkippedReview() }
+                ) {
+                    Text(
+                        text = "Review $skippedCount skipped",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (lastSaved != null) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.size(48.dp, 68.dp)
+                    ) {
+                        AsyncImage(
+                            model = "${lastSaved.card.image}/low.webp",
+                            contentDescription = null,
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = lastSaved.card.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = Color.Green,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (lastSaved.status == BulkScanStatus.DUPLICATE_INCREMENTED) "Added (x${lastSaved.quantity})" else "Added",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    IconButton(onClick = { onEvent(ScannerEvent.UndoLastBulkScan) }) {
+                        Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = "Undo")
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(68.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Ready to scan bulk cards...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
-@Preview(showBackground = true)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScannerContentPermissionPreview() {
-    VaultioTheme {
-        ScannerContent(
-            uiState = ScannerUiState(hasCameraPermission = false),
-            onEvent = {},
-            onNavigateBack = {}
-        )
-    }
-}
+fun SkippedReviewSheet(
+    uiState: ScannerUiState,
+    onEvent: (ScannerEvent) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedCardForReview by remember { mutableStateOf<TcgDexCard?>(null) }
+    val skippedCards = uiState.skippedCards.distinctBy { it.id }
 
-@Preview(showBackground = true)
-@Composable
-private fun ScannerContentSearchingPreview() {
-    VaultioTheme {
-        ScannerContent(
-            uiState = ScannerUiState(
-                hasCameraPermission = true,
-                isSearching = true,
-                detectedNumber = "123",
-                detectedName = "Bulbasaur"
-            ),
-            onEvent = {},
-            onNavigateBack = {}
+    if (selectedCardForReview != null) {
+        MetadataModal(
+            card = selectedCardForReview!!,
+            folders = uiState.folders,
+            onConfirm = { q, c, p, f, folderIds ->
+                onEvent(ScannerEvent.ConfirmSkippedCard(selectedCardForReview!!, q, c, p, f, folderIds))
+                selectedCardForReview = null
+                if (skippedCards.size <= 1) onDismiss()
+            },
+            onBack = { selectedCardForReview = null }
         )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun ScannerContentAutoSelectedPreview() {
-    VaultioTheme {
-        ScannerContent(
-            uiState = ScannerUiState(
-                hasCameraPermission = true,
-                autoSelectedCard = TcgDexCard(
-                    id = "swsh1-1",
-                    localId = "1",
-                    name = "Bulbasaur",
-                    image = "https://assets.tcgdex.net/en/swsh/swsh1/1",
-                    rarity = "Common",
-                    category = "Pokemon"
+    } else {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                }
+                Text(
+                    "Review Skipped Matches",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
                 )
-            ),
-            onEvent = {},
-            onNavigateBack = {}
-        )
+            }
+
+            if (skippedCards.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No skipped cards to review.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    items(
+                        items = skippedCards,
+                        key = { it.id }
+                    ) { card ->
+                        CandidateItem(
+                            card = card,
+                            onClick = { selectedCardForReview = card }
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -689,6 +973,91 @@ fun ScannerOverlay(isSearching: Boolean) {
             start = Offset(left, lineY),
             end = Offset(left + rectWidth, lineY),
             strokeWidth = 1.dp.toPx()
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun CandidateItemPreview() {
+    VaultioTheme {
+        CandidateItem(
+            card = TcgDexCard(
+                id = "swsh1-1",
+                localId = "1",
+                name = "Bulbasaur",
+                image = "https://assets.tcgdex.net/en/swsh/swsh1/1",
+                rarity = "Common",
+                category = "Pokemon"
+            ),
+            onClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun ScannerOverlayPreview() {
+    VaultioTheme {
+        Box(modifier = Modifier.fillMaxSize()) {
+            ScannerOverlay(isSearching = true)
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ScannerContentPermissionPreview() {
+    VaultioTheme {
+        ScannerContent(
+            uiState = ScannerUiState(hasCameraPermission = false),
+            onEvent = {},
+            onNavigateBack = {},
+            onShowBulkSettings = {},
+            onShowSkippedReview = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ScannerContentSearchingPreview() {
+    VaultioTheme {
+        ScannerContent(
+            uiState = ScannerUiState(
+                hasCameraPermission = true,
+                isSearching = true,
+                detectedNumber = "123",
+                detectedName = "Bulbasaur"
+            ),
+            onEvent = {},
+            onNavigateBack = {},
+            onShowBulkSettings = {},
+            onShowSkippedReview = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ScannerContentAutoSelectedPreview() {
+    VaultioTheme {
+        ScannerContent(
+            uiState = ScannerUiState(
+                hasCameraPermission = true,
+                autoSelectedCard = TcgDexCard(
+                    id = "swsh1-1",
+                    localId = "1",
+                    name = "Bulbasaur",
+                    image = "https://assets.tcgdex.net/en/swsh/swsh1/1",
+                    rarity = "Common",
+                    category = "Pokemon"
+                )
+            ),
+            onEvent = {},
+            onNavigateBack = {},
+            onShowBulkSettings = {},
+            onShowSkippedReview = {}
         )
     }
 }
