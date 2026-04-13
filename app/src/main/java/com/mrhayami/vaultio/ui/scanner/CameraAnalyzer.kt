@@ -16,6 +16,7 @@ data class DetectedLine(
 )
 
 class CameraAnalyzer(
+    private val viewportAspectRatio: Float,
     private val onLinesDetected: (List<DetectedLine>, Long?) -> Unit
 ) : ImageAnalysis.Analyzer {
 
@@ -42,7 +43,19 @@ class CameraAnalyzer(
         val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
         val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
         
-        val rectW = rotated.width * 0.85f
+        // Viewport Alignment: Calculate visible area of the bitmap based on screen aspect ratio
+        val screenAR = viewportAspectRatio
+        val bitmapAR = rotated.width.toFloat() / rotated.height.toFloat()
+        
+        val (visibleW, _) = if (bitmapAR > screenAR) {
+            // Bitmap is fatter than screen, sides are cropped in FILL_CENTER
+            (rotated.height * screenAR) to rotated.height.toFloat()
+        } else {
+            // Bitmap is taller than screen, top/bottom are cropped
+            rotated.width.toFloat() to (rotated.width / screenAR)
+        }
+        
+        val rectW = visibleW * 0.85f
         val rectH = rectW * 1.397f
         val left = (rotated.width - rectW) / 2
         val top = (rotated.height - rectH) / 2

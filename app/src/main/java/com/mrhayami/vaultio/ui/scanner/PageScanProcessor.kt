@@ -12,11 +12,11 @@ object PageScanProcessor {
         val width = fullBitmap.width
         val height = fullBitmap.height
 
-        // 3x3 Grid
+        // The fullBitmap is now exactly the grid area (95% width, 1.4x height)
         val cellWidth = width / 3
         val cellHeight = height / 3
         
-        // 5% margin to avoid pocket edges
+        // 5% margin relative to cell size to avoid binder pocket edges
         val marginW = (cellWidth * 0.05f).toInt()
         val marginH = (cellHeight * 0.05f).toInt()
 

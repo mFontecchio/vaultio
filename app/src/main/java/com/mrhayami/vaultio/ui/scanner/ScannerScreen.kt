@@ -157,20 +157,27 @@ fun ScannerContent(
                     onEvent = onEvent
                 )
             } else {
-                CameraPreview(
-                    isPageScanMode = uiState.isPageScanMode,
-                    onLinesDetected = { lines, pHash ->
-                        onEvent(ScannerEvent.LinesDetected(lines, pHash))
-                    },
-                    onPhotoCaptured = { bitmap ->
-                        onEvent(ScannerEvent.CapturePagePhoto(bitmap))
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color.Black)
+                ) {
+                    CameraPreview(
+                        isPageScanMode = uiState.isPageScanMode,
+                        onLinesDetected = { lines, pHash ->
+                            onEvent(ScannerEvent.LinesDetected(lines, pHash))
+                        },
+                        onPhotoCaptured = { bitmap ->
+                            onEvent(ScannerEvent.CapturePagePhoto(bitmap))
+                        }
+                    )
+                    
+                    if (uiState.isPageScanMode) {
+                        PageScanOverlay(isProcessing = uiState.pageScanMode == PageScanMode.PROCESSING)
+                    } else {
+                        ScannerOverlay(isSearching = uiState.isSearching)
                     }
-                )
-                
-                if (uiState.isPageScanMode) {
-                    PageScanOverlay(isProcessing = uiState.pageScanMode == PageScanMode.PROCESSING)
-                } else {
-                    ScannerOverlay(isSearching = uiState.isSearching)
                 }
             }
 
@@ -839,6 +846,7 @@ fun CameraPreview(
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val executor = remember { Executors.newSingleThreadExecutor() }
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
+    var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
 
     val resolutionSelector = ResolutionSelector.Builder()
         .setResolutionStrategy(
@@ -854,10 +862,11 @@ fun CameraPreview(
             factory = { ctx ->
                 PreviewView(ctx).apply {
                     keepScreenOn = true
-                }
+                }.also { previewViewRef = it }
             },
             modifier = Modifier.fillMaxSize(),
             update = { previewView ->
+                previewViewRef = previewView
                 val cameraProvider = cameraProviderFuture.get()
                 val preview = CameraPreview.Builder()
                     .setResolutionSelector(resolutionSelector)
@@ -870,7 +879,12 @@ fun CameraPreview(
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
                     .also {
-                        it.setAnalyzer(executor, CameraAnalyzer(onLinesDetected))
+                        val ar = if (previewView.width > 0) {
+                            previewView.width.toFloat() / previewView.height.toFloat()
+                        } else {
+                            0.5625f // Default 9:16
+                        }
+                        it.setAnalyzer(executor, CameraAnalyzer(ar, onLinesDetected))
                     }
 
                 val capture = ImageCapture.Builder()
@@ -901,6 +915,11 @@ fun CameraPreview(
             }
         )
 
+        val gridAlpha = if (isPageScanMode) 1f else 0f
+        Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = gridAlpha)) {
+            PageScanOverlay(isProcessing = false)
+        }
+
         if (isPageScanMode) {
             Box(
                 modifier = Modifier
@@ -912,13 +931,47 @@ fun CameraPreview(
                         imageCapture?.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
                             override fun onCaptureSuccess(image: ImageProxy) {
                                 val bitmap = image.toBitmap()
-                                // Handle rotation
                                 val rotation = image.imageInfo.rotationDegrees
                                 val matrix = android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
                                 val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
                                 
-                                onPhotoCaptured(rotatedBitmap)
+                                // Viewport Alignment: Calculate visible area based on screen aspect ratio
+                                val pv = previewViewRef ?: return
+                                val screenAR = pv.width.toFloat() / pv.height.toFloat()
+                                val bitmapAR = rotatedBitmap.width.toFloat() / rotatedBitmap.height.toFloat()
+                                
+                                val (visibleW, _) = if (bitmapAR > screenAR) {
+                                    // Bitmap is fatter than screen, sides are cropped
+                                    (rotatedBitmap.height * screenAR) to rotatedBitmap.height.toFloat()
+                                } else {
+                                    // Bitmap is taller than screen, top/bottom are cropped
+                                    rotatedBitmap.width.toFloat() to (rotatedBitmap.width / screenAR)
+                                }
+                                
+                                val gridW = visibleW * 0.95f
+                                val gridH = gridW * 1.4f
+                                
+                                val left = (rotatedBitmap.width - gridW) / 2
+                                val top = (rotatedBitmap.height - gridH) / 2
+                                
+                                val cropped = try {
+                                    Bitmap.createBitmap(
+                                        rotatedBitmap,
+                                        left.toInt().coerceAtLeast(0),
+                                        top.toInt().coerceAtLeast(0),
+                                        gridW.toInt().coerceAtMost(rotatedBitmap.width - left.toInt().coerceAtLeast(0)),
+                                        gridH.toInt().coerceAtMost(rotatedBitmap.height - top.toInt().coerceAtLeast(0))
+                                    )
+                                } catch (e: Exception) {
+                                    rotatedBitmap
+                                }
+                                
+                                onPhotoCaptured(cropped)
                                 image.close()
+                                
+                                // Clean up intermediate bitmaps
+                                if (bitmap != cropped) bitmap.recycle()
+                                if (rotatedBitmap != bitmap && rotatedBitmap != cropped) rotatedBitmap.recycle()
                             }
                         })
                     },
@@ -1043,7 +1096,7 @@ fun PageScanReviewContent(
             columns = GridCells.Fixed(3),
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 16.dp), // Align with 95% width overlay
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
