@@ -66,7 +66,7 @@ class CameraAnalyzer(
             null
         }
 
-        val enhanced = enhanceImage(cropped)
+        val enhanced = ScannerUtils.enhanceImage(cropped)
         val image = InputImage.fromBitmap(enhanced, 0)
 
         recognizer.process(image)
@@ -92,22 +92,5 @@ class CameraAnalyzer(
                 bitmap.recycle()
                 imageProxy.close()
             }
-    }
-
-    private fun enhanceImage(src: Bitmap): Bitmap {
-        val contrast = 1.4f
-        val brightness = 10f
-        val cm = ColorMatrix(floatArrayOf(
-            contrast, 0f, 0f, 0f, brightness,
-            0f, contrast, 0f, 0f, brightness,
-            0f, 0f, contrast, 0f, brightness,
-            0f, 0f, 0f, 1f, 0f
-        ))
-        val ret = Bitmap.createBitmap(src.width, src.height, src.config ?: Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(ret)
-        val paint = Paint()
-        paint.colorFilter = ColorMatrixColorFilter(cm)
-        canvas.drawBitmap(src, 0f, 0f, paint)
-        return ret
     }
 }

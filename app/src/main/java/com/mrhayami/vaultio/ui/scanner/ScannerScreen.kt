@@ -1,6 +1,7 @@
 package com.mrhayami.vaultio.ui.scanner
 
 import android.Manifest
+import android.graphics.Bitmap
 import android.util.Size
 import android.widget.Toast
 import androidx.camera.core.CameraSelector
@@ -14,22 +15,26 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Undo
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Layers
-import androidx.compose.material.icons.rounded.LayersClear
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Settings
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageProxy
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -146,13 +151,28 @@ fun ScannerContent(
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         if (uiState.hasCameraPermission) {
-            CameraPreview(
-                onLinesDetected = { lines, pHash ->
-                    onEvent(ScannerEvent.LinesDetected(lines, pHash))
+            if (uiState.pageScanMode == PageScanMode.REVIEWING) {
+                PageScanReviewContent(
+                    uiState = uiState,
+                    onEvent = onEvent
+                )
+            } else {
+                CameraPreview(
+                    isPageScanMode = uiState.isPageScanMode,
+                    onLinesDetected = { lines, pHash ->
+                        onEvent(ScannerEvent.LinesDetected(lines, pHash))
+                    },
+                    onPhotoCaptured = { bitmap ->
+                        onEvent(ScannerEvent.CapturePagePhoto(bitmap))
+                    }
+                )
+                
+                if (uiState.isPageScanMode) {
+                    PageScanOverlay(isProcessing = uiState.pageScanMode == PageScanMode.PROCESSING)
+                } else {
+                    ScannerOverlay(isSearching = uiState.isSearching)
                 }
-            )
-            
-            ScannerOverlay(isSearching = uiState.isSearching)
+            }
 
             // Header
             Row(
@@ -160,7 +180,7 @@ fun ScannerContent(
                     .fillMaxWidth()
                     .padding(16.dp)
                     .statusBarsPadding(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
@@ -171,28 +191,32 @@ fun ScannerContent(
                     Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White)
                 }
                 
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Mode Selector
                 Surface(
-                    color = if (uiState.isBulkMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.5f),
+                    color = Color.Black.copy(alpha = 0.5f),
                     shape = CircleShape,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
-                    modifier = Modifier.clickable { onEvent(ScannerEvent.ToggleBulkMode) }
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Icon(
-                            if (uiState.isBulkMode) Icons.Rounded.Layers else Icons.Rounded.LayersClear,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                    Row(modifier = Modifier.padding(4.dp)) {
+                        ModeButton(
+                            selected = !uiState.isBulkMode && !uiState.isPageScanMode,
+                            icon = Icons.Rounded.Search,
+                            onClick = { 
+                                if (uiState.isBulkMode) onEvent(ScannerEvent.ToggleBulkMode)
+                                if (uiState.isPageScanMode) onEvent(ScannerEvent.TogglePageScanMode)
+                            }
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            if (uiState.isBulkMode) "Bulk Mode ON" else "Bulk Mode OFF",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
+                        ModeButton(
+                            selected = uiState.isBulkMode,
+                            icon = Icons.Rounded.Layers,
+                            onClick = { onEvent(ScannerEvent.ToggleBulkMode) }
+                        )
+                        ModeButton(
+                            selected = uiState.isPageScanMode,
+                            icon = Icons.Rounded.GridView,
+                            onClick = { onEvent(ScannerEvent.TogglePageScanMode) }
                         )
                     }
                 }
@@ -768,7 +792,32 @@ fun SkippedReviewSheet(
 }
 
 @Composable
-fun CameraPreview(onLinesDetected: (List<DetectedLine>, Long?) -> Unit) {
+fun ModeButton(
+    selected: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Surface(
+        selected = selected,
+        onClick = onClick,
+        shape = CircleShape,
+        color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else Color.White
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.padding(8.dp).size(20.dp)
+        )
+    }
+}
+
+@Composable
+fun CameraPreview(
+    isPageScanMode: Boolean = false,
+    onLinesDetected: (List<DetectedLine>, Long?) -> Unit,
+    onPhotoCaptured: (Bitmap) -> Unit = {}
+) {
     if (LocalInspectionMode.current) {
         Box(
             modifier = Modifier
@@ -789,6 +838,7 @@ fun CameraPreview(onLinesDetected: (List<DetectedLine>, Long?) -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val executor = remember { Executors.newSingleThreadExecutor() }
+    var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
 
     val resolutionSelector = ResolutionSelector.Builder()
         .setResolutionStrategy(
@@ -799,12 +849,15 @@ fun CameraPreview(onLinesDetected: (List<DetectedLine>, Long?) -> Unit) {
         )
         .build()
 
-    AndroidView(
-        factory = { ctx ->
-            val previewView = PreviewView(ctx).apply {
-                keepScreenOn = true
-            }
-            cameraProviderFuture.addListener({
+    Box(modifier = Modifier.fillMaxSize()) {
+        AndroidView(
+            factory = { ctx ->
+                PreviewView(ctx).apply {
+                    keepScreenOn = true
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+            update = { previewView ->
                 val cameraProvider = cameraProviderFuture.get()
                 val preview = CameraPreview.Builder()
                     .setResolutionSelector(resolutionSelector)
@@ -820,22 +873,308 @@ fun CameraPreview(onLinesDetected: (List<DetectedLine>, Long?) -> Unit) {
                         it.setAnalyzer(executor, CameraAnalyzer(onLinesDetected))
                     }
 
+                val capture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                    .build()
+                imageCapture = capture
+
                 try {
                     cameraProvider.unbindAll()
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        CameraSelector.DEFAULT_BACK_CAMERA,
-                        preview,
-                        imageAnalysis
-                    )
+                    if (isPageScanMode) {
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_BACK_CAMERA,
+                            preview,
+                            capture
+                        )
+                    } else {
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_BACK_CAMERA,
+                            preview,
+                            imageAnalysis
+                        )
+                    }
                 } catch (exc: Exception) {
                     exc.printStackTrace()
                 }
-            }, ContextCompat.getMainExecutor(ctx))
-            previewView
-        },
-        modifier = Modifier.fillMaxSize()
-    )
+            }
+        )
+
+        if (isPageScanMode) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp)
+            ) {
+                Surface(
+                    onClick = {
+                        imageCapture?.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
+                            override fun onCaptureSuccess(image: ImageProxy) {
+                                val bitmap = image.toBitmap()
+                                // Handle rotation
+                                val rotation = image.imageInfo.rotationDegrees
+                                val matrix = android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
+                                val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                                
+                                onPhotoCaptured(rotatedBitmap)
+                                image.close()
+                            }
+                        })
+                    },
+                    modifier = Modifier.size(72.dp),
+                    shape = CircleShape,
+                    color = Color.White,
+                    border = androidx.compose.foundation.BorderStroke(4.dp, Color.White.copy(alpha = 0.5f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp)
+                            .background(Color.White, CircleShape)
+                            .border(2.dp, Color.Black, CircleShape)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PageScanOverlay(isProcessing: Boolean) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+        ) {
+            val canvasWidth = size.width
+            val canvasHeight = size.height
+            
+            // Binder page aspect ratio is roughly 3:4 or 2:3.
+            // A 3x3 grid of cards (each ~1:1.4) fits well in a portrait frame.
+            val gridWidth = canvasWidth * 0.95f
+            val gridHeight = gridWidth * 1.4f
+            val left = (canvasWidth - gridWidth) / 2
+            val top = (canvasHeight - gridHeight) / 2
+
+            // Background mask
+            drawRect(color = Color.Black.copy(alpha = 0.5f))
+            drawRoundRect(
+                color = Color.Transparent,
+                topLeft = Offset(left, top),
+                size = ComposeSize(gridWidth, gridHeight),
+                cornerRadius = CornerRadius(12.dp.toPx()),
+                blendMode = BlendMode.Clear
+            )
+
+            // Grid lines
+            val strokeWidth = 1.dp.toPx()
+            val lineColor = Color.White.copy(alpha = 0.5f)
+
+            // Vertical lines
+            drawLine(lineColor, Offset(left + gridWidth / 3, top), Offset(left + gridWidth / 3, top + gridHeight), strokeWidth)
+            drawLine(lineColor, Offset(left + 2 * gridWidth / 3, top), Offset(left + 2 * gridWidth / 3, top + gridHeight), strokeWidth)
+
+            // Horizontal lines
+            drawLine(lineColor, Offset(left, top + gridHeight / 3), Offset(left + gridWidth, top + gridHeight / 3), strokeWidth)
+            drawLine(lineColor, Offset(left, top + 2 * gridHeight / 3), Offset(left + gridWidth, top + 2 * gridHeight / 3), strokeWidth)
+            
+            // Outer border
+            drawRoundRect(
+                color = if (isProcessing) primaryColor else Color.White,
+                topLeft = Offset(left, top),
+                size = ComposeSize(gridWidth, gridHeight),
+                cornerRadius = CornerRadius(12.dp.toPx()),
+                style = Stroke(width = 2.dp.toPx())
+            )
+        }
+
+        if (isProcessing) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = primaryColor)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Processing Page...", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                    Text("Scanning 9 cards in parallel", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PageScanReviewContent(
+    uiState: ScannerUiState,
+    onEvent: (ScannerEvent) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "Review Page Scan",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            IconButton(onClick = { onEvent(ScannerEvent.RetryPageScan) }) {
+                Icon(Icons.Rounded.Refresh, contentDescription = "Retry")
+            }
+        }
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(uiState.pageScanCells) { cell ->
+                PageCellReviewItem(cell = cell, onEvent = onEvent)
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            tonalElevation = 8.dp,
+            shadowElevation = 16.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { onEvent(ScannerEvent.RetryPageScan) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Discard")
+                }
+                Button(
+                    onClick = { onEvent(ScannerEvent.SaveAllPageResults) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = uiState.pageScanCells.any { it.isConfirmed && it.matchedCard != null }
+                ) {
+                    val count = uiState.pageScanCells.count { it.isConfirmed && it.matchedCard != null }
+                    Text("Save $count Cards")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PageCellReviewItem(
+    cell: PageScanCell,
+    onEvent: (ScannerEvent) -> Unit
+) {
+    val isConfirmed = cell.isConfirmed && cell.matchedCard != null
+    
+    Card(
+        modifier = Modifier
+            .aspectRatio(0.715f) // Standard card aspect ratio
+            .clickable { 
+                if (cell.isConfirmed) onEvent(ScannerEvent.RejectPageCell(cell.id))
+                else onEvent(ScannerEvent.ConfirmPageCell(cell.id, cell.matchedCard))
+            },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isConfirmed) MaterialTheme.colorScheme.primaryContainer 
+                             else MaterialTheme.colorScheme.surfaceVariant
+        ),
+        border = if (isConfirmed) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (cell.matchedCard != null) {
+                AsyncImage(
+                    model = "${cell.matchedCard.image}/low.webp",
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    alpha = if (cell.isConfirmed) 1f else 0.5f
+                )
+            } else if (cell.bitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = cell.bitmap.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    alpha = 0.4f
+                )
+            }
+
+            // Overlay Info
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
+                        )
+                    )
+                    .padding(4.dp)
+            ) {
+                Text(
+                    text = cell.matchedCard?.name ?: "No Match",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    maxLines = 1,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = cell.status.name,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = when(cell.status) {
+                        PageScanCellStatus.MATCHED -> Color.Green
+                        PageScanCellStatus.AMBIGUOUS -> Color.Yellow
+                        else -> Color.Red
+                    }.copy(alpha = 0.8f)
+                )
+            }
+
+            if (cell.status == PageScanCellStatus.SCANNING) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp).align(Alignment.Center),
+                    strokeWidth = 2.dp
+                )
+            }
+
+            if (isConfirmed) {
+                Icon(
+                    Icons.Rounded.CheckCircle,
+                    contentDescription = null,
+                    tint = Color.Green,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(20.dp)
+                        .background(Color.White, CircleShape)
+                )
+            }
+        }
+    }
 }
 
 @Composable

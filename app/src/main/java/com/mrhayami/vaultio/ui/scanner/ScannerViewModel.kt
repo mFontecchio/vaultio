@@ -1,5 +1,6 @@
 package com.mrhayami.vaultio.ui.scanner
 
+import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -41,6 +42,9 @@ data class ScannerUiState(
     val errorMessage: String? = null,
     val hasCameraPermission: Boolean = false,
     val isBulkMode: Boolean = false,
+    val isPageScanMode: Boolean = false,
+    val pageScanMode: PageScanMode = PageScanMode.IDLE,
+    val pageScanCells: List<PageScanCell> = emptyList(),
     val bulkDefaults: BulkScanDefaults = BulkScanDefaults(),
     val bulkSessionLog: List<BulkScanEntry> = emptyList(),
     val skippedCards: List<TcgDexCard> = emptyList()
@@ -54,6 +58,12 @@ sealed interface ScannerEvent {
     data class PermissionResult(val granted: Boolean) : ScannerEvent
     data class LinesDetected(val lines: List<DetectedLine>, val pHash: Long?) : ScannerEvent
     data object ToggleBulkMode : ScannerEvent
+    data object TogglePageScanMode : ScannerEvent
+    data class CapturePagePhoto(val bitmap: Bitmap) : ScannerEvent
+    data class ConfirmPageCell(val index: Int, val card: TcgDexCard?) : ScannerEvent
+    data class RejectPageCell(val index: Int) : ScannerEvent
+    data object SaveAllPageResults : ScannerEvent
+    data object RetryPageScan : ScannerEvent
     data class SetBulkDefaults(val defaults: BulkScanDefaults) : ScannerEvent
     data object UndoLastBulkScan : ScannerEvent
     data object ClearBulkSession : ScannerEvent
@@ -137,7 +147,13 @@ class ScannerViewModel(
             ScannerEvent.ConsumeSaveSuccess -> consumeSaveSuccess()
             ScannerEvent.ClearDetectedNumber -> clearDetectedNumber()
             is ScannerEvent.PermissionResult -> _uiState.update { it.copy(hasCameraPermission = event.granted) }
-            ScannerEvent.ToggleBulkMode -> _uiState.update { it.copy(isBulkMode = !it.isBulkMode) }
+            ScannerEvent.ToggleBulkMode -> _uiState.update { it.copy(isBulkMode = !it.isBulkMode, isPageScanMode = false) }
+            ScannerEvent.TogglePageScanMode -> _uiState.update { it.copy(isPageScanMode = !it.isPageScanMode, isBulkMode = false, pageScanMode = PageScanMode.IDLE) }
+            is ScannerEvent.CapturePagePhoto -> capturePagePhoto(event.bitmap)
+            is ScannerEvent.ConfirmPageCell -> confirmPageCell(event.index, event.card)
+            is ScannerEvent.RejectPageCell -> rejectPageCell(event.index)
+            ScannerEvent.SaveAllPageResults -> saveAllPageResults()
+            ScannerEvent.RetryPageScan -> _uiState.update { it.copy(pageScanMode = PageScanMode.IDLE, pageScanCells = emptyList()) }
             is ScannerEvent.SetBulkDefaults -> {
                 viewModelScope.launch {
                     repository.userPreferencesRepository.setBulkScanCondition(event.defaults.condition)
@@ -153,6 +169,133 @@ class ScannerViewModel(
                 saveScannedCard(event.card, event.quantity, event.condition, event.printing, event.finish, event.folderIds)
                 _uiState.update { it.copy(skippedCards = it.skippedCards.filter { c -> c.id != event.card.id }) }
             }
+        }
+    }
+
+    private fun capturePagePhoto(bitmap: Bitmap) {
+        _uiState.update { it.copy(pageScanMode = PageScanMode.PROCESSING, pageScanCells = emptyList()) }
+        viewModelScope.launch(defaultDispatcher) {
+            val cells = PageScanProcessor.processPage(bitmap)
+            _uiState.update { it.copy(pageScanCells = cells, pageScanMode = PageScanMode.REVIEWING) }
+            
+            // Start searching for each cell
+            cells.forEach { cell ->
+                searchCardForCell(cell)
+            }
+        }
+    }
+
+    private fun searchCardForCell(cell: PageScanCell) {
+        viewModelScope.launch(defaultDispatcher) {
+            _uiState.update { state ->
+                state.copy(pageScanCells = state.pageScanCells.map { 
+                    if (it.id == cell.id) it.copy(status = PageScanCellStatus.SCANNING) else it 
+                })
+            }
+
+            val ocr = cell.ocrResult ?: ""
+            val numMatch = numberRegex.find(normalizeOcrTextForNumbers(ocr))
+            val localId = numMatch?.groupValues?.get(1)
+            val totalCount = numMatch?.groupValues?.get(2)
+            val name = cleanCardName(ocr).takeIf { it.isNotEmpty() }
+
+            if (localId == null) {
+                _uiState.update { state ->
+                    state.copy(pageScanCells = state.pageScanCells.map { 
+                        if (it.id == cell.id) it.copy(status = PageScanCellStatus.NOT_FOUND) else it 
+                    })
+                }
+                return@launch
+            }
+
+            try {
+                val numberNorm = if (localId.all { it.isDigit() }) localId.padStart(3, '0') else localId
+                var localResults = repository.searchLocalCards(numberNorm)
+                val totalInt = totalCount?.toIntOrNull()
+                
+                if (totalInt != null) {
+                    val withTotal = repository.searchLocalCardsWithTotal(numberNorm, totalInt)
+                    if (withTotal.isNotEmpty()) localResults = withTotal
+                }
+
+                // Simplified matching for page scan to keep it fast
+                val finalCandidates = if (localResults.size == 1) {
+                    localResults.map { mapToTcgDexCard(it) }
+                } else {
+                    val remoteResults = try { repository.searchTcgDexByLocalId(localId) } catch (_: Exception) { emptyList() }
+                    (localResults.map { mapToTcgDexCard(it) } + remoteResults).distinctBy { it.id }
+                }
+
+                val bestMatch = if (name != null) {
+                    finalCandidates.maxByOrNull { calculateSimilarity(it.name, name) }
+                } else {
+                    finalCandidates.firstOrNull()
+                }
+
+                _uiState.update { state ->
+                    state.copy(pageScanCells = state.pageScanCells.map { 
+                        if (it.id == cell.id) {
+                            it.copy(
+                                matchedCard = bestMatch,
+                                status = if (bestMatch != null) {
+                                    if (finalCandidates.size > 1 && name == null) PageScanCellStatus.AMBIGUOUS 
+                                    else PageScanCellStatus.MATCHED
+                                } else PageScanCellStatus.NOT_FOUND
+                            )
+                        } else it 
+                    })
+                }
+            } catch (e: Exception) {
+                _uiState.update { state ->
+                    state.copy(pageScanCells = state.pageScanCells.map { 
+                        if (it.id == cell.id) it.copy(status = PageScanCellStatus.ERROR) else it 
+                    })
+                }
+            }
+        }
+    }
+
+    private fun confirmPageCell(index: Int, card: TcgDexCard?) {
+        _uiState.update { state ->
+            state.copy(pageScanCells = state.pageScanCells.map { 
+                if (it.id == index) it.copy(matchedCard = card, isConfirmed = true, status = PageScanCellStatus.MATCHED) else it 
+            })
+        }
+    }
+
+    private fun rejectPageCell(index: Int) {
+        _uiState.update { state ->
+            state.copy(pageScanCells = state.pageScanCells.map { 
+                if (it.id == index) it.copy(isConfirmed = false) else it 
+            })
+        }
+    }
+
+    private fun saveAllPageResults() {
+        val confirmedCells = _uiState.value.pageScanCells.filter { it.isConfirmed && it.matchedCard != null }
+        if (confirmedCells.isEmpty()) {
+            _uiState.update { it.copy(pageScanMode = PageScanMode.IDLE) }
+            return
+        }
+
+        viewModelScope.launch {
+            val defaults = _uiState.value.bulkDefaults
+            confirmedCells.forEach { cell ->
+                cell.matchedCard?.let { card ->
+                    repository.addUserCard(
+                        card,
+                        UserCardEntity(
+                            cardId = card.id,
+                            quantity = 1,
+                            condition = defaults.condition,
+                            printing = defaults.printing,
+                            finish = defaults.finish
+                        ),
+                        folderIds = defaults.folderIds
+                    )
+                }
+            }
+            _uiState.update { it.copy(pageScanMode = PageScanMode.IDLE, showSaveSuccess = true) }
         }
     }
 
