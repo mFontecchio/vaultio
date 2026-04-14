@@ -44,29 +44,21 @@ class CameraAnalyzer(
         val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
         
         // Viewport Alignment: Calculate visible area of the bitmap based on screen aspect ratio
-        val screenAR = viewportAspectRatio
-        val bitmapAR = rotated.width.toFloat() / rotated.height.toFloat()
-        
-        val (visibleW, _) = if (bitmapAR > screenAR) {
-            // Bitmap is fatter than screen, sides are cropped in FILL_CENTER
-            (rotated.height * screenAR) to rotated.height.toFloat()
-        } else {
-            // Bitmap is taller than screen, top/bottom are cropped
-            rotated.width.toFloat() to (rotated.width / screenAR)
-        }
-        
-        val rectW = visibleW * 0.85f
-        val rectH = rectW * 1.397f
-        val left = (rotated.width - rectW) / 2
-        val top = (rotated.height - rectH) / 2
+        val cropRect = ScannerGeometry.getCropRect(
+            bitmapWidth = rotated.width,
+            bitmapHeight = rotated.height,
+            viewportWidth = viewportAspectRatio,
+            viewportHeight = 1f, // viewportAspectRatio is already width/height, so we can pass 1f as height
+            isPageScanMode = false // CameraAnalyzer is currently only used for single-card/bulk mode
+        )
         
         val cropped = try {
             Bitmap.createBitmap(
                 rotated,
-                left.toInt().coerceAtLeast(0),
-                top.toInt().coerceAtLeast(0),
-                rectW.toInt().coerceAtMost(rotated.width - left.toInt().coerceAtLeast(0)),
-                rectH.toInt().coerceAtMost(rotated.height - top.toInt().coerceAtLeast(0))
+                cropRect.left,
+                cropRect.top,
+                cropRect.width(),
+                cropRect.height()
             )
         } catch (e: Exception) {
             rotated

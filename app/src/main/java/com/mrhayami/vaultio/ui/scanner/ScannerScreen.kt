@@ -66,6 +66,7 @@ import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.components.DropdownSelector
@@ -182,58 +183,64 @@ fun ScannerContent(
             }
 
             // Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .statusBarsPadding(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            AnimatedVisibility(
+                visible = uiState.pageScanMode != PageScanMode.REVIEWING,
+                enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
+                exit = fadeOut() + slideOutVertically(targetOffsetY = { -it })
             ) {
-                IconButton(
-                    onClick = onNavigateBack,
-                    colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
-                    modifier = Modifier.size(48.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .statusBarsPadding(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White)
-                }
-                
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Mode Selector
-                Surface(
-                    color = Color.Black.copy(alpha = 0.5f),
-                    shape = CircleShape,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
-                ) {
-                    Row(modifier = Modifier.padding(4.dp)) {
-                        ModeButton(
-                            selected = !uiState.isBulkMode && !uiState.isPageScanMode,
-                            icon = Icons.Rounded.Search,
-                            onClick = { 
-                                if (uiState.isBulkMode) onEvent(ScannerEvent.ToggleBulkMode)
-                                if (uiState.isPageScanMode) onEvent(ScannerEvent.TogglePageScanMode)
-                            }
-                        )
-                        ModeButton(
-                            selected = uiState.isBulkMode,
-                            icon = Icons.Rounded.Layers,
-                            onClick = { onEvent(ScannerEvent.ToggleBulkMode) }
-                        )
-                        ModeButton(
-                            selected = uiState.isPageScanMode,
-                            icon = Icons.Rounded.GridView,
-                            onClick = { onEvent(ScannerEvent.TogglePageScanMode) }
-                        )
+                    IconButton(
+                        onClick = onNavigateBack,
+                        colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
-                }
+                    
+                    Spacer(modifier = Modifier.weight(1f))
 
-                IconButton(
-                    onClick = onShowBulkSettings,
-                    colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(Icons.Rounded.Settings, contentDescription = "Bulk Settings", tint = Color.White)
+                    // Mode Selector
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = CircleShape,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                    ) {
+                        Row(modifier = Modifier.padding(4.dp)) {
+                            ModeButton(
+                                selected = !uiState.isBulkMode && !uiState.isPageScanMode,
+                                icon = Icons.Rounded.Search,
+                                onClick = { 
+                                    if (uiState.isBulkMode) onEvent(ScannerEvent.ToggleBulkMode)
+                                    if (uiState.isPageScanMode) onEvent(ScannerEvent.TogglePageScanMode)
+                                }
+                            )
+                            ModeButton(
+                                selected = uiState.isBulkMode,
+                                icon = Icons.Rounded.Layers,
+                                onClick = { onEvent(ScannerEvent.ToggleBulkMode) }
+                            )
+                            ModeButton(
+                                selected = uiState.isPageScanMode,
+                                icon = Icons.Rounded.GridView,
+                                onClick = { onEvent(ScannerEvent.TogglePageScanMode) }
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onShowBulkSettings,
+                        colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(Icons.Rounded.Settings, contentDescription = "Bulk Settings", tint = Color.White)
+                    }
                 }
             }
 
@@ -937,30 +944,21 @@ fun CameraPreview(
                                 
                                 // Viewport Alignment: Calculate visible area based on screen aspect ratio
                                 val pv = previewViewRef ?: return
-                                val screenAR = pv.width.toFloat() / pv.height.toFloat()
-                                val bitmapAR = rotatedBitmap.width.toFloat() / rotatedBitmap.height.toFloat()
-                                
-                                val (visibleW, _) = if (bitmapAR > screenAR) {
-                                    // Bitmap is fatter than screen, sides are cropped
-                                    (rotatedBitmap.height * screenAR) to rotatedBitmap.height.toFloat()
-                                } else {
-                                    // Bitmap is taller than screen, top/bottom are cropped
-                                    rotatedBitmap.width.toFloat() to (rotatedBitmap.width / screenAR)
-                                }
-                                
-                                val gridW = visibleW * 0.95f
-                                val gridH = gridW * 1.4f
-                                
-                                val left = (rotatedBitmap.width - gridW) / 2
-                                val top = (rotatedBitmap.height - gridH) / 2
+                                val cropRect = ScannerGeometry.getCropRect(
+                                    bitmapWidth = rotatedBitmap.width,
+                                    bitmapHeight = rotatedBitmap.height,
+                                    viewportWidth = pv.width.toFloat(),
+                                    viewportHeight = pv.height.toFloat(),
+                                    isPageScanMode = true
+                                )
                                 
                                 val cropped = try {
                                     Bitmap.createBitmap(
                                         rotatedBitmap,
-                                        left.toInt().coerceAtLeast(0),
-                                        top.toInt().coerceAtLeast(0),
-                                        gridW.toInt().coerceAtMost(rotatedBitmap.width - left.toInt().coerceAtLeast(0)),
-                                        gridH.toInt().coerceAtMost(rotatedBitmap.height - top.toInt().coerceAtLeast(0))
+                                        cropRect.left,
+                                        cropRect.top,
+                                        cropRect.width(),
+                                        cropRect.height()
                                     )
                                 } catch (e: Exception) {
                                     rotatedBitmap
@@ -1003,15 +1001,11 @@ fun PageScanOverlay(isProcessing: Boolean) {
                 .fillMaxSize()
                 .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
         ) {
-            val canvasWidth = size.width
-            val canvasHeight = size.height
-            
-            // Binder page aspect ratio is roughly 3:4 or 2:3.
-            // A 3x3 grid of cards (each ~1:1.4) fits well in a portrait frame.
-            val gridWidth = canvasWidth * 0.95f
-            val gridHeight = gridWidth * 1.4f
-            val left = (canvasWidth - gridWidth) / 2
-            val top = (canvasHeight - gridHeight) / 2
+            val rect = ScannerGeometry.getOverlayRect(size, isPageScanMode = true)
+            val gridWidth = rect.width
+            val gridHeight = rect.height
+            val left = rect.left
+            val top = rect.top
 
             // Background mask
             drawRect(color = Color.Black.copy(alpha = 0.5f))
@@ -1250,12 +1244,11 @@ fun ScannerOverlay(isSearching: Boolean) {
             .fillMaxSize()
             .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
     ) {
-        val canvasWidth = size.width
-        val canvasHeight = size.height
-        val rectWidth = canvasWidth * 0.85f
-        val rectHeight = rectWidth * 1.397f
-        val left = (canvasWidth - rectWidth) / 2
-        val top = (canvasHeight - rectHeight) / 2
+        val rect = ScannerGeometry.getOverlayRect(size, isPageScanMode = false)
+        val rectWidth = rect.width
+        val rectHeight = rect.height
+        val left = rect.left
+        val top = rect.top
         val cornerRadius = 24.dp.toPx()
         val cornerSize = 40.dp.toPx()
 
@@ -1444,6 +1437,148 @@ private fun ScannerContentAutoSelectedPreview() {
                     image = "https://assets.tcgdex.net/en/swsh/swsh1/1",
                     rarity = "Common",
                     category = "Pokemon"
+                )
+            ),
+            onEvent = {},
+            onNavigateBack = {},
+            onShowBulkSettings = {},
+            onShowSkippedReview = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun BulkSettingsPreview() {
+    VaultioTheme {
+        Surface {
+            BulkSettingsSheet(
+                uiState = ScannerUiState(
+                    bulkDefaults = BulkScanDefaults(
+                        condition = "Near Mint",
+                        finish = PricingUtils.FINISH_HOLOFOIL
+                    )
+                ),
+                onEvent = {},
+                onDismiss = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun BulkHUDPreview() {
+    VaultioTheme {
+        Box(modifier = Modifier.fillMaxSize()) {
+            BulkModeHUD(
+                uiState = ScannerUiState(
+                    isBulkMode = true,
+                    bulkSessionLog = listOf(
+                        BulkScanEntry(
+                            card = TcgDexCard("1", "1", "Pikachu", null, null, null),
+                            status = BulkScanStatus.SAVED,
+                            quantity = 1
+                        ),
+                        BulkScanEntry(
+                            card = TcgDexCard("2", "2", "Charizard", null, null, null),
+                            status = BulkScanStatus.SAVED,
+                            quantity = 1
+                        )
+                    )
+                ),
+                onEvent = {},
+                onShowSkippedReview = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SkippedReviewPreview() {
+    VaultioTheme {
+        Surface {
+            SkippedReviewSheet(
+                uiState = ScannerUiState(
+                    skippedCards = listOf(
+                        TcgDexCard("1", "1", "Pikachu", null, "Rare", "Pokemon"),
+                        TcgDexCard("2", "2", "Bulbasaur", null, "Common", "Pokemon")
+                    )
+                ),
+                onEvent = {},
+                onDismiss = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PageScanReviewPreview() {
+    VaultioTheme {
+        Surface {
+            PageScanReviewContent(
+                uiState = ScannerUiState(
+                    isPageScanMode = true,
+                    pageScanMode = PageScanMode.REVIEWING,
+                    pageScanCells = List(9) { i ->
+                        PageScanCell(
+                            id = i,
+                            row = i / 3,
+                            col = i % 3,
+                            matchedCard = if (i % 2 == 0) TcgDexCard(
+                                id = "$i",
+                                localId = "$i",
+                                name = "Card $i",
+                                image = null,
+                                rarity = "Common",
+                                category = "Pokemon"
+                            ) else null,
+                            status = if (i % 2 == 0) PageScanCellStatus.MATCHED else PageScanCellStatus.NOT_FOUND
+                        )
+                    }
+                ),
+                onEvent = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun PageScanOverlayIdlePreview() {
+    VaultioTheme {
+        Box(modifier = Modifier.fillMaxSize()) {
+            PageScanOverlay(isProcessing = false)
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun PageScanOverlayProcessingPreview() {
+    VaultioTheme {
+        Box(modifier = Modifier.fillMaxSize()) {
+            PageScanOverlay(isProcessing = true)
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ScannerContentBulkModePreview() {
+    VaultioTheme {
+        ScannerContent(
+            uiState = ScannerUiState(
+                hasCameraPermission = true,
+                isBulkMode = true,
+                bulkSessionLog = listOf(
+                    BulkScanEntry(
+                        card = TcgDexCard("1", "1", "Pikachu", null, null, null),
+                        status = BulkScanStatus.SAVED,
+                        quantity = 1
+                    )
                 )
             ),
             onEvent = {},

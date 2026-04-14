@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mrhayami.vaultio.BuildConfig
@@ -29,7 +30,6 @@ import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.theme.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     repository: VaultioRepository,
@@ -39,6 +39,35 @@ fun SettingsScreen(
     )
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    SettingsScreenContent(
+        uiState = uiState,
+        onThemeBrandChange = viewModel::setThemeBrand,
+        onDarkThemeConfigChange = viewModel::setDarkThemeConfig,
+        onPreferSetLogoChange = viewModel::setPreferSetLogo,
+        onShowEnergyAnimationsChange = viewModel::setShowEnergyAnimations,
+        onShowFinishAnimationsChange = viewModel::setShowFinishAnimations,
+        onJustTcgApiKeyChange = viewModel::setJustTcgApiKey,
+        onRefreshApiUsage = viewModel::refreshApiUsage,
+        onClearImageCache = viewModel::clearImageCache,
+        onResetSettings = viewModel::resetSettings
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreenContent(
+    uiState: SettingsUiState,
+    onThemeBrandChange: (ThemeBrand) -> Unit,
+    onDarkThemeConfigChange: (DarkThemeConfig) -> Unit,
+    onPreferSetLogoChange: (Boolean) -> Unit,
+    onShowEnergyAnimationsChange: (Boolean) -> Unit,
+    onShowFinishAnimationsChange: (Boolean) -> Unit,
+    onJustTcgApiKeyChange: (String) -> Unit,
+    onRefreshApiUsage: () -> Unit,
+    onClearImageCache: () -> Unit,
+    onResetSettings: () -> Unit
+) {
     var showThemeBrandDialog by remember { mutableStateOf(false) }
     var showDarkConfigDialog by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
@@ -104,10 +133,10 @@ fun SettingsScreen(
                 trailingContent = {
                     Switch(
                         checked = uiState.preferSetLogo,
-                        onCheckedChange = { viewModel.setPreferSetLogo(it) }
+                        onCheckedChange = { onPreferSetLogoChange(it) }
                     )
                 },
-                modifier = Modifier.clickable { viewModel.setPreferSetLogo(!uiState.preferSetLogo) }
+                modifier = Modifier.clickable { onPreferSetLogoChange(!uiState.preferSetLogo) }
             )
 
             ListItem(
@@ -130,7 +159,7 @@ fun SettingsScreen(
                     trailingContent = {
                         Switch(
                             checked = uiState.showEnergyAnimations,
-                            onCheckedChange = { viewModel.setShowEnergyAnimations(it) }
+                            onCheckedChange = { onShowEnergyAnimationsChange(it) }
                         )
                     },
                     modifier = Modifier.padding(start = 32.dp)
@@ -142,7 +171,7 @@ fun SettingsScreen(
                     trailingContent = {
                         Switch(
                             checked = uiState.showFinishAnimations,
-                            onCheckedChange = { viewModel.setShowFinishAnimations(it) }
+                            onCheckedChange = { onShowFinishAnimationsChange(it) }
                         )
                     },
                     modifier = Modifier.padding(start = 32.dp)
@@ -215,7 +244,7 @@ fun SettingsScreen(
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                     } else {
                         IconButton(
-                            onClick = { viewModel.refreshApiUsage() },
+                            onClick = { onRefreshApiUsage() },
                             enabled = uiState.justTcgApiKey.isNotEmpty()
                         ) {
                             Icon(
@@ -240,7 +269,7 @@ fun SettingsScreen(
                 headlineContent = { Text("Clear Image Cache") },
                 supportingContent = { Text("Free up space on your device") },
                 leadingContent = { Icon(Icons.Rounded.Storage, contentDescription = null) },
-                modifier = Modifier.clickable { viewModel.clearImageCache() }
+                modifier = Modifier.clickable { onClearImageCache() }
             )
 
             ListItem(
@@ -260,7 +289,7 @@ fun SettingsScreen(
             )
 
             TextButton(
-                onClick = { viewModel.resetSettings() },
+                onClick = { onResetSettings() },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
@@ -277,7 +306,7 @@ fun SettingsScreen(
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text("Standard", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 8.dp))
                     ThemeBrandOption("Default (Material You)", uiState.themeBrand == ThemeBrand.DEFAULT, null) {
-                        viewModel.setThemeBrand(ThemeBrand.DEFAULT)
+                        onThemeBrandChange(ThemeBrand.DEFAULT)
                         showThemeBrandDialog = false
                     }
                     
@@ -285,43 +314,43 @@ fun SettingsScreen(
                     Text("Energy Themes", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 8.dp))
                     
                     ThemeBrandOption("Grass", uiState.themeBrand == ThemeBrand.GRASS, EnergyGrass) {
-                        viewModel.setThemeBrand(ThemeBrand.GRASS)
+                        onThemeBrandChange(ThemeBrand.GRASS)
                         showThemeBrandDialog = false
                     }
                     ThemeBrandOption("Fire", uiState.themeBrand == ThemeBrand.FIRE, EnergyFire) {
-                        viewModel.setThemeBrand(ThemeBrand.FIRE)
+                        onThemeBrandChange(ThemeBrand.FIRE)
                         showThemeBrandDialog = false
                     }
                     ThemeBrandOption("Water", uiState.themeBrand == ThemeBrand.WATER, EnergyWater) {
-                        viewModel.setThemeBrand(ThemeBrand.WATER)
+                        onThemeBrandChange(ThemeBrand.WATER)
                         showThemeBrandDialog = false
                     }
                     ThemeBrandOption("Lightning", uiState.themeBrand == ThemeBrand.ELECTRIC, EnergyLightning) {
-                        viewModel.setThemeBrand(ThemeBrand.ELECTRIC)
+                        onThemeBrandChange(ThemeBrand.ELECTRIC)
                         showThemeBrandDialog = false
                     }
                     ThemeBrandOption("Psychic", uiState.themeBrand == ThemeBrand.PSYCHIC, EnergyPsychic) {
-                        viewModel.setThemeBrand(ThemeBrand.PSYCHIC)
+                        onThemeBrandChange(ThemeBrand.PSYCHIC)
                         showThemeBrandDialog = false
                     }
                     ThemeBrandOption("Fighting", uiState.themeBrand == ThemeBrand.FIGHTING, EnergyFighting) {
-                        viewModel.setThemeBrand(ThemeBrand.FIGHTING)
+                        onThemeBrandChange(ThemeBrand.FIGHTING)
                         showThemeBrandDialog = false
                     }
                     ThemeBrandOption("Darkness", uiState.themeBrand == ThemeBrand.DARKNESS, EnergyDarkness) {
-                        viewModel.setThemeBrand(ThemeBrand.DARKNESS)
+                        onThemeBrandChange(ThemeBrand.DARKNESS)
                         showThemeBrandDialog = false
                     }
                     ThemeBrandOption("Metal", uiState.themeBrand == ThemeBrand.STEEL, EnergyMetal) {
-                        viewModel.setThemeBrand(ThemeBrand.STEEL)
+                        onThemeBrandChange(ThemeBrand.STEEL)
                         showThemeBrandDialog = false
                     }
                     ThemeBrandOption("Fairy", uiState.themeBrand == ThemeBrand.FAIRY, EnergyFairy) {
-                        viewModel.setThemeBrand(ThemeBrand.FAIRY)
+                        onThemeBrandChange(ThemeBrand.FAIRY)
                         showThemeBrandDialog = false
                     }
                     ThemeBrandOption("Dragon", uiState.themeBrand == ThemeBrand.DRAGON, EnergyDragon) {
-                        viewModel.setThemeBrand(ThemeBrand.DRAGON)
+                        onThemeBrandChange(ThemeBrand.DRAGON)
                         showThemeBrandDialog = false
                     }
                 }
@@ -339,15 +368,15 @@ fun SettingsScreen(
             text = {
                 Column {
                     DarkConfigOption("Follow System", uiState.darkThemeConfig == DarkThemeConfig.FOLLOW_SYSTEM) {
-                        viewModel.setDarkThemeConfig(DarkThemeConfig.FOLLOW_SYSTEM)
+                        onDarkThemeConfigChange(DarkThemeConfig.FOLLOW_SYSTEM)
                         showDarkConfigDialog = false
                     }
                     DarkConfigOption("Light Mode", uiState.darkThemeConfig == DarkThemeConfig.LIGHT) {
-                        viewModel.setDarkThemeConfig(DarkThemeConfig.LIGHT)
+                        onDarkThemeConfigChange(DarkThemeConfig.LIGHT)
                         showDarkConfigDialog = false
                     }
                     DarkConfigOption("Dark Mode", uiState.darkThemeConfig == DarkThemeConfig.DARK) {
-                        viewModel.setDarkThemeConfig(DarkThemeConfig.DARK)
+                        onDarkThemeConfigChange(DarkThemeConfig.DARK)
                         showDarkConfigDialog = false
                     }
                 }
@@ -392,7 +421,7 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { 
-                    viewModel.setJustTcgApiKey(tempKey)
+                    onJustTcgApiKeyChange(tempKey)
                     showApiKeyDialog = false 
                 }) { 
                     Text("Save") 
@@ -460,3 +489,36 @@ private fun formatLastSynced(timestamp: Long): String {
     }
 }
 
+@Preview
+@Composable
+fun SettingsScreenPreview() {
+    VaultioTheme {
+        Surface {
+            SettingsScreenContent(
+                uiState = SettingsUiState(
+                    themeBrand = ThemeBrand.DEFAULT,
+                    darkThemeConfig = DarkThemeConfig.FOLLOW_SYSTEM,
+                    justTcgApiKey = "mock_api_key",
+                    dailyUsed = 42,
+                    dailyLimit = 100,
+                    dailyRemaining = 58,
+                    planUsed = 150,
+                    planLimit = 1000,
+                    planRemaining = 850,
+                    planName = "Basic",
+                    offlineSetsCount = 5,
+                    isRefreshing = false
+                ),
+                onThemeBrandChange = {},
+                onDarkThemeConfigChange = {},
+                onPreferSetLogoChange = {},
+                onShowEnergyAnimationsChange = {},
+                onShowFinishAnimationsChange = {},
+                onJustTcgApiKeyChange = {},
+                onRefreshApiUsage = {},
+                onClearImageCache = {},
+                onResetSettings = {}
+            )
+        }
+    }
+}
