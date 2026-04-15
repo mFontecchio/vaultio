@@ -43,6 +43,7 @@ data class ScannerUiState(
     val showSaveSuccess: Boolean = false,
     val errorMessage: String? = null,
     val hasCameraPermission: Boolean = false,
+    val isTorchEnabled: Boolean = false,
     val isBulkMode: Boolean = false,
     val isPageScanMode: Boolean = false,
     val pageScanMode: PageScanMode = PageScanMode.IDLE,
@@ -58,6 +59,7 @@ sealed interface ScannerEvent {
     data object ConsumeSaveSuccess : ScannerEvent
     data class CardSelected(val card: TcgDexCard?) : ScannerEvent
     data class PermissionResult(val granted: Boolean) : ScannerEvent
+    data object ToggleTorch : ScannerEvent
     data class LinesDetected(val lines: List<DetectedLine>, val pHash: Long?) : ScannerEvent
     data object ToggleBulkMode : ScannerEvent
     data object TogglePageScanMode : ScannerEvent
@@ -149,8 +151,36 @@ class ScannerViewModel(
             ScannerEvent.ConsumeSaveSuccess -> consumeSaveSuccess()
             ScannerEvent.ClearDetectedNumber -> clearDetectedNumber()
             is ScannerEvent.PermissionResult -> _uiState.update { it.copy(hasCameraPermission = event.granted) }
-            ScannerEvent.ToggleBulkMode -> _uiState.update { it.copy(isBulkMode = !it.isBulkMode, isPageScanMode = false) }
-            ScannerEvent.TogglePageScanMode -> _uiState.update { it.copy(isPageScanMode = !it.isPageScanMode, isBulkMode = false, pageScanMode = PageScanMode.IDLE) }
+            ScannerEvent.ToggleTorch -> _uiState.update { it.copy(isTorchEnabled = !it.isTorchEnabled) }
+            ScannerEvent.ToggleBulkMode -> {
+                _uiState.update { it.copy(
+                    isBulkMode = !it.isBulkMode,
+                    isPageScanMode = false,
+                    detectedNumber = null,
+                    detectedTotal = null,
+                    detectedName = null,
+                    candidates = emptyList(),
+                    isSearching = false,
+                    autoSelectedCard = null
+                ) }
+                lastMatchedNumber = null
+                detectionHistory.clear()
+            }
+            ScannerEvent.TogglePageScanMode -> {
+                _uiState.update { it.copy(
+                    isPageScanMode = !it.isPageScanMode,
+                    isBulkMode = false,
+                    pageScanMode = PageScanMode.IDLE,
+                    detectedNumber = null,
+                    detectedTotal = null,
+                    detectedName = null,
+                    candidates = emptyList(),
+                    isSearching = false,
+                    autoSelectedCard = null
+                ) }
+                lastMatchedNumber = null
+                detectionHistory.clear()
+            }
             is ScannerEvent.CapturePagePhoto -> capturePagePhoto(event.bitmap)
             is ScannerEvent.ConfirmPageCell -> confirmPageCell(event.index, event.card)
             is ScannerEvent.RejectPageCell -> rejectPageCell(event.index)

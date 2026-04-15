@@ -4,9 +4,13 @@ import android.Manifest
 import android.graphics.Bitmap
 import android.util.Size
 import android.widget.Toast
+import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview as CameraPreview
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -29,17 +33,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Undo
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageProxy
-import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -54,6 +57,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -182,6 +186,7 @@ fun ScannerContent(
                     }
                     CameraPreview(
                         isPageScanMode = uiState.isPageScanMode,
+                        isTorchEnabled = uiState.isTorchEnabled,
                         onLinesDetected = onLinesDetected,
                         onPhotoCaptured = onPhotoCaptured
                     )
@@ -247,6 +252,20 @@ fun ScannerContent(
                     }
 
                     IconButton(
+                        onClick = { onEvent(ScannerEvent.ToggleTorch) },
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = if (uiState.isTorchEnabled) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            if (uiState.isTorchEnabled) Icons.Rounded.FlashOn else Icons.Rounded.FlashOff,
+                            contentDescription = "Toggle Flash",
+                            tint = if (uiState.isTorchEnabled) MaterialTheme.colorScheme.onPrimary else Color.White
+                        )
+                    }
+
+                    IconButton(
                         onClick = onShowBulkSettings,
                         colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
                         modifier = Modifier.size(48.dp)
@@ -260,11 +279,11 @@ fun ScannerContent(
             Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 115.dp),
+                    .padding(top = 125.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 AnimatedVisibility(
-                    visible = uiState.detectedNumber != null || uiState.isSearching,
+                    visible = (uiState.detectedNumber != null || uiState.isSearching) && !uiState.isPageScanMode,
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically()
                 ) {
@@ -841,6 +860,7 @@ fun ModeButton(
 @Composable
 fun CameraPreview(
     isPageScanMode: Boolean = false,
+    isTorchEnabled: Boolean = false,
     onLinesDetected: (List<DetectedLine>, Long?) -> Unit,
     onPhotoCaptured: (Bitmap) -> Unit = {}
 ) {
@@ -861,12 +881,26 @@ fun CameraPreview(
     }
 
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val executor = remember { Executors.newSingleThreadExecutor() }
     
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
+    var cameraControl: CameraControl? by remember { mutableStateOf(null) }
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
+    var showFlash by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isTorchEnabled, cameraControl) {
+        cameraControl?.enableTorch(isTorchEnabled)
+    }
+
+    LaunchedEffect(showFlash) {
+        if (showFlash) {
+            delay(80)
+            showFlash = false
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -922,22 +956,24 @@ fun CameraPreview(
         imageCapture = capture
 
         try {
-            cameraProvider.unbindAll()
-            if (isPageScanMode) {
-                cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview,
-                    capture
-                )
-            } else {
-                cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview,
-                    imageAnalysis
-                )
+            val camera = cameraProvider.unbindAll().let {
+                if (isPageScanMode) {
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        capture
+                    )
+                } else {
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        imageAnalysis
+                    )
+                }
             }
+            cameraControl = camera.cameraControl
         } catch (exc: Exception) {
             exc.printStackTrace()
         }
@@ -954,9 +990,12 @@ fun CameraPreview(
             update = { /* Camera logic moved to LaunchedEffect */ }
         )
 
-        val gridAlpha = if (isPageScanMode) 1f else 0f
-        Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = gridAlpha)) {
-            PageScanOverlay(isProcessing = false)
+        if (showFlash) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White)
+            )
         }
 
         if (isPageScanMode) {
@@ -967,6 +1006,8 @@ fun CameraPreview(
             ) {
                 Surface(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showFlash = true
                         imageCapture?.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
                             override fun onCaptureSuccess(image: ImageProxy) {
                                 val bitmap = image.toBitmap()
@@ -1083,6 +1124,40 @@ fun PageScanOverlay(isProcessing: Boolean) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Processing Page...", color = Color.White, style = MaterialTheme.typography.titleMedium)
                     Text("Scanning 9 cards in parallel", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("You can move your phone now", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        } else {
+            // Hint for the user
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 125.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.5f),
+                    shape = CircleShape,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.PhotoCamera,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Hold Still • Align Grid",
+                            color = Color.White.copy(alpha = 0.9f),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
                 }
             }
         }
