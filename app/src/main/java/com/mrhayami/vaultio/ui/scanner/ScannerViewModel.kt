@@ -1,6 +1,7 @@
 package com.mrhayami.vaultio.ui.scanner
 
 import android.graphics.Bitmap
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -27,6 +28,7 @@ import kotlinx.coroutines.withContext
 /** One frame's worth of extracted OCR data used by the consensus buffer. */
 private data class FrameDetection(val number: String?, val total: String?, val name: String?, val pHash: Long? = null)
 
+@Immutable
 data class ScannerUiState(
     val detectedText: String = "",
     val detectedNumber: String? = null,
@@ -222,7 +224,10 @@ class ScannerViewModel(
                 val finalCandidates = if (localResults.size == 1) {
                     localResults.map { mapToTcgDexCard(it) }
                 } else {
-                    val remoteResults = try { repository.searchTcgDexByLocalId(localId) } catch (_: Exception) { emptyList() }
+                    val remoteResults = try { repository.searchTcgDexByLocalId(localId) } catch (e: Exception) { 
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        emptyList() 
+                    }
                     (localResults.map { mapToTcgDexCard(it) } + remoteResults).distinctBy { it.id }
                 }
 
@@ -246,6 +251,7 @@ class ScannerViewModel(
                     })
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _uiState.update { state ->
                     state.copy(pageScanCells = state.pageScanCells.map { 
                         if (it.id == cell.id) it.copy(status = PageScanCellStatus.ERROR) else it 
@@ -313,6 +319,7 @@ class ScannerViewModel(
                     bulkSessionLog = it.bulkSessionLog.dropLast(1)
                 ) }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _uiState.update { it.copy(errorMessage = "Undo failed: ${e.message}") }
             }
         }
@@ -445,7 +452,8 @@ class ScannerViewModel(
                 } else {
                     val remoteResults = try {
                         repository.searchTcgDexByLocalId(localId)
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
                         emptyList()
                     }
                     
@@ -504,6 +512,7 @@ class ScannerViewModel(
                     }
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _uiState.update { it.copy(isSearching = false, errorMessage = "Search failed: ${e.message}") }
             }
         }
@@ -616,6 +625,7 @@ class ScannerViewModel(
                 }
                 resumeScanning()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _uiState.update { it.copy(isSearching = false, errorMessage = "Bulk save failed: ${e.message}") }
             }
         }
@@ -652,6 +662,7 @@ class ScannerViewModel(
                 _uiState.update { it.copy(showSaveSuccess = true) }
                 resumeScanning()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _uiState.update { it.copy(errorMessage = "Failed to save card: ${e.message}") }
             }
         }

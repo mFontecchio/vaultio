@@ -23,9 +23,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mrhayami.vaultio.data.DarkThemeConfig
 import com.mrhayami.vaultio.data.ThemeBrand
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mrhayami.vaultio.ui.navigation.Screen
 import com.mrhayami.vaultio.ui.collection.CollectionScreen
 import com.mrhayami.vaultio.ui.screens.SetDownloadsScreen
+import com.mrhayami.vaultio.ui.screens.SetDownloadsViewModel
 import com.mrhayami.vaultio.ui.settings.SettingsScreen
 import com.mrhayami.vaultio.ui.scanner.ScannerScreen
 import com.mrhayami.vaultio.ui.card_detail.CardDetailScreen
@@ -119,7 +121,18 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToCardDetail = { id -> navController.navigate("card_detail/$id") }
                                 ) 
                             }
-                            composable(Screen.SetDownloads.route) { SetDownloadsScreen(repository) }
+                            composable(Screen.SetDownloads.route) { 
+                                val viewModel: SetDownloadsViewModel = viewModel(
+                                    factory = remember(repository) { 
+                                        object : androidx.lifecycle.ViewModelProvider.Factory {
+                                            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                                                return SetDownloadsViewModel(repository) as T
+                                            }
+                                        }
+                                    }
+                                )
+                                SetDownloadsScreen(viewModel) 
+                            }
                             composable(Screen.Settings.route) { SettingsScreen(repository, userPreferencesRepository) }
                             composable(Screen.Scanner.route) { 
                                 ScannerScreen(

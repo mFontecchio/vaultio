@@ -14,94 +14,26 @@ import com.mrhayami.vaultio.data.local.PriceEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
-import com.squareup.moshi.Moshi
-import com.squareup.moshi.Types
+import com.mrhayami.vaultio.ui.common.MviViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class ViewMode { LIST, GRID, POKEDEX }
-enum class SortMode { NAME, SET, VALUE, DATE_ADDED, RARITY, QUANTITY, NUMBER }
-enum class SortDirection { ASCENDING, DESCENDING }
-
-data class ListSettings(
-    val showPrices: Boolean = true,
-    val isCompact: Boolean = false
-)
-
-data class GridSettings(
-    val columns: Int = 3,
-    val showBadges: Boolean = true
-)
-
-data class PokedexSettings(
-    val showUncollected: Boolean = true,
-    val useShinySprites: Boolean = false
-)
-
-data class FilterSettings(
-    val rarities: Set<String> = emptySet(),
-    val categories: Set<String> = emptySet(),
-    val types: Set<String> = emptySet(),
-    val conditions: Set<String> = emptySet(),
-    val finishes: Set<String> = emptySet()
-)
-
-data class PokedexEntry(
-    val dexNumber: Int,
-    val pokemonName: String?,
-    val cardCount: Int,
-    val totalQuantity: Int,
-    val representativeImage: String?,
-    val isCollected: Boolean
-)
-
-data class CollectionUiState(
-    val viewMode: ViewMode = ViewMode.GRID,
-    val sortMode: SortMode = SortMode.DATE_ADDED,
-    val sortDirection: SortDirection = SortDirection.DESCENDING,
-    val filterSettings: FilterSettings = FilterSettings(),
-    val userCards: List<CardWithDetails> = emptyList(),
-    val filteredUserCards: List<CardWithDetails> = emptyList(),
-    val pokedexEntries: List<PokedexEntry> = emptyList(),
-    val folders: List<FolderEntity> = emptyList(),
-    val selectedFolderId: Long? = null,
-    val searchQuery: String = "",
-    val isSearchBarVisible: Boolean = false,
-    val isLoading: Boolean = true,
-    val searchResults: List<TcgDexCard> = emptyList(),
-    val isSearching: Boolean = false,
-    val selectedIds: Set<Long> = emptySet(),
-    val isSelectionMode: Boolean = false,
-    val listSettings: ListSettings = ListSettings(),
-    val gridSettings: GridSettings = GridSettings(),
-    val pokedexSettings: PokedexSettings = PokedexSettings(),
-    val preferSetLogo: Boolean = true,
-    val sets: Map<String, SetEntity> = emptyMap(),
-    val showSaveSuccess: Boolean = false,
-    // Available filter options based on current collection
-    val availableRarities: List<String> = emptyList(),
-    val availableCategories: List<String> = emptyList(),
-    val availableTypes: List<String> = emptyList(),
-    val totalValue: Double = 0.0,
-    val totalCount: Int = 0,
-    val totalQuantity: Int = 0
-)
-
 class CollectionViewModel(
     private val repository: VaultioRepository,
     private val userPreferencesRepository: UserPreferencesRepository
-) : ViewModel() {
-
-    private val moshi = Moshi.Builder().build()
-    private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Int::class.javaObjectType))
+) : MviViewModel<CollectionUiState, CollectionEvent, CollectionEffect>(
+    initialState = CollectionUiState()
+) {
 
     private val _searchQuery = MutableStateFlow("")
     private val _selectedFolderId = MutableStateFlow<Long?>(null)
@@ -110,85 +42,219 @@ class CollectionViewModel(
     private val _filterSettings = MutableStateFlow(FilterSettings())
     private val _selectionState = MutableStateFlow(emptySet<Long>())
     private val _showSaveSuccess = MutableStateFlow(false)
+    private val _remoteSearchResults = MutableStateFlow<List<TcgDexCard>>(emptyList())
+    private val _isRemoteSearching = MutableStateFlow(false)
 
-    val uiState: StateFlow<CollectionUiState> = combine(
-        repository.allUserCards,
-        repository.allFolders,
-        repository.allFolderCardCrossRefs,
-        _searchQuery,
-        _selectedFolderId,
-        _isSearchBarVisible,
-        userPreferencesRepository.viewMode,
-        userPreferencesRepository.sortMode,
-        _sortDirection,
-        _filterSettings,
-        _selectionState,
-        userPreferencesRepository.listSettings,
-        userPreferencesRepository.gridSettings,
-        userPreferencesRepository.pokedexSettings,
-        userPreferencesRepository.preferSetLogo,
-        repository.allSets.map { sets -> sets.associateBy { it.id } },
-        _showSaveSuccess,
-        repository.allPrices,
-        repository.allVintagePrices
-    ) { flows: Array<Any?> ->
-        @Suppress("UNCHECKED_CAST")
-        val userCards = flows[0] as List<CardWithDetails>
-        @Suppress("UNCHECKED_CAST")
-        val folders = flows[1] as List<FolderEntity>
-        @Suppress("UNCHECKED_CAST")
-        val crossRefs = flows[2] as List<FolderCardCrossRef>
-        val searchQuery = flows[3] as String
-        val selectedFolderId = flows[4] as Long?
-        val isSearchBarVisible = flows[5] as Boolean
-        val viewMode = flows[6] as ViewMode
-        val sortMode = flows[7] as SortMode
-        val sortDirection = flows[8] as SortDirection
-        val filterSettings = flows[9] as FilterSettings
-        @Suppress("UNCHECKED_CAST")
-        val selectedIds = flows[10] as Set<Long>
-        val listSettings = flows[11] as ListSettings
-        val gridSettings = flows[12] as GridSettings
-        val pokedexSettings = flows[13] as PokedexSettings
-        val preferSetLogo = flows[14] as Boolean
-        @Suppress("UNCHECKED_CAST")
-        val sets = flows[15] as Map<String, SetEntity>
-        val showSaveSuccess = flows[16] as Boolean
-        @Suppress("UNCHECKED_CAST")
-        val allPrices = flows[17] as List<PriceEntity>
-        @Suppress("UNCHECKED_CAST")
-        val allVintagePrices = flows[18] as List<VintagePriceEntity>
+    // Base Data Flows
+    private val _allCards = repository.allUserCards
+    private val _allFolders = repository.allFolders
+    private val _allCrossRefs = repository.allFolderCardCrossRefs
+    private val _allPrices = repository.allPrices
+    private val _allVintagePrices = repository.allVintagePrices
+    private val _allSets = repository.allSets.map { sets -> sets.associateBy { it.id } }
 
-        // Calculate available filter options from the base userCards
-        val availableRarities = userCards.mapNotNull { it.card.rarity }.distinct().sorted()
-        val availableCategories = userCards.mapNotNull { it.card.category }.distinct().sorted()
-        val availableTypes = userCards.flatMap { it.card.types?.split(",") ?: emptyList() }
-            .map { it.trim() }.distinct().sorted()
+    init {
+        // Observe all data and update state
+        combine(
+            userPreferencesRepository.viewMode,
+            userPreferencesRepository.sortMode,
+            _sortDirection,
+            _filterSettings,
+            _searchQuery,
+            _selectedFolderId,
+            _isSearchBarVisible,
+            _allCards,
+            _allFolders,
+            _allCrossRefs,
+            _allPrices,
+            _allVintagePrices,
+            userPreferencesRepository.listSettings,
+            userPreferencesRepository.gridSettings,
+            userPreferencesRepository.pokedexSettings,
+            userPreferencesRepository.preferSetLogo,
+            _allSets,
+            _showSaveSuccess,
+            _selectionState,
+            _remoteSearchResults,
+            _isRemoteSearching
+        ) { flows ->
+            val viewMode = flows[0] as ViewMode
+            val sortMode = flows[1] as SortMode
+            val sortDirection = flows[2] as SortDirection
+            val filterSettings = flows[3] as FilterSettings
+            val searchQuery = flows[4] as String
+            val selectedFolderId = flows[5] as Long?
+            val isSearchBarVisible = flows[6] as Boolean
+            val allCards = flows[7] as List<CardWithDetails>
+            val folders = flows[8] as List<FolderEntity>
+            val crossRefs = flows[9] as List<FolderCardCrossRef>
+            val allPrices = flows[10] as List<PriceEntity>
+            val allVintagePrices = flows[11] as List<VintagePriceEntity>
+            val listSettings = flows[12] as ListSettings
+            val gridSettings = flows[13] as GridSettings
+            val pokedexSettings = flows[14] as PokedexSettings
+            val preferSetLogo = flows[15] as Boolean
+            val setsMap = flows[16] as Map<String, SetEntity>
+            val showSaveSuccess = flows[17] as Boolean
+            val selectedIds = flows[18] as Set<Long>
+            val remoteResults = flows[19] as List<TcgDexCard>
+            val isRemoteSearching = flows[20] as Boolean
 
+            // Filter logic
+            val filteredCards = filterAndSortCards(
+                allCards, crossRefs, searchQuery, selectedFolderId,
+                sortMode, sortDirection, filterSettings, allPrices, allVintagePrices
+            )
+
+            // Stats logic
+            val stats = computeStats(filteredCards, allPrices, allVintagePrices)
+
+            // Available filters logic
+            val availableFilters = computeAvailableFilters(allCards)
+
+            // Pokedex logic
+            val pokedexUserCards = if (selectedFolderId == null && filterSettings == FilterSettings()) allCards else filteredCards
+            val effectivePokedexSettings = if (selectedFolderId != null || filterSettings != FilterSettings()) {
+                pokedexSettings.copy(showUncollected = false)
+            } else pokedexSettings
+            
+            var pokedexEntries = computePokedexEntries(pokedexUserCards, effectivePokedexSettings)
+            if (searchQuery.isNotBlank()) {
+                pokedexEntries = pokedexEntries.filter { entry ->
+                    entry.pokemonName?.contains(searchQuery, ignoreCase = true) == true ||
+                    entry.dexNumber.toString() == searchQuery
+                }
+            }
+
+            updateState {
+                copy(
+                    viewMode = viewMode,
+                    sortMode = sortMode,
+                    sortDirection = sortDirection,
+                    filterSettings = filterSettings,
+                    userCards = allCards,
+                    filteredUserCards = filteredCards,
+                    pokedexEntries = pokedexEntries,
+                    folders = folders,
+                    selectedFolderId = selectedFolderId,
+                    searchQuery = searchQuery,
+                    isSearchBarVisible = isSearchBarVisible,
+                    isLoading = false,
+                    selectedIds = selectedIds,
+                    isSelectionMode = selectedIds.isNotEmpty(),
+                    listSettings = listSettings,
+                    gridSettings = gridSettings,
+                    pokedexSettings = pokedexSettings,
+                    preferSetLogo = preferSetLogo,
+                    sets = setsMap,
+                    showSaveSuccess = showSaveSuccess,
+                    availableRarities = availableFilters.first,
+                    availableCategories = availableFilters.second,
+                    availableTypes = availableFilters.third,
+                    totalValue = stats.first,
+                    totalCount = stats.second,
+                    totalQuantity = stats.third,
+                    searchResults = remoteResults,
+                    isSearching = isRemoteSearching
+                )
+            }
+        }.launchIn(viewModelScope)
+    }
+
+    override fun onEvent(event: CollectionEvent) {
+        when (event) {
+            is CollectionEvent.OnViewModeChange -> setViewMode(event.viewMode)
+            is CollectionEvent.OnSortModeChange -> setSortMode(event.sortMode)
+            is CollectionEvent.OnSortDirectionChange -> setSortDirection(event.direction)
+            CollectionEvent.OnToggleSearchBar -> toggleSearchBar()
+            is CollectionEvent.OnSearchQueryChange -> setSearchQuery(event.query)
+            is CollectionEvent.OnFolderSelect -> selectFolder(event.folderId)
+            is CollectionEvent.OnUpdateListSettings -> updateListSettings(event.settings)
+            is CollectionEvent.OnUpdateGridSettings -> updateGridSettings(event.settings)
+            is CollectionEvent.OnUpdatePokedexSettings -> updatePokedexSettings(event.settings)
+            is CollectionEvent.OnToggleRarityFilter -> toggleRarityFilter(event.rarity)
+            is CollectionEvent.OnToggleCategoryFilter -> toggleCategoryFilter(event.category)
+            is CollectionEvent.OnToggleTypeFilter -> toggleTypeFilter(event.type)
+            is CollectionEvent.OnToggleConditionFilter -> toggleConditionFilter(event.condition)
+            is CollectionEvent.OnToggleFinishFilter -> toggleFinishFilter(event.finish)
+            CollectionEvent.OnClearFilters -> clearFilters()
+            is CollectionEvent.OnToggleSelection -> toggleSelection(event.id)
+            CollectionEvent.OnSelectAll -> selectAll()
+            CollectionEvent.OnClearSelection -> clearSelection()
+            CollectionEvent.OnDeleteSelectedCards -> deleteSelectedCards()
+            is CollectionEvent.OnMoveSelectedToFolder -> moveSelectedToFolder(event.folderId)
+            is CollectionEvent.OnAddFolder -> addFolder(event.name, event.icon, event.color)
+            is CollectionEvent.OnUpdateFolder -> updateFolder(event.folder)
+            is CollectionEvent.OnDeleteFolder -> deleteFolder(event.folder)
+            is CollectionEvent.OnSearchRemoteCards -> searchRemoteCards(event.query)
+            is CollectionEvent.OnAddUserCard -> addUserCard(event.card, event.quantity, event.condition, event.printing, event.finish, event.folderIds)
+            CollectionEvent.OnConsumeSaveSuccess -> consumeSaveSuccess()
+        }
+    }
+
+    private fun filterAndSortCards(
+        userCards: List<CardWithDetails>,
+        crossRefs: List<FolderCardCrossRef>,
+        searchQuery: String,
+        selectedFolderId: Long?,
+        sortMode: SortMode,
+        sortDirection: SortDirection,
+        filterSettings: FilterSettings,
+        allPrices: List<PriceEntity>,
+        allVintagePrices: List<VintagePriceEntity>
+    ): List<CardWithDetails> {
         var filtered = userCards.filter { cardWithDetails ->
             val card = cardWithDetails.card
             val userCard = cardWithDetails.userCard
-            
-            val matchesSearch = if (searchQuery.isBlank()) true 
-                else card.name.contains(searchQuery, ignoreCase = true) || 
-                     card.pokemonName?.contains(searchQuery, ignoreCase = true) == true ||
-                     cardWithDetails.set.name.contains(searchQuery, ignoreCase = true)
-            
+
+            val matchesSearch = if (searchQuery.isBlank()) true
+            else card.name.contains(searchQuery, ignoreCase = true) ||
+                    card.pokemonName?.contains(searchQuery, ignoreCase = true) == true ||
+                    cardWithDetails.set.name.contains(searchQuery, ignoreCase = true)
+
             val matchesFolder = if (selectedFolderId == null) true
-                else crossRefs.any { it.folderId == selectedFolderId && it.userCardId == userCard.id }
-            
+            else crossRefs.any { it.folderId == selectedFolderId && it.userCardId == userCard.id }
+
             val matchesRarity = filterSettings.rarities.isEmpty() || filterSettings.rarities.contains(card.rarity)
             val matchesCategory = filterSettings.categories.isEmpty() || filterSettings.categories.contains(card.category)
             val matchesCondition = filterSettings.conditions.isEmpty() || filterSettings.conditions.contains(userCard.condition)
             val matchesFinish = filterSettings.finishes.isEmpty() || filterSettings.finishes.contains(userCard.finish)
-            
+
             val cardTypes = card.types?.split(",")?.map { it.trim() } ?: emptyList()
             val matchesType = filterSettings.types.isEmpty() || cardTypes.any { filterSettings.types.contains(it) }
-            
+
             matchesSearch && matchesFolder && matchesRarity && matchesCategory && matchesCondition && matchesFinish && matchesType
         }
 
-        // Calculate total value for filtered cards
+        val comparator = when (sortMode) {
+            SortMode.NAME -> compareBy<CardWithDetails> { it.card.name }
+            SortMode.SET -> compareBy<CardWithDetails> { it.set.releaseDate }.thenBy { it.card.localId.padStart(5, '0') }
+            SortMode.VALUE -> compareBy<CardWithDetails> { item ->
+                item.userCard.manualPrice ?: run {
+                    val cardId = item.card.id
+                    val finish = item.userCard.finish
+                    val condition = item.userCard.condition
+                    val printing = item.userCard.printing
+                    allPrices.find { it.cardId == cardId && it.finish == finish && it.condition == condition }?.marketPrice
+                        ?: allVintagePrices.find { it.cardId == cardId && it.finish == finish && it.condition == condition && it.printing == printing }?.marketPrice
+                        ?: 0.0
+                }
+            }
+            SortMode.DATE_ADDED -> compareBy<CardWithDetails> { it.userCard.dateAdded }
+            SortMode.RARITY -> compareBy<CardWithDetails> { it.card.rarity }
+            SortMode.QUANTITY -> compareBy<CardWithDetails> { it.userCard.quantity }
+            SortMode.NUMBER -> compareBy<CardWithDetails> { it.card.localId.padStart(5, '0') }
+        }
+
+        filtered = if (sortDirection == SortDirection.ASCENDING) filtered.sortedWith(comparator) else filtered.sortedWith(comparator.reversed())
+        return filtered
+    }
+
+    private fun computeStats(
+        filtered: List<CardWithDetails>,
+        allPrices: List<PriceEntity>,
+        allVintagePrices: List<VintagePriceEntity>
+    ): Triple<Double, Int, Int> {
         var totalValue = 0.0
         var totalQuantity = 0
         filtered.forEach { item ->
@@ -199,82 +265,21 @@ class CollectionViewModel(
                 val finish = item.userCard.finish
                 val condition = item.userCard.condition
                 val printing = item.userCard.printing
-                
-                val foundPrice = allPrices.find { 
-                    it.cardId == cardId && it.finish == finish && it.condition == condition 
-                }?.marketPrice ?: allVintagePrices.find {
-                    it.cardId == cardId && it.finish == finish && it.condition == condition && it.printing == printing
-                }?.marketPrice
-                
-                foundPrice ?: 0.0
+                allPrices.find { it.cardId == cardId && it.finish == finish && it.condition == condition }?.marketPrice
+                    ?: allVintagePrices.find { it.cardId == cardId && it.finish == finish && it.condition == condition && it.printing == printing }?.marketPrice
+                    ?: 0.0
             }
             totalValue += price * quantity
         }
+        return Triple(totalValue, filtered.size, totalQuantity)
+    }
 
-        // Sorting
-        val comparator = when (sortMode) {
-            SortMode.NAME -> compareBy<CardWithDetails> { it.card.name }
-            SortMode.SET -> compareBy<CardWithDetails> { it.set.releaseDate }.thenBy { it.card.localId.padStart(5, '0') }
-            SortMode.VALUE -> compareBy<CardWithDetails> { it.userCard.manualPrice ?: 0.0 }
-            SortMode.DATE_ADDED -> compareBy<CardWithDetails> { it.userCard.dateAdded }
-            SortMode.RARITY -> compareBy<CardWithDetails> { it.card.rarity }
-            SortMode.QUANTITY -> compareBy<CardWithDetails> { it.userCard.quantity }
-            SortMode.NUMBER -> compareBy<CardWithDetails> { it.card.localId.padStart(5, '0') }
-        }
-
-        filtered = if (sortDirection == SortDirection.ASCENDING) {
-            filtered.sortedWith(comparator)
-        } else {
-            filtered.sortedWith(comparator.reversed())
-        }
-
-        // Pokedex entries should respect the folder filter and other filters if we want consistency
-        val pokedexUserCards = if (selectedFolderId == null && filterSettings == FilterSettings()) userCards else filtered
-        val effectivePokedexSettings = if (selectedFolderId != null || filterSettings != FilterSettings()) pokedexSettings.copy(showUncollected = false) else pokedexSettings
-        val pokedexEntries = if (searchQuery.isNotBlank()) {
-            val entries = computePokedexEntries(pokedexUserCards, effectivePokedexSettings)
-            entries.filter { entry ->
-                entry.pokemonName?.contains(searchQuery, ignoreCase = true) == true ||
-                entry.dexNumber.toString() == searchQuery
-            }
-        } else {
-            computePokedexEntries(pokedexUserCards, effectivePokedexSettings)
-        }
-
-        CollectionUiState(
-            viewMode = viewMode,
-            sortMode = sortMode,
-            sortDirection = sortDirection,
-            filterSettings = filterSettings,
-            userCards = userCards,
-            filteredUserCards = filtered,
-            pokedexEntries = pokedexEntries,
-            folders = folders,
-            selectedFolderId = selectedFolderId,
-            searchQuery = searchQuery,
-            isSearchBarVisible = isSearchBarVisible,
-            isLoading = false,
-            selectedIds = selectedIds,
-            isSelectionMode = selectedIds.isNotEmpty(),
-            listSettings = listSettings,
-            gridSettings = gridSettings,
-            pokedexSettings = pokedexSettings,
-            preferSetLogo = preferSetLogo,
-            sets = sets,
-            showSaveSuccess = showSaveSuccess,
-            availableRarities = availableRarities,
-            availableCategories = availableCategories,
-            availableTypes = availableTypes,
-            totalValue = totalValue,
-            totalCount = filtered.size,
-            totalQuantity = totalQuantity
-        )
-    }.flowOn(Dispatchers.Default)
-    .stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = CollectionUiState()
-    )
+    private fun computeAvailableFilters(userCards: List<CardWithDetails>): Triple<List<String>, List<String>, List<String>> {
+        val rarities = userCards.mapNotNull { it.card.rarity }.distinct().sorted()
+        val categories = userCards.mapNotNull { it.card.category }.distinct().sorted()
+        val types = userCards.flatMap { it.card.types?.split(",") ?: emptyList() }.map { it.trim() }.distinct().sorted()
+        return Triple(rarities, categories, types)
+    }
 
     private fun computePokedexEntries(userCards: List<CardWithDetails>, settings: PokedexSettings): List<PokedexEntry> {
         val buckets = mutableMapOf<Int, MutableList<CardWithDetails>>()
@@ -283,12 +288,7 @@ class CollectionViewModel(
 
         userCards.forEach { cardWithDetails ->
             val card = cardWithDetails.card
-            val dexIds = try {
-                card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
-            } catch (_: Exception) {
-                listOfNotNull(card.dexId?.toIntOrNull())
-            }
-
+            val dexIds = PokemonUtils.parseDexIds(card.dexIds, card.dexId)
             val normalizedName = card.pokemonName ?: PokemonUtils.extractPokemonName(card.name)
 
             dexIds.forEach { id ->
@@ -303,11 +303,7 @@ class CollectionViewModel(
 
         userCards.forEach { cardWithDetails ->
             val card = cardWithDetails.card
-            val dexIds = try {
-                card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
-            } catch (_: Exception) {
-                listOfNotNull(card.dexId?.toIntOrNull())
-            }
+            val dexIds = PokemonUtils.parseDexIds(card.dexIds, card.dexId)
 
             if (dexIds.isEmpty()) {
                 val normalizedName = card.pokemonName ?: PokemonUtils.extractPokemonName(card.name)
@@ -345,56 +341,56 @@ class CollectionViewModel(
         return entries
     }
 
-    fun setViewMode(viewMode: ViewMode) {
+    private fun setViewMode(viewMode: ViewMode) {
         viewModelScope.launch {
             userPreferencesRepository.setViewMode(viewMode)
         }
     }
 
-    fun setSortMode(sortMode: SortMode) {
+    private fun setSortMode(sortMode: SortMode) {
         viewModelScope.launch {
             userPreferencesRepository.setSortMode(sortMode)
         }
     }
 
-    fun setSortDirection(direction: SortDirection) {
+    private fun setSortDirection(direction: SortDirection) {
         _sortDirection.value = direction
     }
 
-    fun toggleSearchBar() {
+    private fun toggleSearchBar() {
         _isSearchBarVisible.update { !it }
         if (!_isSearchBarVisible.value) {
             _searchQuery.value = ""
         }
     }
 
-    fun setSearchQuery(query: String) {
+    private fun setSearchQuery(query: String) {
         _searchQuery.value = query
     }
 
-    fun selectFolder(folderId: Long?) {
+    private fun selectFolder(folderId: Long?) {
         _selectedFolderId.value = folderId
     }
 
-    fun updateListSettings(settings: ListSettings) {
+    private fun updateListSettings(settings: ListSettings) {
         viewModelScope.launch {
             userPreferencesRepository.setListSettings(settings)
         }
     }
 
-    fun updateGridSettings(settings: GridSettings) {
+    private fun updateGridSettings(settings: GridSettings) {
         viewModelScope.launch {
             userPreferencesRepository.setGridSettings(settings)
         }
     }
 
-    fun updatePokedexSettings(settings: PokedexSettings) {
+    private fun updatePokedexSettings(settings: PokedexSettings) {
         viewModelScope.launch {
             userPreferencesRepository.setPokedexSettings(settings)
         }
     }
 
-    fun toggleRarityFilter(rarity: String) {
+    private fun toggleRarityFilter(rarity: String) {
         _filterSettings.update { current ->
             val newRarities = if (current.rarities.contains(rarity)) {
                 current.rarities - rarity
@@ -405,7 +401,7 @@ class CollectionViewModel(
         }
     }
 
-    fun toggleCategoryFilter(category: String) {
+    private fun toggleCategoryFilter(category: String) {
         _filterSettings.update { current ->
             val newCategories = if (current.categories.contains(category)) {
                 current.categories - category
@@ -416,7 +412,7 @@ class CollectionViewModel(
         }
     }
 
-    fun toggleTypeFilter(type: String) {
+    private fun toggleTypeFilter(type: String) {
         _filterSettings.update { current ->
             val newTypes = if (current.types.contains(type)) {
                 current.types - type
@@ -427,7 +423,7 @@ class CollectionViewModel(
         }
     }
 
-    fun toggleConditionFilter(condition: String) {
+    private fun toggleConditionFilter(condition: String) {
         _filterSettings.update { current ->
             val newConditions = if (current.conditions.contains(condition)) {
                 current.conditions - condition
@@ -438,7 +434,7 @@ class CollectionViewModel(
         }
     }
 
-    fun toggleFinishFilter(finish: String) {
+    private fun toggleFinishFilter(finish: String) {
         _filterSettings.update { current ->
             val newFinishes = if (current.finishes.contains(finish)) {
                 current.finishes - finish
@@ -449,11 +445,11 @@ class CollectionViewModel(
         }
     }
 
-    fun clearFilters() {
+    private fun clearFilters() {
         _filterSettings.value = FilterSettings()
     }
 
-    fun addUserCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String, folderIds: List<Long> = emptyList()) {
+    private fun addUserCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String, folderIds: List<Long>) {
         viewModelScope.launch {
             repository.addUserCard(
                 card,
@@ -470,65 +466,58 @@ class CollectionViewModel(
         }
     }
 
-    fun consumeSaveSuccess() {
+    private fun consumeSaveSuccess() {
         _showSaveSuccess.value = false
     }
 
-    fun addFolder(name: String, icon: String?, color: String?) {
+    private fun addFolder(name: String, icon: String?, color: String?) {
         viewModelScope.launch {
             repository.addFolder(name, icon, color)
         }
     }
 
-    fun updateFolder(folder: FolderEntity) {
+    private fun updateFolder(folder: FolderEntity) {
         viewModelScope.launch {
             repository.updateFolder(folder)
         }
     }
 
-    fun deleteFolder(folder: FolderEntity) {
+    private fun deleteFolder(folder: FolderEntity) {
         viewModelScope.launch {
             repository.deleteFolder(folder)
         }
     }
 
-    fun toggleSelection(id: Long) {
+    private fun toggleSelection(id: Long) {
         _selectionState.update { current ->
             if (current.contains(id)) current - id else current + id
         }
     }
 
-    fun selectAll() {
-        val allIds = uiState.value.userCards.map { it.userCard.id }.toSet()
+    private fun selectAll() {
+        val allIds = state.value.userCards.map { it.userCard.id }.toSet()
         _selectionState.value = allIds
     }
 
-    fun clearSelection() {
+    private fun clearSelection() {
         _selectionState.value = emptySet()
     }
 
-    fun deleteSelectedCards() {
+    private fun deleteSelectedCards() {
         viewModelScope.launch {
             repository.deleteUserCards(_selectionState.value.toList())
             clearSelection()
         }
     }
 
-    fun moveSelectedToFolder(folderId: Long) {
+    private fun moveSelectedToFolder(folderId: Long) {
         viewModelScope.launch {
             repository.addCardsToFolder(_selectionState.value.toList(), folderId)
             clearSelection()
         }
     }
 
-    private val _remoteSearchResults = MutableStateFlow<List<TcgDexCard>>(emptyList())
-    private val _isRemoteSearching = MutableStateFlow(false)
-    
-    val remoteSearchState = combine(_remoteSearchResults, _isRemoteSearching) { results, loading ->
-        Pair(results, loading)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Pair(emptyList(), false))
-
-    fun searchRemoteCards(query: String) {
+    private fun searchRemoteCards(query: String) {
         viewModelScope.launch {
             _isRemoteSearching.value = true
             val results = repository.searchTcgDex(query)

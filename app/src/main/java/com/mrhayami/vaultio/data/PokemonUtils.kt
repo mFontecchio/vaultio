@@ -517,6 +517,20 @@ object PokemonUtils {
     // Regex to split Tag Team / LEGEND card names on " & " or " and "
     private val tagTeamSplitRegex = Regex("""\s+(?:&|and)\s+""", RegexOption.IGNORE_CASE)
 
+    private val moshi = com.squareup.moshi.Moshi.Builder().build()
+    private val listIntAdapter = moshi.adapter<List<Int>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Int::class.javaObjectType))
+
+    /**
+     * Parses a JSON string of Dex IDs or returns a list containing the single dexId if provided.
+     */
+    fun parseDexIds(dexIdsJson: String?, singleDexId: String?): List<Int> {
+        return try {
+            dexIdsJson?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(singleDexId?.toIntOrNull())
+        } catch (_: Exception) {
+            listOfNotNull(singleDexId?.toIntOrNull())
+        }
+    }
+
     // ─── Public API ───────────────────────────────────────────────────────────
 
     /**

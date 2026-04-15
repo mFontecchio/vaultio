@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -105,9 +107,11 @@ fun ScannerScreen(
     var showBulkSettings by remember { mutableStateOf(false) }
     var showSkippedReview by remember { mutableStateOf(false) }
     
+    val onEventStable = remember(viewModel) { { event: ScannerEvent -> viewModel.onEvent(event) } }
+    
     ScannerContent(
         uiState = uiState,
-        onEvent = viewModel::onEvent,
+        onEvent = onEventStable,
         onNavigateBack = onNavigateBack,
         onShowBulkSettings = { showBulkSettings = true },
         onShowSkippedReview = { showSkippedReview = true }
@@ -150,12 +154,14 @@ fun ScannerContent(
     onShowSkippedReview: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val onEventStable = remember(onEvent) { onEvent }
+    
     Box(modifier = modifier.fillMaxSize()) {
         if (uiState.hasCameraPermission) {
             if (uiState.pageScanMode == PageScanMode.REVIEWING) {
                 PageScanReviewContent(
                     uiState = uiState,
-                    onEvent = onEvent
+                    onEvent = onEventStable
                 )
             } else {
                 Box(
@@ -164,14 +170,20 @@ fun ScannerContent(
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color.Black)
                 ) {
+                    val onLinesDetected = remember(onEventStable) {
+                        { lines: List<DetectedLine>, pHash: Long? ->
+                            onEventStable(ScannerEvent.LinesDetected(lines, pHash))
+                        }
+                    }
+                    val onPhotoCaptured = remember(onEventStable) {
+                        { bitmap: Bitmap ->
+                            onEventStable(ScannerEvent.CapturePagePhoto(bitmap))
+                        }
+                    }
                     CameraPreview(
                         isPageScanMode = uiState.isPageScanMode,
-                        onLinesDetected = { lines, pHash ->
-                            onEvent(ScannerEvent.LinesDetected(lines, pHash))
-                        },
-                        onPhotoCaptured = { bitmap ->
-                            onEvent(ScannerEvent.CapturePagePhoto(bitmap))
-                        }
+                        onLinesDetected = onLinesDetected,
+                        onPhotoCaptured = onPhotoCaptured
                     )
                     
                     if (uiState.isPageScanMode) {
@@ -852,17 +864,84 @@ fun CameraPreview(
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val executor = remember { Executors.newSingleThreadExecutor() }
+    
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
 
-    val resolutionSelector = ResolutionSelector.Builder()
-        .setResolutionStrategy(
-            ResolutionStrategy(
-                Size(1920, 1080),
-                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+    DisposableEffect(Unit) {
+        onDispose {
+            executor.shutdown()
+        }
+    }
+
+    val resolutionSelector = remember {
+        ResolutionSelector.Builder()
+            .setResolutionStrategy(
+                ResolutionStrategy(
+                    Size(1920, 1080),
+                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                )
             )
-        )
-        .build()
+            .build()
+    }
+
+    LaunchedEffect(isPageScanMode, lifecycleOwner, previewViewRef) {
+        val previewView = previewViewRef ?: return@LaunchedEffect
+        
+        val cameraProvider = suspendCancellableCoroutine<ProcessCameraProvider> { continuation ->
+            cameraProviderFuture.addListener({
+                continuation.resume(cameraProviderFuture.get())
+            }, ContextCompat.getMainExecutor(context))
+        }
+
+        val preview = CameraPreview.Builder()
+            .setResolutionSelector(resolutionSelector)
+            .build().also {
+                it.surfaceProvider = previewView.surfaceProvider
+            }
+
+        val imageAnalysis = ImageAnalysis.Builder()
+            .setResolutionSelector(resolutionSelector)
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+            .also {
+                // Determine aspect ratio for analyzer
+                val ar = if (previewView.width > 0) {
+                    previewView.width.toFloat() / previewView.height.toFloat()
+                } else {
+                    context.resources.displayMetrics.let { dm ->
+                        dm.widthPixels.toFloat() / dm.heightPixels.toFloat()
+                    }
+                }
+                it.setAnalyzer(executor, CameraAnalyzer(ar, onLinesDetected))
+            }
+
+        val capture = ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+            .build()
+        imageCapture = capture
+
+        try {
+            cameraProvider.unbindAll()
+            if (isPageScanMode) {
+                cameraProvider.bindToLifecycle(
+                    lifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    capture
+                )
+            } else {
+                cameraProvider.bindToLifecycle(
+                    lifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    imageAnalysis
+                )
+            }
+        } catch (exc: Exception) {
+            exc.printStackTrace()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
@@ -872,54 +951,7 @@ fun CameraPreview(
                 }.also { previewViewRef = it }
             },
             modifier = Modifier.fillMaxSize(),
-            update = { previewView ->
-                previewViewRef = previewView
-                val cameraProvider = cameraProviderFuture.get()
-                val preview = CameraPreview.Builder()
-                    .setResolutionSelector(resolutionSelector)
-                    .build().also {
-                        it.surfaceProvider = previewView.surfaceProvider
-                    }
-
-                val imageAnalysis = ImageAnalysis.Builder()
-                    .setResolutionSelector(resolutionSelector)
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
-                    .also {
-                        val ar = if (previewView.width > 0) {
-                            previewView.width.toFloat() / previewView.height.toFloat()
-                        } else {
-                            0.5625f // Default 9:16
-                        }
-                        it.setAnalyzer(executor, CameraAnalyzer(ar, onLinesDetected))
-                    }
-
-                val capture = ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-                    .build()
-                imageCapture = capture
-
-                try {
-                    cameraProvider.unbindAll()
-                    if (isPageScanMode) {
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                            capture
-                        )
-                    } else {
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                            imageAnalysis
-                        )
-                    }
-                } catch (exc: Exception) {
-                    exc.printStackTrace()
-                }
-            }
+            update = { /* Camera logic moved to LaunchedEffect */ }
         )
 
         val gridAlpha = if (isPageScanMode) 1f else 0f
@@ -1094,7 +1126,10 @@ fun PageScanReviewContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(uiState.pageScanCells) { cell ->
+            items(
+                items = uiState.pageScanCells,
+                key = { it.id }
+            ) { cell ->
                 PageCellReviewItem(cell = cell, onEvent = onEvent)
             }
         }
@@ -1364,7 +1399,7 @@ fun ScannerOverlay(isSearching: Boolean) {
 
 @Preview(showBackground = true)
 @Composable
-private fun CandidateItemPreview() {
+fun CandidateItemPreview() {
     VaultioTheme {
         CandidateItem(
             card = TcgDexCard(
@@ -1382,7 +1417,7 @@ private fun CandidateItemPreview() {
 
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
-private fun ScannerOverlayPreview() {
+fun ScannerOverlayPreview() {
     VaultioTheme {
         Box(modifier = Modifier.fillMaxSize()) {
             ScannerOverlay(isSearching = true)
@@ -1392,7 +1427,7 @@ private fun ScannerOverlayPreview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun ScannerContentPermissionPreview() {
+fun ScannerContentPermissionPreview() {
     VaultioTheme {
         ScannerContent(
             uiState = ScannerUiState(hasCameraPermission = false),
@@ -1406,7 +1441,7 @@ private fun ScannerContentPermissionPreview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun ScannerContentSearchingPreview() {
+fun ScannerContentSearchingPreview() {
     VaultioTheme {
         ScannerContent(
             uiState = ScannerUiState(
@@ -1425,7 +1460,7 @@ private fun ScannerContentSearchingPreview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun ScannerContentAutoSelectedPreview() {
+fun ScannerContentAutoSelectedPreview() {
     VaultioTheme {
         ScannerContent(
             uiState = ScannerUiState(
@@ -1449,7 +1484,7 @@ private fun ScannerContentAutoSelectedPreview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun BulkSettingsPreview() {
+fun BulkSettingsPreview() {
     VaultioTheme {
         Surface {
             BulkSettingsSheet(
@@ -1468,7 +1503,7 @@ private fun BulkSettingsPreview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun BulkHUDPreview() {
+fun BulkHUDPreview() {
     VaultioTheme {
         Box(modifier = Modifier.fillMaxSize()) {
             BulkModeHUD(
@@ -1496,7 +1531,7 @@ private fun BulkHUDPreview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun SkippedReviewPreview() {
+fun SkippedReviewPreview() {
     VaultioTheme {
         Surface {
             SkippedReviewSheet(
@@ -1515,7 +1550,7 @@ private fun SkippedReviewPreview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun PageScanReviewPreview() {
+fun PageScanReviewPreview() {
     VaultioTheme {
         Surface {
             PageScanReviewContent(
@@ -1547,7 +1582,7 @@ private fun PageScanReviewPreview() {
 
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
-private fun PageScanOverlayIdlePreview() {
+fun PageScanOverlayIdlePreview() {
     VaultioTheme {
         Box(modifier = Modifier.fillMaxSize()) {
             PageScanOverlay(isProcessing = false)
@@ -1557,7 +1592,7 @@ private fun PageScanOverlayIdlePreview() {
 
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
-private fun PageScanOverlayProcessingPreview() {
+fun PageScanOverlayProcessingPreview() {
     VaultioTheme {
         Box(modifier = Modifier.fillMaxSize()) {
             PageScanOverlay(isProcessing = true)
@@ -1567,7 +1602,7 @@ private fun PageScanOverlayProcessingPreview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun ScannerContentBulkModePreview() {
+fun ScannerContentBulkModePreview() {
     VaultioTheme {
         ScannerContent(
             uiState = ScannerUiState(

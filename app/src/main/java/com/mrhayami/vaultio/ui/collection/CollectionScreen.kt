@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.UserPreferencesRepository
@@ -68,6 +69,8 @@ import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.components.*
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -81,17 +84,32 @@ fun CollectionScreen(
         factory = CollectionViewModelFactory(repository, userPreferencesRepository)
     )
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val allPrices by repository.allPrices.collectAsState(initial = emptyList())
-    val allVintagePrices by repository.allVintagePrices.collectAsState(initial = emptyList())
-    val remoteSearchState by viewModel.remoteSearchState.collectAsState()
+    val uiState by viewModel.state.collectAsStateWithLifecycle()
+    val allPrices by repository.allPrices.collectAsStateWithLifecycle(initialValue = emptyList())
+    val allVintagePrices by repository.allVintagePrices.collectAsStateWithLifecycle(initialValue = emptyList())
 
     val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        viewModel.sideEffects.collect { effect ->
+            when (effect) {
+                is CollectionEffect.ShowToast -> {
+                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                }
+                is CollectionEffect.Navigation -> {
+                    when (effect) {
+                        CollectionEffect.Navigation.ToScanner -> onNavigateToScanner()
+                        is CollectionEffect.Navigation.ToCardDetail -> onNavigateToCardDetail(effect.userCardId)
+                    }
+                }
+            }
+        }
+    }
 
     LaunchedEffect(uiState.showSaveSuccess) {
         if (uiState.showSaveSuccess) {
             Toast.makeText(context, "Card added to collection", Toast.LENGTH_SHORT).show()
-            viewModel.consumeSaveSuccess()
+            viewModel.onEvent(CollectionEvent.OnConsumeSaveSuccess)
         }
     }
 
@@ -99,34 +117,9 @@ fun CollectionScreen(
         uiState = uiState,
         allPrices = allPrices,
         allVintagePrices = allVintagePrices,
-        remoteSearchState = remoteSearchState,
+        onEvent = viewModel::onEvent,
         onNavigateToScanner = onNavigateToScanner,
-        onNavigateToCardDetail = onNavigateToCardDetail,
-        onClearSelection = viewModel::clearSelection,
-        onSelectAll = viewModel::selectAll,
-        onDeleteSelected = viewModel::deleteSelectedCards,
-        onMoveSelectedToFolder = viewModel::moveSelectedToFolder,
-        onSetSearchQuery = viewModel::setSearchQuery,
-        onToggleSearchBar = viewModel::toggleSearchBar,
-        onSelectFolder = viewModel::selectFolder,
-        onAddFolder = viewModel::addFolder,
-        onUpdateFolder = viewModel::updateFolder,
-        onDeleteFolder = viewModel::deleteFolder,
-        onViewModeChange = viewModel::setViewMode,
-        onUpdateListSettings = viewModel::updateListSettings,
-        onUpdateGridSettings = viewModel::updateGridSettings,
-        onUpdatePokedexSettings = viewModel::updatePokedexSettings,
-        onSortModeChange = viewModel::setSortMode,
-        onSortDirectionChange = viewModel::setSortDirection,
-        onToggleRarity = viewModel::toggleRarityFilter,
-        onToggleCategory = viewModel::toggleCategoryFilter,
-        onToggleType = viewModel::toggleTypeFilter,
-        onToggleCondition = viewModel::toggleConditionFilter,
-        onToggleFinish = viewModel::toggleFinishFilter,
-        onClearFilters = viewModel::clearFilters,
-        onToggleSelection = viewModel::toggleSelection,
-        onSearchRemoteCards = viewModel::searchRemoteCards,
-        onAddUserCard = viewModel::addUserCard
+        onNavigateToCardDetail = onNavigateToCardDetail
     )
 }
 
@@ -135,34 +128,9 @@ fun CollectionContent(
     uiState: CollectionUiState,
     allPrices: List<PriceEntity>,
     allVintagePrices: List<VintagePriceEntity>,
-    remoteSearchState: Pair<List<TcgDexCard>, Boolean>,
+    onEvent: (CollectionEvent) -> Unit,
     onNavigateToScanner: () -> Unit,
     onNavigateToCardDetail: (Long) -> Unit,
-    onClearSelection: () -> Unit,
-    onSelectAll: () -> Unit,
-    onDeleteSelected: () -> Unit,
-    onMoveSelectedToFolder: (Long) -> Unit,
-    onSetSearchQuery: (String) -> Unit,
-    onToggleSearchBar: () -> Unit,
-    onSelectFolder: (Long?) -> Unit,
-    onAddFolder: (String, String?, String?) -> Unit,
-    onUpdateFolder: (FolderEntity) -> Unit,
-    onDeleteFolder: (FolderEntity) -> Unit,
-    onViewModeChange: (ViewMode) -> Unit,
-    onUpdateListSettings: (ListSettings) -> Unit,
-    onUpdateGridSettings: (GridSettings) -> Unit,
-    onUpdatePokedexSettings: (PokedexSettings) -> Unit,
-    onSortModeChange: (SortMode) -> Unit,
-    onSortDirectionChange: (SortDirection) -> Unit,
-    onToggleRarity: (String) -> Unit,
-    onToggleCategory: (String) -> Unit,
-    onToggleType: (String) -> Unit,
-    onToggleCondition: (String) -> Unit,
-    onToggleFinish: (String) -> Unit,
-    onClearFilters: () -> Unit,
-    onToggleSelection: (Long) -> Unit,
-    onSearchRemoteCards: (String) -> Unit,
-    onAddUserCard: (TcgDexCard, Int, String, String, String, List<Long>) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showAddCardModal by remember { mutableStateOf(false) }
@@ -175,6 +143,16 @@ fun CollectionContent(
     
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
+    
+    val onCardClick = remember(uiState.isSelectionMode) {
+        { id: Long -> if (uiState.isSelectionMode) onEvent(CollectionEvent.OnToggleSelection(id)) else onNavigateToCardDetail(id) }
+    }
+    val onCardLongClick = remember {
+        { id: Long -> onEvent(CollectionEvent.OnToggleSelection(id)) }
+    }
+    val onDexClick = remember {
+        { dexId: Int -> selectedDexId = dexId }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -183,13 +161,13 @@ fun CollectionContent(
                 TopAppBar(
                     title = { Text("${uiState.selectedIds.size} Selected") },
                     navigationIcon = {
-                        IconButton(onClick = onClearSelection) {
+                        IconButton(onClick = { onEvent(CollectionEvent.OnClearSelection) }) {
                             Icon(Icons.Rounded.Close, contentDescription = "Clear Selection")
                         }
                     },
                     actions = {
                         val allSelected = uiState.selectedIds.size == uiState.userCards.size
-                        IconButton(onClick = { if (allSelected) onClearSelection() else onSelectAll() }) {
+                        IconButton(onClick = { if (allSelected) onEvent(CollectionEvent.OnClearSelection) else onEvent(CollectionEvent.OnSelectAll) }) {
                             Icon(
                                 if (allSelected) Icons.Rounded.Deselect else Icons.Rounded.SelectAll,
                                 contentDescription = if (allSelected) "Select None" else "Select All"
@@ -198,7 +176,7 @@ fun CollectionContent(
                         IconButton(onClick = { showMoveToFolderSheet = true }) {
                             Icon(Icons.AutoMirrored.Rounded.DriveFileMove, contentDescription = "Move to Folder")
                         }
-                        IconButton(onClick = onDeleteSelected) {
+                        IconButton(onClick = { onEvent(CollectionEvent.OnDeleteSelectedCards) }) {
                             Icon(Icons.Rounded.Delete, contentDescription = "Delete Selected")
                         }
                     },
@@ -225,7 +203,7 @@ fun CollectionContent(
                             ) {
                                 BasicTextField(
                                     value = uiState.searchQuery,
-                                    onValueChange = onSetSearchQuery,
+                                    onValueChange = { onEvent(CollectionEvent.OnSearchQueryChange(it)) },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .focusRequester(focusRequester),
@@ -255,14 +233,14 @@ fun CollectionContent(
                     },
                     navigationIcon = {
                         if (uiState.isSearchBarVisible) {
-                            IconButton(onClick = onToggleSearchBar) {
+                            IconButton(onClick = { onEvent(CollectionEvent.OnToggleSearchBar) }) {
                                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                             }
                         }
                     },
                     actions = {
                         if (!uiState.isSearchBarVisible) {
-                            IconButton(onClick = onToggleSearchBar) {
+                            IconButton(onClick = { onEvent(CollectionEvent.OnToggleSearchBar) }) {
                                 Icon(Icons.Rounded.Search, contentDescription = "Search")
                             }
                             IconButton(onClick = { showManageFolders = true }) {
@@ -272,7 +250,7 @@ fun CollectionContent(
                                 Icon(Icons.Rounded.Tune, contentDescription = "View Settings")
                             }
                         } else {
-                            IconButton(onClick = { onSetSearchQuery("") }) {
+                            IconButton(onClick = { onEvent(CollectionEvent.OnSearchQueryChange("")) }) {
                                 Icon(Icons.Rounded.Clear, contentDescription = "Clear Search")
                             }
                         }
@@ -318,8 +296,7 @@ fun CollectionContent(
         ) {
             StickyControls(
                 uiState = uiState,
-                onViewModeChange = onViewModeChange,
-                onFolderSelect = onSelectFolder,
+                onEvent = onEvent,
                 onSortClick = { showSortFilterSheet = true }
             )
 
@@ -345,21 +322,21 @@ fun CollectionContent(
                             preferSetLogo = uiState.preferSetLogo,
                             allPrices = allPrices,
                             allVintagePrices = allVintagePrices,
-                            onCardClick = { if (uiState.isSelectionMode) onToggleSelection(it) else onNavigateToCardDetail(it) },
-                            onCardLongClick = onToggleSelection
+                            onCardClick = onCardClick,
+                            onCardLongClick = onCardLongClick
                         )
                         ViewMode.GRID -> GridView(
                             userCards = uiState.filteredUserCards,
                             selectedIds = uiState.selectedIds,
                             isSelectionMode = uiState.isSelectionMode,
                             settings = uiState.gridSettings,
-                            onCardClick = { if (uiState.isSelectionMode) onToggleSelection(it) else onNavigateToCardDetail(it) },
-                            onCardLongClick = onToggleSelection
+                            onCardClick = onCardClick,
+                            onCardLongClick = onCardLongClick
                         )
                         ViewMode.POKEDEX -> PokedexView(
                             entries = uiState.pokedexEntries,
                             settings = uiState.pokedexSettings,
-                            onDexClick = { dexId -> selectedDexId = dexId }
+                            onDexClick = onDexClick
                         )
                     }
                 }
@@ -374,9 +351,7 @@ fun CollectionContent(
                 listSettings = uiState.listSettings,
                 gridSettings = uiState.gridSettings,
                 pokedexSettings = uiState.pokedexSettings,
-                onUpdateList = onUpdateListSettings,
-                onUpdateGrid = onUpdateGridSettings,
-                onUpdatePokedex = onUpdatePokedexSettings
+                onEvent = onEvent
             )
         }
     }
@@ -385,14 +360,7 @@ fun CollectionContent(
         ModalBottomSheet(onDismissRequest = { showSortFilterSheet = false }) {
             SortFilterSheet(
                 uiState = uiState,
-                onSortModeChange = onSortModeChange,
-                onSortDirectionChange = onSortDirectionChange,
-                onToggleRarity = onToggleRarity,
-                onToggleCategory = onToggleCategory,
-                onToggleType = onToggleType,
-                onToggleCondition = onToggleCondition,
-                onToggleFinish = onToggleFinish,
-                onClearFilters = onClearFilters
+                onEvent = onEvent
             )
         }
     }
@@ -404,10 +372,8 @@ fun CollectionContent(
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
             AddCardModal(
-                remoteSearchState = remoteSearchState,
                 uiState = uiState,
-                onSearchRemoteCards = onSearchRemoteCards,
-                onAddUserCard = onAddUserCard,
+                onEvent = onEvent,
                 onDismiss = {
                     scope.launch {
                         sheetState.hide()
@@ -437,7 +403,7 @@ fun CollectionContent(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .clickable {
-                                onMoveSelectedToFolder(folder.id)
+                                onEvent(CollectionEvent.OnMoveSelectedToFolder(folder.id))
                                 showMoveToFolderSheet = false
                             }
                     )
@@ -471,7 +437,7 @@ fun CollectionContent(
                                     }) {
                                         Icon(Icons.Rounded.Edit, contentDescription = "Edit")
                                     }
-                                    IconButton(onClick = { onDeleteFolder(folder) }) {
+                                    IconButton(onClick = { onEvent(CollectionEvent.OnDeleteFolder(folder)) }) {
                                         Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }
@@ -490,9 +456,9 @@ fun CollectionContent(
             onDismiss = { showFolderDialog = null },
             onConfirm = { name, icon, color ->
                 if (showFolderDialog!!.id == 0L) {
-                    onAddFolder(name, icon, color)
+                    onEvent(CollectionEvent.OnAddFolder(name, icon, color))
                 } else {
-                    onUpdateFolder(showFolderDialog!!.copy(name = name, icon = icon, color = color))
+                    onEvent(CollectionEvent.OnUpdateFolder(showFolderDialog!!.copy(name = name, icon = icon, color = color)))
                 }
                 showFolderDialog = null
             }
@@ -504,14 +470,16 @@ fun CollectionContent(
         val listIntAdapter = remember { moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Int::class.javaObjectType)) }
         
         // Use filtered cards so folder filtering applies to the detailed list too
-        val collectedForDex = uiState.filteredUserCards.filter { cardWithDetails ->
-            val card = cardWithDetails.card
-            val dexIds = try {
-                card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
-            } catch (_: Exception) {
-                listOfNotNull(card.dexId?.toIntOrNull())
+        val collectedForDex = remember(selectedDexId, uiState.filteredUserCards) {
+            uiState.filteredUserCards.filter { cardWithDetails ->
+                val card = cardWithDetails.card
+                val dexIds = try {
+                    card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
+                } catch (_: Exception) {
+                    listOfNotNull(card.dexId?.toIntOrNull())
+                }
+                dexIds.contains(selectedDexId)
             }
-            dexIds.contains(selectedDexId)
         }
         
         ModalBottomSheet(onDismissRequest = { selectedDexId = null }) {
@@ -565,14 +533,7 @@ fun CollectionContent(
 @Composable
 fun SortFilterSheet(
     uiState: CollectionUiState,
-    onSortModeChange: (SortMode) -> Unit,
-    onSortDirectionChange: (SortDirection) -> Unit,
-    onToggleRarity: (String) -> Unit,
-    onToggleCategory: (String) -> Unit,
-    onToggleType: (String) -> Unit,
-    onToggleCondition: (String) -> Unit,
-    onToggleFinish: (String) -> Unit,
-    onClearFilters: () -> Unit
+    onEvent: (CollectionEvent) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -587,7 +548,7 @@ fun SortFilterSheet(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Sort & Filter", style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = onClearFilters) { Text("Clear All") }
+            TextButton(onClick = { onEvent(CollectionEvent.OnClearFilters) }) { Text("Clear All") }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -600,7 +561,7 @@ fun SortFilterSheet(
             SortMode.entries.forEach { mode ->
                 FilterChip(
                     selected = uiState.sortMode == mode,
-                    onClick = { onSortModeChange(mode) },
+                    onClick = { onEvent(CollectionEvent.OnSortModeChange(mode)) },
                     label = { Text(mode.name.replace("_", " ").lowercase(Locale.US).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() }) },
                 )
             }
@@ -612,12 +573,12 @@ fun SortFilterSheet(
             SingleChoiceSegmentedButtonRow {
                 SegmentedButton(
                     selected = uiState.sortDirection == SortDirection.ASCENDING,
-                    onClick = { onSortDirectionChange(SortDirection.ASCENDING) },
+                    onClick = { onEvent(CollectionEvent.OnSortDirectionChange(SortDirection.ASCENDING)) },
                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
                 ) { Text("Asc") }
                 SegmentedButton(
                     selected = uiState.sortDirection == SortDirection.DESCENDING,
-                    onClick = { onSortDirectionChange(SortDirection.DESCENDING) },
+                    onClick = { onEvent(CollectionEvent.OnSortDirectionChange(SortDirection.DESCENDING)) },
                     shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
                 ) { Text("Desc") }
             }
@@ -634,7 +595,7 @@ fun SortFilterSheet(
                 uiState.availableRarities.forEach { rarity ->
                     FilterChip(
                         selected = uiState.filterSettings.rarities.contains(rarity),
-                        onClick = { onToggleRarity(rarity) },
+                        onClick = { onEvent(CollectionEvent.OnToggleRarityFilter(rarity)) },
                         label = { Text(rarity) },
                     )
                 }
@@ -650,7 +611,7 @@ fun SortFilterSheet(
                 uiState.availableCategories.forEach { category ->
                     FilterChip(
                         selected = uiState.filterSettings.categories.contains(category),
-                        onClick = { onToggleCategory(category) },
+                        onClick = { onEvent(CollectionEvent.OnToggleCategoryFilter(category)) },
                         label = { Text(category) },
                     )
                 }
@@ -666,7 +627,7 @@ fun SortFilterSheet(
                 uiState.availableTypes.forEach { type ->
                     FilterChip(
                         selected = uiState.filterSettings.types.contains(type),
-                        onClick = { onToggleType(type) },
+                        onClick = { onEvent(CollectionEvent.OnToggleTypeFilter(type)) },
                         label = { Text(type) },
                     )
                 }
@@ -681,7 +642,7 @@ fun SortFilterSheet(
             listOf("Mint", "Near Mint", "Lightly Played", "Moderately Played", "Heavily Played", "Damaged").forEach { cond ->
                 FilterChip(
                     selected = uiState.filterSettings.conditions.contains(cond),
-                    onClick = { onToggleCondition(cond) },
+                    onClick = { onEvent(CollectionEvent.OnToggleConditionFilter(cond)) },
                     label = { Text(cond) },
                 )
             }
@@ -695,7 +656,7 @@ fun SortFilterSheet(
             listOf("Non Holo", "Holo", "Reverse Holo", "Textured", "Gold").forEach { finish ->
                 FilterChip(
                     selected = uiState.filterSettings.finishes.contains(finish),
-                    onClick = { onToggleFinish(finish) },
+                    onClick = { onEvent(CollectionEvent.OnToggleFinishFilter(finish)) },
                     label = { Text(finish) },
                 )
             }
@@ -711,9 +672,7 @@ fun ViewSettingsSheet(
     listSettings: ListSettings,
     gridSettings: GridSettings,
     pokedexSettings: PokedexSettings,
-    onUpdateList: (ListSettings) -> Unit,
-    onUpdateGrid: (GridSettings) -> Unit,
-    onUpdatePokedex: (PokedexSettings) -> Unit
+    onEvent: (CollectionEvent) -> Unit
 ) {
     Column(modifier = Modifier.padding(16.dp).navigationBarsPadding()) {
         Text("View Settings", style = MaterialTheme.typography.titleLarge)
@@ -721,22 +680,22 @@ fun ViewSettingsSheet(
 
         when (viewMode) {
             ViewMode.LIST -> {
-                SettingsToggle("Show Prices", listSettings.showPrices) { onUpdateList(listSettings.copy(showPrices = it)) }
-                SettingsToggle("Compact Mode", listSettings.isCompact) { onUpdateList(listSettings.copy(isCompact = it)) }
+                SettingsToggle("Show Prices", listSettings.showPrices) { onEvent(CollectionEvent.OnUpdateListSettings(listSettings.copy(showPrices = it))) }
+                SettingsToggle("Compact Mode", listSettings.isCompact) { onEvent(CollectionEvent.OnUpdateListSettings(listSettings.copy(isCompact = it))) }
             }
             ViewMode.GRID -> {
                 Text("Columns: ${gridSettings.columns}", style = MaterialTheme.typography.bodyMedium)
                 Slider(
                     value = gridSettings.columns.toFloat(),
-                    onValueChange = { onUpdateGrid(gridSettings.copy(columns = it.toInt())) },
+                    onValueChange = { onEvent(CollectionEvent.OnUpdateGridSettings(gridSettings.copy(columns = it.toInt()))) },
                     valueRange = 2f..5f,
                     steps = 2
                 )
-                SettingsToggle("Show Quantity Badges", gridSettings.showBadges) { onUpdateGrid(gridSettings.copy(showBadges = it)) }
+                SettingsToggle("Show Quantity Badges", gridSettings.showBadges) { onEvent(CollectionEvent.OnUpdateGridSettings(gridSettings.copy(showBadges = it))) }
             }
             ViewMode.POKEDEX -> {
-                SettingsToggle("Show Uncollected Slots", pokedexSettings.showUncollected) { onUpdatePokedex(pokedexSettings.copy(showUncollected = it)) }
-                SettingsToggle("Use Shiny Sprites", pokedexSettings.useShinySprites) { onUpdatePokedex(pokedexSettings.copy(useShinySprites = it)) }
+                SettingsToggle("Show Uncollected Slots", pokedexSettings.showUncollected) { onEvent(CollectionEvent.OnUpdatePokedexSettings(pokedexSettings.copy(showUncollected = it))) }
+                SettingsToggle("Use Shiny Sprites", pokedexSettings.useShinySprites) { onEvent(CollectionEvent.OnUpdatePokedexSettings(pokedexSettings.copy(useShinySprites = it))) }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -880,8 +839,7 @@ private fun StickyControlsPreview() {
                 totalValue = 1250.50,
                 filteredUserCards = List(5) { mockCardWithDetails("swsh1-$it", "Card $it") }
             ),
-            onViewModeChange = {},
-            onFolderSelect = {},
+            onEvent = {},
             onSortClick = {}
         )
     }
@@ -961,34 +919,9 @@ private fun CollectionContentPreview() {
             ),
             allPrices = emptyList(),
             allVintagePrices = emptyList(),
-            remoteSearchState = Pair(emptyList(), false),
+            onEvent = {},
             onNavigateToScanner = {},
-            onNavigateToCardDetail = {},
-            onClearSelection = {},
-            onSelectAll = {},
-            onDeleteSelected = {},
-            onMoveSelectedToFolder = {},
-            onSetSearchQuery = {},
-            onToggleSearchBar = {},
-            onSelectFolder = {},
-            onAddFolder = { _, _, _ -> },
-            onUpdateFolder = {},
-            onDeleteFolder = {},
-            onViewModeChange = {},
-            onUpdateListSettings = {},
-            onUpdateGridSettings = {},
-            onUpdatePokedexSettings = {},
-            onSortModeChange = {},
-            onSortDirectionChange = {},
-            onToggleRarity = {},
-            onToggleCategory = {},
-            onToggleType = {},
-            onToggleCondition = {},
-            onToggleFinish = {},
-            onClearFilters = {},
-            onToggleSelection = {},
-            onSearchRemoteCards = {},
-            onAddUserCard = { _, _, _, _, _, _ -> }
+            onNavigateToCardDetail = {}
         )
     }
 }
@@ -1005,34 +938,9 @@ private fun CollectionContentEmptyPreview() {
             ),
             allPrices = emptyList(),
             allVintagePrices = emptyList(),
-            remoteSearchState = Pair(emptyList(), false),
+            onEvent = {},
             onNavigateToScanner = {},
-            onNavigateToCardDetail = {},
-            onClearSelection = {},
-            onSelectAll = {},
-            onDeleteSelected = {},
-            onMoveSelectedToFolder = {},
-            onSetSearchQuery = {},
-            onToggleSearchBar = {},
-            onSelectFolder = {},
-            onAddFolder = { _, _, _ -> },
-            onUpdateFolder = {},
-            onDeleteFolder = {},
-            onViewModeChange = {},
-            onUpdateListSettings = {},
-            onUpdateGridSettings = {},
-            onUpdatePokedexSettings = {},
-            onSortModeChange = {},
-            onSortDirectionChange = {},
-            onToggleRarity = {},
-            onToggleCategory = {},
-            onToggleType = {},
-            onToggleCondition = {},
-            onToggleFinish = {},
-            onClearFilters = {},
-            onToggleSelection = {},
-            onSearchRemoteCards = {},
-            onAddUserCard = { _, _, _, _, _, _ -> }
+            onNavigateToCardDetail = {}
         )
     }
 }
@@ -1040,8 +948,7 @@ private fun CollectionContentEmptyPreview() {
 @Composable
 fun StickyControls(
     uiState: CollectionUiState,
-    onViewModeChange: (ViewMode) -> Unit,
-    onFolderSelect: (Long?) -> Unit,
+    onEvent: (CollectionEvent) -> Unit,
     onSortClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1070,7 +977,7 @@ fun StickyControls(
             item {
                 FilterChip(
                     selected = uiState.selectedFolderId == null,
-                    onClick = { onFolderSelect(null) },
+                    onClick = { onEvent(CollectionEvent.OnFolderSelect(null)) },
                     label = { Text("All") },
                     shape = CircleShape
                 )
@@ -1078,7 +985,7 @@ fun StickyControls(
             items(uiState.folders, key = { it.id }) { folder ->
                 FilterChip(
                     selected = uiState.selectedFolderId == folder.id,
-                    onClick = { onFolderSelect(folder.id) },
+                    onClick = { onEvent(CollectionEvent.OnFolderSelect(folder.id)) },
                     label = { Text(folder.name) },
                     shape = CircleShape,
                     leadingIcon = {
@@ -1122,17 +1029,17 @@ fun StickyControls(
             ) {
                 SegmentedButton(
                     selected = uiState.viewMode == ViewMode.LIST,
-                    onClick = { onViewModeChange(ViewMode.LIST) },
+                    onClick = { onEvent(CollectionEvent.OnViewModeChange(ViewMode.LIST)) },
                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
                 ) { Icon(Icons.AutoMirrored.Rounded.List, contentDescription = "List") }
                 SegmentedButton(
                     selected = uiState.viewMode == ViewMode.GRID,
-                    onClick = { onViewModeChange(ViewMode.GRID) },
+                    onClick = { onEvent(CollectionEvent.OnViewModeChange(ViewMode.GRID)) },
                     shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
                 ) { Icon(Icons.Rounded.GridView, contentDescription = "Grid") }
                 SegmentedButton(
                     selected = uiState.viewMode == ViewMode.POKEDEX,
-                    onClick = { onViewModeChange(ViewMode.POKEDEX) },
+                    onClick = { onEvent(CollectionEvent.OnViewModeChange(ViewMode.POKEDEX)) },
                     shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
                 ) { Icon(Icons.Rounded.AutoAwesome, contentDescription = "Pokedex") }
             }
@@ -1368,10 +1275,8 @@ fun PokedexView(
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun AddCardModal(
-    remoteSearchState: Pair<List<TcgDexCard>, Boolean>,
     uiState: CollectionUiState,
-    onSearchRemoteCards: (String) -> Unit,
-    onAddUserCard: (TcgDexCard, Int, String, String, String, List<Long>) -> Unit,
+    onEvent: (CollectionEvent) -> Unit,
     onDismiss: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -1399,7 +1304,7 @@ fun AddCardModal(
                     value = searchQuery,
                     onValueChange = {
                         searchQuery = it
-                        if (it.length > 2) onSearchRemoteCards(it)
+                        if (it.length > 2) onEvent(CollectionEvent.OnSearchRemoteCards(it))
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1429,7 +1334,7 @@ fun AddCardModal(
                                 }
                                 innerTextField()
                             }
-                            if (remoteSearchState.second) {
+                            if (uiState.isSearching) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             }
                         }
@@ -1440,7 +1345,7 @@ fun AddCardModal(
             Spacer(modifier = Modifier.height(16.dp))
             
             LazyColumn(modifier = Modifier.weight(1f)) {
-                items(remoteSearchState.first, key = { it.id }) { card ->
+                items(uiState.searchResults, key = { it.id }) { card ->
                     ListItem(
                         headlineContent = { Text(card.name, fontWeight = FontWeight.Bold) },
                         supportingContent = {
@@ -1480,11 +1385,10 @@ fun AddCardModal(
             card = selectedCard!!,
             folders = uiState.folders,
             onConfirm = { q, c, p, f, folderIds ->
-                onAddUserCard(selectedCard!!, q, c, p, f, folderIds)
+                onEvent(CollectionEvent.OnAddUserCard(selectedCard!!, q, c, p, f, folderIds))
                 onDismiss()
             },
             onBack = { selectedCard = null }
         )
     }
 }
-
