@@ -31,6 +31,7 @@ import com.mrhayami.vaultio.data.ThemeBrand
 import com.mrhayami.vaultio.ui.card_detail.CardDetailScreen
 import com.mrhayami.vaultio.ui.collection.CollectionScreen
 import com.mrhayami.vaultio.ui.navigation.Screen
+import com.mrhayami.vaultio.ui.navigation.VaultioNavigationBar
 import com.mrhayami.vaultio.ui.scanner.ScannerScreen
 import com.mrhayami.vaultio.ui.screens.SetDownloadsScreen
 import com.mrhayami.vaultio.ui.screens.SetDownloadsViewModel
@@ -59,39 +60,31 @@ class MainActivity : ComponentActivity() {
 
             VaultioTheme(themeBrand = themeBrand, darkTheme = useDarkTheme) {
                 val navController = rememberNavController()
-                val items = listOf(
-                    Screen.Collection,
-                    Screen.SetDownloads,
-                    Screen.Settings
-                )
                 
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
-                val showBottomBar = items.any { it.route == currentRoute }
+                val showBottomBar = listOf(
+                    Screen.Collection,
+                    Screen.SetDownloads,
+                    Screen.Settings
+                ).any { it.route == currentRoute }
 
                 Scaffold(
                     contentWindowInsets = WindowInsets(0.dp),
                     bottomBar = {
                         if (showBottomBar) {
-                            NavigationBar {
-                                val currentDestination = navBackStackEntry?.destination
-                                items.forEach { screen ->
-                                    NavigationBarItem(
-                                        icon = { screen.icon?.let { Icon(it, contentDescription = null) } },
-                                        label = { Text(screen.title) },
-                                        selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
-                                        onClick = {
-                                            navController.navigate(screen.route) {
-                                                popUpTo(navController.graph.findStartDestination().id) {
-                                                    saveState = true
-                                                }
-                                                launchSingleTop = true
-                                                restoreState = true
-                                            }
+                            VaultioNavigationBar(
+                                currentDestination = navBackStackEntry?.destination,
+                                onNavigate = { screen ->
+                                    navController.navigate(screen.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
                                         }
-                                    )
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
-                            }
+                            )
                         }
                     }
                 ) { innerPadding ->

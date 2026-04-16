@@ -103,10 +103,17 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -214,6 +221,7 @@ fun CollectionContent(
     var showSortFilterSheet by remember { mutableStateOf(false) }
     var selectedDexId by remember { mutableStateOf<Int?>(null) }
     var showMoveToFolderSheet by remember { mutableStateOf(false) }
+    var fabExpanded by remember { mutableStateOf(false) }
     
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
@@ -335,29 +343,67 @@ fun CollectionContent(
         },
         floatingActionButton = {
             if (!uiState.isSelectionMode) {
-                Column(horizontalAlignment = Alignment.End) {
-                    SmallFloatingActionButton(
-                        onClick = { showFolderDialog = FolderEntity(name = "") },
-                        modifier = Modifier.padding(bottom = 8.dp),
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = CircleShape
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val rotation by animateFloatAsState(
+                        targetValue = if (fabExpanded) 45f else 0f,
+                        label = "FabRotation"
+                    )
+
+                    AnimatedVisibility(
+                        visible = fabExpanded,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
                     ) {
-                        Icon(Icons.Rounded.CreateNewFolder, contentDescription = "Add Folder")
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            SmallFloatingActionButton(
+                                onClick = {
+                                    showFolderDialog = FolderEntity(name = "")
+                                    fabExpanded = false
+                                },
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = CircleShape
+                            ) {
+                                Icon(Icons.Rounded.CreateNewFolder, contentDescription = "Add Folder")
+                            }
+                            SmallFloatingActionButton(
+                                onClick = {
+                                    showAddCardModal = true
+                                    fabExpanded = false
+                                },
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                shape = CircleShape
+                            ) {
+                                Icon(Icons.Rounded.Add, contentDescription = "Add Card Manually")
+                            }
+                            SmallFloatingActionButton(
+                                onClick = {
+                                    onNavigateToScanner()
+                                    fabExpanded = false
+                                },
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                shape = CircleShape
+                            ) {
+                                Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan Card")
+                            }
+                        }
                     }
-                    SmallFloatingActionButton(
-                        onClick = onNavigateToScanner,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        shape = CircleShape
-                    ) {
-                        Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan Card")
-                    }
+
                     FloatingActionButton(
-                        onClick = { showAddCardModal = true },
+                        onClick = { fabExpanded = !fabExpanded },
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         shape = CircleShape
                     ) {
-                        Icon(Icons.Rounded.Add, contentDescription = "Add Card")
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = if (fabExpanded) "Close Menu" else "Open Menu",
+                            modifier = Modifier.rotate(rotation)
+                        )
                     }
                 }
             }
