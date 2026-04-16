@@ -3,17 +3,21 @@
 package com.mrhayami.vaultio.ui.collection
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -53,7 +57,6 @@ import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Cloud
@@ -72,10 +75,8 @@ import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -103,25 +104,17 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.ui.draw.rotate
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -131,10 +124,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -148,8 +139,10 @@ import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import com.mrhayami.vaultio.ui.collection.components.CollectionGridView
+import com.mrhayami.vaultio.ui.collection.components.CollectionListView
+import com.mrhayami.vaultio.ui.collection.components.PokedexView
 import com.mrhayami.vaultio.ui.components.MetadataModal
-import com.mrhayami.vaultio.ui.components.shimmerEffect
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import kotlinx.coroutines.launch
@@ -434,7 +427,7 @@ fun CollectionContent(
                     )
                 } else {
                     when (uiState.viewMode) {
-                        ViewMode.LIST -> ListView(
+                        ViewMode.LIST -> CollectionListView(
                             userCards = uiState.filteredUserCards,
                             selectedIds = uiState.selectedIds,
                             isSelectionMode = uiState.isSelectionMode,
@@ -445,7 +438,7 @@ fun CollectionContent(
                             onCardClick = onCardClick,
                             onCardLongClick = onCardLongClick
                         )
-                        ViewMode.GRID -> GridView(
+                        ViewMode.GRID -> CollectionGridView(
                             userCards = uiState.filteredUserCards,
                             selectedIds = uiState.selectedIds,
                             isSelectionMode = uiState.isSelectionMode,
@@ -965,59 +958,11 @@ private fun StickyControlsPreview() {
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-private fun ListViewPreview() {
-    MaterialTheme {
-        ListView(
-            userCards = List(5) { mockCardWithDetails("swsh1-$it", "Pokemon Card $it") },
-            selectedIds = emptySet(),
-            isSelectionMode = false,
-            settings = ListSettings(),
-            preferSetLogo = true,
-            allPrices = emptyList(),
-            allVintagePrices = emptyList(),
-            onCardClick = {},
-            onCardLongClick = {}
-        )
-    }
-}
 
-@Preview(showBackground = true)
-@Composable
-private fun GridViewPreview() {
-    MaterialTheme {
-        GridView(
-            userCards = List(6) { mockCardWithDetails("swsh1-$it", "Pokemon Card $it") },
-            selectedIds = emptySet(),
-            isSelectionMode = false,
-            settings = GridSettings(columns = 3),
-            onCardClick = {},
-            onCardLongClick = {}
-        )
-    }
-}
 
-@Preview(showBackground = true)
-@Composable
-private fun PokedexViewPreview() {
-    MaterialTheme {
-        PokedexView(
-            entries = List(8) { 
-                PokedexEntry(
-                    dexNumber = it + 1,
-                    pokemonName = "Pokemon ${it + 1}",
-                    cardCount = 1,
-                    totalQuantity = 1,
-                    representativeImage = null,
-                    isCollected = it % 2 == 0
-                )
-            },
-            settings = PokedexSettings(),
-            onDexClick = {}
-        )
-    }
-}
+
+
+
 
 private fun mockCardWithDetails(id: String, name: String) = CardWithDetails(
     userCard = UserCardEntity(id = id.hashCode().toLong(), cardId = id, quantity = 1),
@@ -1168,229 +1113,11 @@ fun StickyControls(
     }
 }
 
-@Composable
-fun ListView(
-    userCards: List<CardWithDetails>,
-    selectedIds: Set<Long>,
-    isSelectionMode: Boolean,
-    settings: ListSettings,
-    preferSetLogo: Boolean,
-    allPrices: List<PriceEntity>,
-    allVintagePrices: List<VintagePriceEntity>,
-    onCardClick: (Long) -> Unit,
-    onCardLongClick: (Long) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    LazyColumn(
-        contentPadding = PaddingValues(bottom = 80.dp),
-        modifier = modifier.navigationBarsPadding()
-    ) {
-        items(userCards, key = { it.userCard.id }) { item ->
-            val isSelected = selectedIds.contains(item.userCard.id)
-            val isNew = System.currentTimeMillis() - item.userCard.dateAdded < 60_000 // 1 minute
-            
-            ListItem(
-                headlineContent = { Text(item.card.name, fontWeight = FontWeight.Bold) },
-                supportingContent = {
-                    if (!settings.isCompact) {
-                        Text("${item.set.name} • ${item.card.localId}")
-                    }
-                },
-                leadingContent = {
-                    Box(
-                        modifier = Modifier
-                            .size(if (settings.isCompact) 48.dp else 64.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .shimmerEffect(show = isNew)
-                    ) {
-                        AsyncImage(
-                            model = "${item.card.image}/low.webp",
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                            alignment = Alignment.TopCenter
-                        )
-                    }
-                },
-                trailingContent = {
-                    if (isSelectionMode) {
-                        Checkbox(checked = isSelected, onCheckedChange = { onCardClick(item.userCard.id) })
-                    } else {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val setIcon = if (preferSetLogo) {
-                                    item.set.logo ?: item.set.symbol ?: "https://assets.tcgdex.net/en/sets/${item.set.id}/logo.png"
-                                } else {
-                                    item.set.symbol ?: item.set.logo ?: "https://assets.tcgdex.net/en/sets/${item.set.id}/symbol.png"
-                                }
-                                
-                                AsyncImage(
-                                    model = setIcon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp).padding(end = 4.dp),
-                                    contentScale = ContentScale.Fit
-                                )
-                                Text("x${item.userCard.quantity}", fontWeight = FontWeight.Bold)
-                            }
-                            if (settings.showPrices) {
-                                val price = item.userCard.manualPrice ?: run {
-                                    val cardId = item.card.id
-                                    val finish = item.userCard.finish
-                                    val condition = item.userCard.condition
-                                    val printing = item.userCard.printing
-                                    
-                                    val foundPrice = allPrices.find { 
-                                        it.cardId == cardId && it.finish == finish && it.condition == condition 
-                                    }?.marketPrice ?: allVintagePrices.find {
-                                        it.cardId == cardId && it.finish == finish && it.condition == condition && it.printing == printing
-                                    }?.marketPrice
-                                    
-                                    foundPrice ?: 0.0
-                                }
-                                Text("$${String.format(Locale.US, "%.2f", price)}", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .combinedClickable(
-                        onClick = { onCardClick(item.userCard.id) },
-                        onLongClick = { onCardLongClick(item.userCard.id) }
-                    )
-                    .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface)
-            )
-        }
-    }
-}
 
-@Composable
-fun GridView(
-    userCards: List<CardWithDetails>,
-    selectedIds: Set<Long>,
-    isSelectionMode: Boolean,
-    settings: GridSettings,
-    onCardClick: (Long) -> Unit,
-    onCardLongClick: (Long) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(settings.columns),
-        contentPadding = PaddingValues(8.dp, 8.dp, 8.dp, 80.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.navigationBarsPadding()
-    ) {
-        items(userCards, key = { it.userCard.id }) { item ->
-            val isSelected = selectedIds.contains(item.userCard.id)
-            val isNew = System.currentTimeMillis() - item.userCard.dateAdded < 60_000 // 1 minute
-            
-            Card(
-                modifier = Modifier.combinedClickable(
-                    onClick = { onCardClick(item.userCard.id) },
-                    onLongClick = { onCardLongClick(item.userCard.id) }
-                ),
-                shape = RoundedCornerShape(8.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                border = if (isSelected) androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
-            ) {
-                Box {
-                    AsyncImage(
-                        model = "${item.card.image}/high.webp",
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(0.718f)
-                            .shimmerEffect(show = isNew),
-                        contentScale = ContentScale.FillBounds
-                    )
-                    if (isSelected) {
-                        Box(
-                            modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
-                        }
-                    } else if (settings.showBadges) {
-                        Badge(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(4.dp),
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ) {
-                            Text("${item.userCard.quantity}", modifier = Modifier.padding(2.dp))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
-@Composable
-fun PokedexView(
-    entries: List<PokedexEntry>,
-    settings: PokedexSettings,
-    onDexClick: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(4),
-        contentPadding = PaddingValues(8.dp, 8.dp, 8.dp, 80.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.navigationBarsPadding()
-    ) {
-        items(entries, key = { it.dexNumber }) { entry ->
-            val isCollected = entry.isCollected
-            val spriteType = if (settings.useShinySprites) "shiny" else "pokemon"
-            val spriteUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/$spriteType/${entry.dexNumber}.png"
 
-            Box(
-                modifier = Modifier
-                    .aspectRatio(1f)
-                    .background(
-                        if (isCollected) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                    .clickable { onDexClick(entry.dexNumber) },
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(4.dp)
-                ) {
-                    Text("#${entry.dexNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Box(contentAlignment = Alignment.Center) {
-                        AsyncImage(
-                            model = spriteUrl,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            contentScale = ContentScale.Fit,
-                            alpha = if (isCollected) 1f else 0.3f,
-                            colorFilter = if (isCollected) null else ColorFilter.colorMatrix(
-                                ColorMatrix().apply { setToSaturation(0f) }
-                            )
-                        )
-                    }
-                    if (isCollected && entry.pokemonName != null) {
-                        Text(
-                            entry.pokemonName,
-                            fontSize = 8.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
+
+
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
