@@ -126,10 +126,16 @@ sealed interface CollectionEvent {
     ) : CollectionEvent
     
     data object OnConsumeSaveSuccess : CollectionEvent
+    
+    // Import/Export
+    data class OnExportCollection(val folderIds: List<Long>? = null) : CollectionEvent
+    data class OnImportCollection(val json: String) : CollectionEvent
 }
 
 sealed interface CollectionEffect {
     data class ShowToast(val message: String) : CollectionEffect
+    data class ExportCollection(val json: String) : CollectionEffect
+    data object ImportSuccess : CollectionEffect
     
     sealed interface Navigation : CollectionEffect {
         data object ToScanner : Navigation

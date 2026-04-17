@@ -2,6 +2,14 @@
 
 package com.mrhayami.vaultio.ui.collection
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -31,6 +39,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -163,12 +172,45 @@ fun CollectionScreen(
     val allVintagePrices by repository.allVintagePrices.collectAsStateWithLifecycle(initialValue = emptyList())
 
     val context = LocalContext.current
+    var pendingExportJson by remember { mutableStateOf<String?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri?.let {
+            pendingExportJson?.let { json ->
+                context.contentResolver.openOutputStream(it)?.use { stream ->
+                    stream.write(json.toByteArray())
+                }
+                Toast.makeText(context, "Collection exported successfully", Toast.LENGTH_SHORT).show()
+                pendingExportJson = null
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            context.contentResolver.openInputStream(it)?.use { stream ->
+                val json = stream.bufferedReader().use { it.readText() }
+                viewModel.onEvent(CollectionEvent.OnImportCollection(json))
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.sideEffects.collect { effect ->
             when (effect) {
                 is CollectionEffect.ShowToast -> {
                     Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                }
+                is CollectionEffect.ExportCollection -> {
+                    pendingExportJson = effect.json
+                    exportLauncher.launch("vaultio_collection_${System.currentTimeMillis()}.json")
+                }
+                CollectionEffect.ImportSuccess -> {
+                    // Handled via toast in VM effect
                 }
                 is CollectionEffect.Navigation -> {
                     when (effect) {
@@ -193,7 +235,8 @@ fun CollectionScreen(
         allVintagePrices = allVintagePrices,
         onEvent = viewModel::onEvent,
         onNavigateToScanner = onNavigateToScanner,
-        onNavigateToCardDetail = onNavigateToCardDetail
+        onNavigateToCardDetail = onNavigateToCardDetail,
+        importLauncher = importLauncher
     )
 }
 
@@ -205,6 +248,7 @@ fun CollectionContent(
     onEvent: (CollectionEvent) -> Unit,
     onNavigateToScanner: () -> Unit,
     onNavigateToCardDetail: (Long) -> Unit,
+    importLauncher: ActivityResultLauncher<Array<String>>,
     modifier: Modifier = Modifier
 ) {
     var showAddCardModal by remember { mutableStateOf(false) }
@@ -318,11 +362,71 @@ fun CollectionContent(
                             IconButton(onClick = { onEvent(CollectionEvent.OnToggleSearchBar) }) {
                                 Icon(Icons.Rounded.Search, contentDescription = "Search")
                             }
-                            IconButton(onClick = { showManageFolders = true }) {
-                                Icon(Icons.Rounded.FolderCopy, contentDescription = "Manage Folders")
+                            
+                            var showMenu by remember { mutableStateOf(false) }
+                            var showExportDialog by remember { mutableStateOf(false) }
+
+                            Box {
+                                IconButton(onClick = { showMenu = true }) {
+                                    Icon(Icons.Rounded.MoreVert, contentDescription = "More")
+                                }
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false },
+                                    shape = RoundedCornerShape(28.dp),
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    tonalElevation = 6.dp,
+                                    shadowElevation = 8.dp
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("View Settings", style = MaterialTheme.typography.labelLarge) },
+                                        onClick = {
+                                            showMenu = false
+                                            showViewSettings = true
+                                        },
+                                        leadingIcon = { Icon(Icons.Rounded.Tune, null, modifier = Modifier.size(20.dp)) },
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Manage Folders", style = MaterialTheme.typography.labelLarge) },
+                                        onClick = {
+                                            showMenu = false
+                                            showManageFolders = true
+                                        },
+                                        leadingIcon = { Icon(Icons.Rounded.FolderCopy, null, modifier = Modifier.size(20.dp)) },
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp, horizontal = 12.dp))
+                                    DropdownMenuItem(
+                                        text = { Text("Import Collection", style = MaterialTheme.typography.labelLarge) },
+                                        onClick = {
+                                            showMenu = false
+                                            importLauncher.launch(arrayOf("application/json"))
+                                        },
+                                        leadingIcon = { Icon(Icons.Rounded.FileDownload, null, modifier = Modifier.size(20.dp)) },
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Export Collection", style = MaterialTheme.typography.labelLarge) },
+                                        onClick = {
+                                            showMenu = false
+                                            showExportDialog = true
+                                        },
+                                        leadingIcon = { Icon(Icons.Rounded.FileUpload, null, modifier = Modifier.size(20.dp)) },
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                }
                             }
-                            IconButton(onClick = { showViewSettings = true }) {
-                                Icon(Icons.Rounded.Tune, contentDescription = "View Settings")
+
+                            if (showExportDialog) {
+                                ExportSelectionDialog(
+                                    folders = uiState.folders,
+                                    onDismiss = { showExportDialog = false },
+                                    onConfirm = { folderIds ->
+                                        onEvent(CollectionEvent.OnExportCollection(folderIds))
+                                        showExportDialog = false
+                                    }
+                                )
                             }
                         } else {
                             IconButton(onClick = { onEvent(CollectionEvent.OnSearchQueryChange("")) }) {
@@ -930,6 +1034,120 @@ fun FolderDialog(
     )
 }
 
+@Composable
+fun ExportSelectionDialog(
+    folders: List<FolderEntity>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<Long>?) -> Unit
+) {
+    var selectedFolderIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var exportAll by remember { mutableStateOf(true) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Export Collection") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text("Select what you want to export:", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { exportAll = true }
+                        .padding(vertical = 8.dp)
+                ) {
+                    androidx.compose.material3.RadioButton(
+                        selected = exportAll,
+                        onClick = { exportAll = true }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Entire Collection")
+                }
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { exportAll = false }
+                        .padding(vertical = 8.dp)
+                ) {
+                    androidx.compose.material3.RadioButton(
+                        selected = !exportAll,
+                        onClick = { exportAll = false }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Selected Folders Only")
+                }
+
+                AnimatedVisibility(visible = !exportAll) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 300.dp)
+                            .padding(start = 32.dp)
+                    ) {
+                        LazyColumn {
+                            items(folders) { folder ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedFolderIds = if (selectedFolderIds.contains(folder.id)) {
+                                                selectedFolderIds - folder.id
+                                            } else {
+                                                selectedFolderIds + folder.id
+                                            }
+                                        }
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    androidx.compose.material3.Checkbox(
+                                        checked = selectedFolderIds.contains(folder.id),
+                                        onCheckedChange = { checked ->
+                                            selectedFolderIds = if (checked) {
+                                                selectedFolderIds + folder.id
+                                            } else {
+                                                selectedFolderIds - folder.id
+                                            }
+                                        }
+                                    )
+                                    Icon(
+                                        getIconFromName(folder.icon),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                        tint = folder.color?.let { Color(it.toLong().toInt()) } ?: MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(folder.name, style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (exportAll) {
+                        onConfirm(null)
+                    } else if (selectedFolderIds.isNotEmpty()) {
+                        onConfirm(selectedFolderIds.toList())
+                    }
+                },
+                enabled = exportAll || selectedFolderIds.isNotEmpty()
+            ) {
+                Text("Export")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
 fun getIconFromName(name: String?): ImageVector {
     return when (name) {
         "star" -> Icons.Rounded.Star
@@ -986,7 +1204,8 @@ private fun CollectionContentPreview() {
             allVintagePrices = emptyList(),
             onEvent = {},
             onNavigateToScanner = {},
-            onNavigateToCardDetail = {}
+            onNavigateToCardDetail = {},
+            importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {}
         )
     }
 }
@@ -1005,7 +1224,8 @@ private fun CollectionContentEmptyPreview() {
             allVintagePrices = emptyList(),
             onEvent = {},
             onNavigateToScanner = {},
-            onNavigateToCardDetail = {}
+            onNavigateToCardDetail = {},
+            importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {}
         )
     }
 }
@@ -1075,7 +1295,7 @@ fun StickyControls(
             Column(modifier = Modifier.padding(start = 16.dp)) {
                 Text(
                     if (uiState.viewMode == ViewMode.POKEDEX) "${uiState.pokedexEntries.count { it.isCollected }} / ${uiState.pokedexEntries.size} Collected"
-                    else "${uiState.filteredUserCards.size} Cards",
+                    else "${uiState.totalQuantity} Cards",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )

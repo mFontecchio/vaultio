@@ -37,6 +37,7 @@ class VaultioRepository(
 ) {
     private val moshi = Moshi.Builder().build()
     private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Int::class.javaObjectType))
+    private val collectionExportAdapter = moshi.adapter(CollectionExportDto::class.java)
 
     val allSets: Flow<List<SetEntity>> = setDao.getAllSets()
     val allUserCards: Flow<List<CardWithDetails>> = userCardDao.getAllUserCardsWithDetails()
@@ -503,5 +504,99 @@ class VaultioRepository(
 
     suspend fun logTelemetry(api: String, endpoint: String, status: Int, latency: Long) {
         telemetryDao.insertLog(TelemetryLogEntity(api = api, endpoint = endpoint, status = status, latency = latency))
+    }
+
+    suspend fun exportCollectionJson(folderIds: List<Long>? = null): String = withContext(ioDispatcher) {
+        val folders = if (folderIds == null) {
+            folderDao.getAllFolders().firstOrNull() ?: emptyList()
+        } else {
+            folderDao.getAllFolders().firstOrNull()?.filter { folderIds.contains(it.id) } ?: emptyList()
+        }
+
+        val allUserCards = userCardDao.getAllUserCardsWithDetails().firstOrNull() ?: emptyList()
+        val allCrossRefs = userCardDao.getAllFolderCardCrossRefs().firstOrNull() ?: emptyList()
+
+        val userCards = if (folderIds == null) {
+            allUserCards
+        } else {
+            // Filter user cards that are in the selected folders
+            val userCardIdsInFolders = allCrossRefs
+                .filter { folderIds.contains(it.folderId) }
+                .map { it.userCardId }
+                .toSet()
+            allUserCards.filter { userCardIdsInFolders.contains(it.userCard.id) }
+        }
+
+        val folderDtos = folders.map { FolderDto(it.id, it.name, it.icon, it.color) }
+        val userCardDtos = userCards.map { cardWithDetails ->
+            val userCard = cardWithDetails.userCard
+            UserCardDto(
+                cardId = userCard.cardId,
+                quantity = userCard.quantity,
+                condition = userCard.condition,
+                printing = userCard.printing,
+                finish = userCard.finish,
+                manualPrice = userCard.manualPrice,
+                dateAdded = userCard.dateAdded,
+                folderIds = allCrossRefs.filter { it.userCardId == userCard.id }.map { it.folderId }
+            )
+        }
+
+        val export = CollectionExportDto(
+            folders = folderDtos,
+            userCards = userCardDtos
+        )
+
+        collectionExportAdapter.toJson(export)
+    }
+
+    suspend fun importCollectionFromJson(json: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val export = collectionExportAdapter.fromJson(json) ?: throw Exception("Invalid JSON")
+            
+            // Map old folder IDs to new folder IDs
+            val folderIdMap = mutableMapOf<Long, Long>()
+            export.folders.forEach { folderDto ->
+                val newId = folderDao.insertFolder(FolderEntity(
+                    name = folderDto.name,
+                    icon = folderDto.icon,
+                    color = folderDto.color
+                ))
+                folderIdMap[folderDto.id] = newId
+            }
+
+            // Import user cards and their folder associations
+            export.userCards.forEach { cardDto ->
+                // Ensure the card entity exists (or at least the set is synced)
+                val setId = cardDto.cardId.substringBefore("-")
+                ensureSetIsSynced(setId)
+                
+                // We don't necessarily need to download the whole set, but the card detail is nice
+                if (cardDao.getCardById(cardDto.cardId) == null) {
+                    val remoteCard = getCardDetail(cardDto.cardId)
+                    if (remoteCard != null) {
+                        val entity = remoteCard.toEntity(setId)
+                        cardDao.insertCards(listOf(entity))
+                    }
+                }
+
+                val userCardId = userCardDao.insertUserCard(UserCardEntity(
+                    cardId = cardDto.cardId,
+                    quantity = cardDto.quantity,
+                    condition = cardDto.condition,
+                    printing = cardDto.printing,
+                    finish = cardDto.finish,
+                    manualPrice = cardDto.manualPrice,
+                    dateAdded = cardDto.dateAdded
+                ))
+
+                // Restore folder associations
+                val newFolderIds = cardDto.folderIds.mapNotNull { folderIdMap[it] }
+                if (newFolderIds.isNotEmpty()) {
+                    val crossRefs = newFolderIds.map { FolderCardCrossRef(folderId = it, userCardId = userCardId) }
+                    userCardDao.insertFolderCardCrossRefs(crossRefs)
+                }
+            }
+        }
     }
 }

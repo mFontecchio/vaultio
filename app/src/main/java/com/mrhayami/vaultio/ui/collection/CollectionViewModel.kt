@@ -189,6 +189,30 @@ class CollectionViewModel(
             is CollectionEvent.OnSearchRemoteCards -> searchRemoteCards(event.query)
             is CollectionEvent.OnAddUserCard -> addUserCard(event.card, event.quantity, event.condition, event.printing, event.finish, event.folderIds)
             CollectionEvent.OnConsumeSaveSuccess -> consumeSaveSuccess()
+            is CollectionEvent.OnExportCollection -> exportCollection(event.folderIds)
+            is CollectionEvent.OnImportCollection -> importCollection(event.json)
+        }
+    }
+
+    private fun exportCollection(folderIds: List<Long>?) {
+        viewModelScope.launch {
+            val json = repository.exportCollectionJson(folderIds)
+            emitEffect(CollectionEffect.ExportCollection(json))
+        }
+    }
+
+    private fun importCollection(json: String) {
+        viewModelScope.launch {
+            updateState { copy(isLoading = true) }
+            repository.importCollectionFromJson(json)
+                .onSuccess {
+                    emitEffect(CollectionEffect.ImportSuccess)
+                    emitEffect(CollectionEffect.ShowToast("Collection imported successfully"))
+                }
+                .onFailure {
+                    emitEffect(CollectionEffect.ShowToast("Failed to import collection: ${it.message}"))
+                }
+            updateState { copy(isLoading = false) }
         }
     }
 
