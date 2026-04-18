@@ -95,11 +95,25 @@ class CardDetailViewModel(
     fun onEvent(event: CardDetailEvent) {
         when (event) {
             is CardDetailEvent.SaveChanges -> saveChanges(event.quantity, event.condition, event.printing, event.finish)
+            is CardDetailEvent.SplitCard -> splitCard(event.condition, event.printing, event.finish)
             CardDetailEvent.DeleteCard -> deleteUserCard()
             CardDetailEvent.RefreshPrice -> refreshPrice()
             is CardDetailEvent.AddCardToFolder -> addCardToFolder(event.folderId)
             is CardDetailEvent.RemoveCardFromFolder -> removeCardFromFolder(event.folderId)
             CardDetailEvent.ConsumeSaveSuccess -> consumeSaveSuccess()
+        }
+    }
+
+    private fun splitCard(condition: String, printing: String, finish: String) {
+        viewModelScope.launch {
+            try {
+                val newId = repository.splitUserCard(userCardId, condition, printing, finish)
+                if (newId != null) {
+                    _sideEffects.send(CardDetailEffect.Navigation.ToCard(newId))
+                }
+            } catch (_: Exception) {
+                // Potential error handling
+            }
         }
     }
 

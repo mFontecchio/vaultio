@@ -24,6 +24,7 @@ import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.ui.collection.ListSettings
+import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.shimmerEffect
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import java.util.Locale
@@ -51,7 +52,16 @@ fun CollectionListView(
             val isNew = System.currentTimeMillis() - item.userCard.dateAdded < 60_000 // 1 minute
             
             ListItem(
-                headlineContent = { Text(item.card.name, fontWeight = FontWeight.Bold) },
+                headlineContent = { 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(item.card.name, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        CardAttributeBadges(
+                            finish = item.userCard.finish,
+                            printing = item.userCard.printing
+                        )
+                    }
+                },
                 supportingContent = {
                     if (!settings.isCompact) {
                         Text("${item.set.name} • ${item.card.localId}")

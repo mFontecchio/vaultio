@@ -48,6 +48,8 @@ class VaultioRepository(
 
     fun getUserCardById(userCardId: Long): Flow<CardWithDetails?> = userCardDao.getUserCardById(userCardId)
 
+    suspend fun getUserCardByIdSync(userCardId: Long): CardWithDetails? = userCardDao.getUserCardByIdSync(userCardId)
+
     fun getPricesForCard(cardId: String): Flow<List<PriceEntity>> = priceDao.getPricesForCard(cardId)
 
     fun getVintagePricesForCard(cardId: String): Flow<List<VintagePriceEntity>> = priceDao.getVintagePricesForCard(cardId)
@@ -194,7 +196,7 @@ class VaultioRepository(
         )
 
         val userCardIdResult: Long = if (existingUserCard != null) {
-            userCardDao.insertUserCard(existingUserCard.copy(quantity = existingUserCard.quantity + userCardEntity.quantity))
+            userCardDao.updateUserCard(existingUserCard.copy(quantity = existingUserCard.quantity + userCardEntity.quantity))
             existingUserCard.id
         } else {
             userCardDao.insertUserCard(userCardEntity.copy(cardId = card.id))
@@ -280,7 +282,58 @@ class VaultioRepository(
     }
 
     suspend fun updateUserCard(userCard: UserCardEntity) {
-        userCardDao.insertUserCard(userCard)
+        userCardDao.updateUserCard(userCard)
+    }
+
+    suspend fun splitUserCard(userCardId: Long, newCondition: String, newPrinting: String, newFinish: String): Long? {
+        return withContext(ioDispatcher) {
+            val originalDetails = userCardDao.getUserCardByIdSync(userCardId) ?: return@withContext null
+            val original = originalDetails.userCard
+            
+            if (original.quantity <= 1) return@withContext null
+
+            // 1. Decrease quantity of original
+            userCardDao.updateUserCard(original.copy(quantity = original.quantity - 1))
+
+            // 2. Check if a card with the new attributes already exists
+            val existing = userCardDao.findExistingUserCard(
+                cardId = original.cardId,
+                condition = newCondition,
+                printing = newPrinting,
+                finish = newFinish
+            )
+
+            val newId = if (existing != null) {
+                // Add to existing
+                userCardDao.updateUserCard(existing.copy(quantity = existing.quantity + 1))
+                existing.id
+            } else {
+                // Create new entry
+                val newEntry = UserCardEntity(
+                    cardId = original.cardId,
+                    quantity = 1,
+                    condition = newCondition,
+                    printing = newPrinting,
+                    finish = newFinish,
+                    dateAdded = System.currentTimeMillis()
+                )
+                val insertedId = userCardDao.insertUserCard(newEntry)
+                
+                // Copy folder associations from the original card
+                val originalFolders = userCardDao.getFolderIdsForUserCardSync(userCardId)
+                if (originalFolders.isNotEmpty()) {
+                    userCardDao.insertFolderCardCrossRefs(originalFolders.map { 
+                        FolderCardCrossRef(folderId = it, userCardId = insertedId) 
+                    })
+                }
+                insertedId
+            }
+            
+            // 3. Ensure price is updated for the new finish if needed
+            updateCardPrice(original.cardId)
+            
+            newId
+        }
     }
 
     suspend fun deleteUserCard(userCardId: Long) {
@@ -298,7 +351,7 @@ class VaultioRepository(
             val lastCard = userCardDao.getLastUserCardByCardId(cardId)
             if (lastCard != null) {
                 if (lastCard.quantity > 1) {
-                    userCardDao.insertUserCard(lastCard.copy(quantity = lastCard.quantity - 1))
+                    userCardDao.updateUserCard(lastCard.copy(quantity = lastCard.quantity - 1))
                 } else {
                     deleteUserCard(lastCard.id)
                 }

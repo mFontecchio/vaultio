@@ -151,6 +151,7 @@ import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.collection.components.CollectionGridView
 import com.mrhayami.vaultio.ui.collection.components.CollectionListView
 import com.mrhayami.vaultio.ui.collection.components.PokedexView
+import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.MetadataModal
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
@@ -730,12 +731,24 @@ fun CollectionContent(
                                 shape = RoundedCornerShape(12.dp),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
-                                AsyncImage(
-                                    model = "${item.card.image}/high.webp",
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxWidth().aspectRatio(0.718f),
-                                    contentScale = ContentScale.FillBounds
-                                )
+                                Box {
+                                    AsyncImage(
+                                        model = "${item.card.image}/high.webp",
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxWidth().aspectRatio(0.718f),
+                                        contentScale = ContentScale.FillBounds
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .padding(6.dp)
+                                    ) {
+                                        CardAttributeBadges(
+                                            finish = item.userCard.finish,
+                                            printing = item.userCard.printing
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1414,7 +1427,18 @@ fun AddCardModal(
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(uiState.searchResults, key = { it.id }) { card ->
                     ListItem(
-                        headlineContent = { Text(card.name, fontWeight = FontWeight.Bold) },
+                        headlineContent = { 
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(card.name, fontWeight = FontWeight.Bold)
+                                if (card.rarity?.contains("Promo", ignoreCase = true) == true) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    CardAttributeBadges(
+                                        finish = com.mrhayami.vaultio.data.PricingUtils.FINISH_NORMAL,
+                                        printing = com.mrhayami.vaultio.data.PricingUtils.PRINTING_PROMO
+                                    )
+                                }
+                            }
+                        },
                         supportingContent = {
                             val setId = card.id.substringBefore("-")
                             val set = uiState.sets[setId]

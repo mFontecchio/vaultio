@@ -278,11 +278,18 @@ fun CardDetailContent(
                             
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(set.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "#${card.localId} / ${set.totalCards}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "#${card.localId} / ${set.totalCards}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    CardAttributeBadges(
+                                        finish = finish,
+                                        printing = printing
+                                    )
+                                }
                             }
                             if (card.rarity != null) {
                                 Surface(
@@ -478,6 +485,33 @@ fun CardDetailContent(
                                 ),
                                 onSelected = { finish = it }
                             )
+
+                            if (quantity > 1) {
+                                val canSplit = condition != userCard.condition || 
+                                              printing != userCard.printing || 
+                                              finish != userCard.finish
+
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = { onEvent(CardDetailEvent.SplitCard(condition, printing, finish)) },
+                                    enabled = canSplit,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.secondary
+                                    ),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Icon(Icons.Rounded.ContentCopy, null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Change 1 instance only")
+                                }
+                                Text(
+                                    "Changes 1 of your $quantity cards to the selected attributes.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 4.dp, start = 8.dp)
+                                )
+                            }
                         }
                     }
 
@@ -537,6 +571,7 @@ fun CardDetailScreen(
     repository: VaultioRepository,
     userCardId: Long,
     onNavigateBack: () -> Unit,
+    onNavigateToCard: (Long) -> Unit = {}
 ) {
     val viewModel: CardDetailViewModel = viewModel(
         factory = CardDetailViewModelFactory(repository, SavedStateHandle(mapOf("userCardId" to userCardId)))
@@ -547,6 +582,7 @@ fun CardDetailScreen(
         viewModel.sideEffects.collect { effect ->
             when (effect) {
                 CardDetailEffect.Navigation.Back -> onNavigateBack()
+                is CardDetailEffect.Navigation.ToCard -> onNavigateToCard(effect.userCardId)
             }
         }
     }

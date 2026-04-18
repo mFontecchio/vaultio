@@ -29,6 +29,11 @@ sealed interface CardDetailEvent {
         val printing: String,
         val finish: String
     ) : CardDetailEvent
+    data class SplitCard(
+        val condition: String,
+        val printing: String,
+        val finish: String
+    ) : CardDetailEvent
     data object DeleteCard : CardDetailEvent
     data object RefreshPrice : CardDetailEvent
     data class AddCardToFolder(val folderId: Long) : CardDetailEvent
@@ -40,5 +45,6 @@ sealed interface CardDetailEvent {
 sealed interface CardDetailEffect {
     sealed interface Navigation : CardDetailEffect {
         data object Back : Navigation
+        data class ToCard(val userCardId: Long) : Navigation
     }
 }

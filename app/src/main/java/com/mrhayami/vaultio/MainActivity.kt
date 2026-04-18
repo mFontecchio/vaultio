@@ -145,7 +145,12 @@ class MainActivity : ComponentActivity() {
                                 CardDetailScreen(
                                     repository = repository,
                                     userCardId = userCardId,
-                                    onNavigateBack = { navController.popBackStack() }
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToCard = { id -> 
+                                        navController.navigate("card_detail/$id") {
+                                            popUpTo("card_detail/$userCardId") { inclusive = true }
+                                        }
+                                    }
                                 )
                             }
                         }

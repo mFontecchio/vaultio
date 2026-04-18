@@ -105,6 +105,19 @@ interface UserCardDao {
         FROM user_cards
         INNER JOIN cards c ON user_cards.cardId = c.id
         INNER JOIN sets s ON c.setId = s.id
+        WHERE user_cards.id = :userCardId
+        """)
+    suspend fun getUserCardByIdSync(userCardId: Long): CardWithDetails?
+
+    @Transaction
+    @Query("""
+        SELECT
+            user_cards.*,
+            c.id as card_id, c.localId as card_localId, c.name as card_name, c.image as card_image, c.setId as card_setId, c.rarity as card_rarity, c.category as card_category, c.types as card_types, c.dexId as card_dexId, c.dexIds as card_dexIds, c.pokemonName as card_pokemonName, c.tcgPlayerId as card_tcgPlayerId, c.pHash as card_pHash, c.lastUpdated as card_lastUpdated,
+            s.id as set_id, s.name as set_name, s.series as set_series, s.logo as set_logo, s.symbol as set_symbol, s.totalCards as set_totalCards, s.officialCards as set_officialCards, s.releaseDate as set_releaseDate, s.isDownloaded as set_isDownloaded, s.lastUpdated as set_lastUpdated
+        FROM user_cards
+        INNER JOIN cards c ON user_cards.cardId = c.id
+        INNER JOIN sets s ON c.setId = s.id
         """)
     fun getAllUserCardsWithDetails(): Flow<List<CardWithDetails>>
 
@@ -140,8 +153,14 @@ interface UserCardDao {
         finish: String
     ): UserCardEntity?
 
+    @Query("SELECT folderId FROM folder_cards WHERE userCardId = :userCardId")
+    suspend fun getFolderIdsForUserCardSync(userCardId: Long): List<Long>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUserCard(userCard: UserCardEntity): Long
+
+    @Update
+    suspend fun updateUserCard(userCard: UserCardEntity): Int
 
     @Query("DELETE FROM user_cards WHERE id = :userCardId")
     suspend fun deleteUserCard(userCardId: Long): Int

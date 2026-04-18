@@ -75,6 +75,7 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.DropdownSelector
 import com.mrhayami.vaultio.ui.components.MetadataModal
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
@@ -504,7 +505,18 @@ fun CandidateItem(
     modifier: Modifier = Modifier
 ) {
     ListItem(
-        headlineContent = { Text(card.name, fontWeight = FontWeight.Bold) },
+        headlineContent = { 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(card.name, fontWeight = FontWeight.Bold)
+                if (card.rarity?.contains("Promo", ignoreCase = true) == true) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    CardAttributeBadges(
+                        finish = PricingUtils.FINISH_NORMAL,
+                        printing = PricingUtils.PRINTING_PROMO
+                    )
+                }
+            }
+        },
         supportingContent = { 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(card.id, style = MaterialTheme.typography.bodySmall)

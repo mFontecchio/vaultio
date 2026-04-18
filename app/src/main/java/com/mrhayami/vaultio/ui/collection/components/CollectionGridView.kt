@@ -24,6 +24,7 @@ import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.ui.collection.GridSettings
+import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.shimmerEffect
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
 
@@ -85,6 +86,16 @@ fun CollectionGridView(
                         ) {
                             Text("${item.userCard.quantity}", modifier = Modifier.padding(2.dp))
                         }
+                    }
+                    
+                    if (!isSelected) {
+                        CardAttributeBadges(
+                            finish = item.userCard.finish,
+                            printing = item.userCard.printing,
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(4.dp)
+                        )
                     }
                 }
             }
