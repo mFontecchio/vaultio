@@ -4,6 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
@@ -139,7 +144,31 @@ class MainActivity : ComponentActivity() {
                             }
                             composable(
                                 route = "card_detail/{userCardId}",
-                                arguments = listOf(navArgument("userCardId") { type = NavType.LongType })
+                                arguments = listOf(navArgument("userCardId") { type = NavType.LongType }),
+                                enterTransition = {
+                                    slideIntoContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Left,
+                                        animationSpec = tween(500, easing = FastOutSlowInEasing)
+                                    ) + fadeIn(animationSpec = tween(500))
+                                },
+                                exitTransition = {
+                                    slideOutOfContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Left,
+                                        animationSpec = tween(500, easing = FastOutSlowInEasing)
+                                    ) + fadeOut(animationSpec = tween(500))
+                                },
+                                popEnterTransition = {
+                                    slideIntoContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Right,
+                                        animationSpec = tween(500, easing = FastOutSlowInEasing)
+                                    ) + fadeIn(animationSpec = tween(500))
+                                },
+                                popExitTransition = {
+                                    slideOutOfContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Right,
+                                        animationSpec = tween(500, easing = FastOutSlowInEasing)
+                                    ) + fadeOut(animationSpec = tween(500))
+                                }
                             ) { backStackEntry ->
                                 val userCardId = backStackEntry.arguments?.getLong("userCardId") ?: 0L
                                 CardDetailScreen(

@@ -1,5 +1,8 @@
 package com.mrhayami.vaultio.ui.components
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -38,142 +41,165 @@ fun MetadataModal(
     var finish by remember { mutableStateOf(PricingUtils.FINISH_NORMAL) }
     val selectedFolderIds = remember { mutableStateListOf<Long>() }
 
+    var isVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { isVisible = true }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 16.dp)
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { -20 }
         ) {
-            IconButton(onClick = onBack) { 
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 16.dp)
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                }
+                Text(
+                    "Add ${card.name}",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
             }
-            Text(
-                "Add ${card.name}", 
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
         }
 
-        Card(
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .padding(bottom = 24.dp),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = fadeIn(tween(400, 100)) + scaleIn(tween(400, 100), initialScale = 0.9f)
         ) {
-            AsyncImage(
-                model = "${card.image}/high.webp",
-                contentDescription = null,
+            Card(
                 modifier = Modifier
-                    .height(280.dp)
-                    .padding(8.dp),
-                contentScale = ContentScale.Fit
-            )
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = 24.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                AsyncImage(
+                    model = "${card.image}/high.webp",
+                    contentDescription = null,
+                    modifier = Modifier
+                        .height(280.dp)
+                        .padding(8.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
         }
 
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier.fillMaxWidth()
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = fadeIn(tween(500, 200, FastOutSlowInEasing)) +
+                    slideInVertically(tween(500, 200, FastOutSlowInEasing)) { 40 }
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        "Quantity", 
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surface, CircleShape)
-                            .padding(horizontal = 4.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        IconButton(
-                            onClick = { if (quantity > 1) quantity-- },
-                            modifier = Modifier.clip(CircleShape)
-                        ) { 
-                            Icon(Icons.Rounded.Remove, null, tint = MaterialTheme.colorScheme.primary) 
-                        }
                         Text(
-                            "$quantity", 
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 16.dp)
+                            "Quantity",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
-                        IconButton(
-                            onClick = { quantity++ },
-                            modifier = Modifier.clip(CircleShape)
-                        ) { 
-                            Icon(Icons.Rounded.Add, null, tint = MaterialTheme.colorScheme.primary) 
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.surface, CircleShape)
+                                .padding(horizontal = 4.dp)
+                        ) {
+                            IconButton(
+                                onClick = { if (quantity > 1) quantity-- },
+                                modifier = Modifier.clip(CircleShape)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Remove,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Text(
+                                "$quantity",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                            IconButton(
+                                onClick = { quantity++ },
+                                modifier = Modifier.clip(CircleShape)
+                            ) {
+                                Icon(Icons.Rounded.Add, null, tint = MaterialTheme.colorScheme.primary)
+                            }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                val conditions = listOf(
-                    PricingUtils.CONDITION_NM,
-                    PricingUtils.CONDITION_LP,
-                    PricingUtils.CONDITION_MP,
-                    PricingUtils.CONDITION_HP,
-                    PricingUtils.CONDITION_DMG
-                )
-                DropdownSelector("Condition", condition, conditions) { condition = it }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                val printings = listOf(
-                    PricingUtils.PRINTING_UNLIMITED,
-                    PricingUtils.PRINTING_SHADOWLESS,
-                    PricingUtils.PRINTING_PROMO,
-                    PricingUtils.PRINTING_1ST_EDITION
-                )
-                DropdownSelector("Printing", printing, printings) { printing = it }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                val finishes = listOf(
-                    PricingUtils.FINISH_NORMAL,
-                    PricingUtils.FINISH_HOLOFOIL,
-                    PricingUtils.FINISH_REVERSE_HOLO,
-                    PricingUtils.FINISH_TEXTURED,
-                    PricingUtils.FINISH_GOLD
-                )
-                DropdownSelector("Finish", finish, finishes) { finish = it }
-
-                if (folders.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        "Add to Folders", 
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                    val conditions = listOf(
+                        PricingUtils.CONDITION_NM,
+                        PricingUtils.CONDITION_LP,
+                        PricingUtils.CONDITION_MP,
+                        PricingUtils.CONDITION_HP,
+                        PricingUtils.CONDITION_DMG
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        folders.forEach { folder ->
-                            key(folder.id) {
-                                val isSelected = selectedFolderIds.contains(folder.id)
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = {
-                                        if (isSelected) selectedFolderIds.remove(folder.id)
-                                        else selectedFolderIds.add(folder.id)
-                                    },
-                                    label = { Text(folder.name) },
-                                    shape = CircleShape
-                                )
+                    DropdownSelector("Condition", condition, conditions) { condition = it }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val printings = listOf(
+                        PricingUtils.PRINTING_UNLIMITED,
+                        PricingUtils.PRINTING_SHADOWLESS,
+                        PricingUtils.PRINTING_PROMO,
+                        PricingUtils.PRINTING_1ST_EDITION
+                    )
+                    DropdownSelector("Printing", printing, printings) { printing = it }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val finishes = listOf(
+                        PricingUtils.FINISH_NORMAL,
+                        PricingUtils.FINISH_HOLOFOIL,
+                        PricingUtils.FINISH_REVERSE_HOLO,
+                        PricingUtils.FINISH_TEXTURED,
+                        PricingUtils.FINISH_GOLD
+                    )
+                    DropdownSelector("Finish", finish, finishes) { finish = it }
+
+                    if (folders.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            "Add to Folders",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            folders.forEach { folder ->
+                                key(folder.id) {
+                                    val isSelected = selectedFolderIds.contains(folder.id)
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            if (isSelected) selectedFolderIds.remove(folder.id)
+                                            else selectedFolderIds.add(folder.id)
+                                        },
+                                        label = { Text(folder.name) },
+                                        shape = CircleShape
+                                    )
+                                }
                             }
                         }
                     }
@@ -183,21 +209,34 @@ fun MetadataModal(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Button(
-            onClick = { onConfirm(quantity, condition, printing, finish, selectedFolderIds.toList()) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = CircleShape,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary
-            )
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = fadeIn(tween(500, 350)) + slideInVertically(tween(500, 350)) { 20 }
         ) {
-            Text(
-                "Add to Collection", 
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Button(
+                onClick = {
+                    onConfirm(
+                        quantity,
+                        condition,
+                        printing,
+                        finish,
+                        selectedFolderIds.toList()
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text(
+                    "Add to Collection",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
         Spacer(modifier = Modifier.height(32.dp))
     }
