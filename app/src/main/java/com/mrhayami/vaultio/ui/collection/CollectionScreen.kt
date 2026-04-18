@@ -940,6 +940,7 @@ fun ViewSettingsSheet(
             }
             ViewMode.POKEDEX -> {
                 SettingsToggle("Show Uncollected Slots", pokedexSettings.showUncollected) { onEvent(CollectionEvent.OnUpdatePokedexSettings(pokedexSettings.copy(showUncollected = it))) }
+                SettingsToggle("Use Official Art", pokedexSettings.useOfficialArt) { onEvent(CollectionEvent.OnUpdatePokedexSettings(pokedexSettings.copy(useOfficialArt = it))) }
                 SettingsToggle("Use Shiny Sprites", pokedexSettings.useShinySprites) { onEvent(CollectionEvent.OnUpdatePokedexSettings(pokedexSettings.copy(useShinySprites = it))) }
             }
         }

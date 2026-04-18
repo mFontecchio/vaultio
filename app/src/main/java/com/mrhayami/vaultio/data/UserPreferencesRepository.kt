@@ -42,6 +42,7 @@ class UserPreferencesRepository(context: Context) {
         
         val POKEDEX_SHOW_UNCOLLECTED = booleanPreferencesKey("pokedex_show_uncollected")
         val POKEDEX_USE_SHINY_SPRITES = booleanPreferencesKey("pokedex_use_shiny_sprites")
+        val POKEDEX_USE_OFFICIAL_ART = booleanPreferencesKey("pokedex_use_official_art")
 
         val THEME_BRAND = stringPreferencesKey("theme_brand")
         val DARK_THEME_CONFIG = stringPreferencesKey("dark_theme_config")
@@ -113,7 +114,8 @@ class UserPreferencesRepository(context: Context) {
     val pokedexSettings: Flow<PokedexSettings> = dataStore.data.map {
         PokedexSettings(
             showUncollected = it[PreferencesKeys.POKEDEX_SHOW_UNCOLLECTED] ?: true,
-            useShinySprites = it[PreferencesKeys.POKEDEX_USE_SHINY_SPRITES] ?: false
+            useShinySprites = it[PreferencesKeys.POKEDEX_USE_SHINY_SPRITES] ?: false,
+            useOfficialArt = it[PreferencesKeys.POKEDEX_USE_OFFICIAL_ART] ?: false
         )
     }
 
@@ -121,6 +123,7 @@ class UserPreferencesRepository(context: Context) {
         dataStore.edit {
             it[PreferencesKeys.POKEDEX_SHOW_UNCOLLECTED] = settings.showUncollected
             it[PreferencesKeys.POKEDEX_USE_SHINY_SPRITES] = settings.useShinySprites
+            it[PreferencesKeys.POKEDEX_USE_OFFICIAL_ART] = settings.useOfficialArt
         }
     }
 

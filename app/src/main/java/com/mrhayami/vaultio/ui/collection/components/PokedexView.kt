@@ -41,8 +41,16 @@ fun PokedexView(
     ) {
         items(entries, key = { it.dexNumber }) { entry ->
             val isCollected = entry.isCollected
-            val spriteType = if (settings.useShinySprites) "shiny" else "pokemon"
-            val spriteUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/$spriteType/${entry.dexNumber}.png"
+            val spriteUrl = if (settings.useOfficialArt) {
+                if (settings.useShinySprites) {
+                    "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/shiny/${entry.dexNumber}.png"
+                } else {
+                    "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${entry.dexNumber}.png"
+                }
+            } else {
+                val spriteType = if (settings.useShinySprites) "shiny" else "pokemon"
+                "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/$spriteType/${entry.dexNumber}.png"
+            }
 
             Box(
                 modifier = Modifier

@@ -25,7 +25,8 @@ data class GridSettings(
 @Immutable
 data class PokedexSettings(
     val showUncollected: Boolean = true,
-    val useShinySprites: Boolean = false
+    val useShinySprites: Boolean = false,
+    val useOfficialArt: Boolean = false
 )
 
 @Immutable
