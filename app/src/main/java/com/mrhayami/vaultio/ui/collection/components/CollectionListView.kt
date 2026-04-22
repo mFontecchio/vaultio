@@ -1,20 +1,40 @@
 package com.mrhayami.vaultio.ui.collection.components
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -52,8 +72,9 @@ fun CollectionListView(
         itemsIndexed(userCards, key = { _, item -> item.userCard.id }) { index, item ->
             val isSelected = selectedIds.contains(item.userCard.id)
             val isNew = System.currentTimeMillis() - item.userCard.dateAdded < 60_000 // 1 minute
-            
-            var visible by remember { mutableStateOf(false) }
+
+            val isInspectionMode = LocalInspectionMode.current
+            var visible by remember { mutableStateOf(isInspectionMode) }
             LaunchedEffect(Unit) { visible = true }
 
             AnimatedVisibility(
@@ -110,7 +131,9 @@ fun CollectionListView(
                                     AsyncImage(
                                         model = setIcon,
                                         contentDescription = null,
-                                        modifier = Modifier.size(20.dp).padding(end = 4.dp),
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .padding(end = 4.dp),
                                         contentScale = ContentScale.Fit
                                     )
                                     Text("x${item.userCard.quantity}", fontWeight = FontWeight.Bold)
@@ -142,24 +165,28 @@ fun CollectionListView(
                             onClick = { onCardClick(item.userCard.id) },
                             onLongClick = { onCardLongClick(item.userCard.id) }
                         )
-                        .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface)
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(
+                                alpha = 0.5f
+                            ) else MaterialTheme.colorScheme.surface
+                        )
                 )
             }
         }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "List View")
 @Composable
-private fun CollectionListViewPreview() {
+fun CollectionListViewPreview() {
     VaultioTheme {
         CollectionListView(
             userCards = listOf(
-                mockCardWithDetails("1", "Pikachu"),
-                mockCardWithDetails("2", "Charizard"),
-                mockCardWithDetails("3", "Mewtwo")
+                mockCardWithDetails(1L, "Pikachu", "https://images.pokemontcg.io/swsh1/1"),
+                mockCardWithDetails(2L, "Charizard", "https://images.pokemontcg.io/swsh4/25"),
+                mockCardWithDetails(3L, "Mewtwo", "https://images.pokemontcg.io/base1/10")
             ),
-            selectedIds = setOf(2L),
+            selectedIds = emptySet(),
             isSelectionMode = false,
             settings = ListSettings(showPrices = true, isCompact = false),
             preferSetLogo = true,
@@ -171,23 +198,68 @@ private fun CollectionListViewPreview() {
     }
 }
 
-private fun mockCardWithDetails(id: String, name: String) = CardWithDetails(
+@Preview(showBackground = true, name = "Compact View")
+@Composable
+fun CollectionListViewCompactPreview() {
+    VaultioTheme {
+        CollectionListView(
+            userCards = listOf(
+                mockCardWithDetails(1L, "Pikachu", "https://images.pokemontcg.io/swsh1/1"),
+                mockCardWithDetails(2L, "Charizard", "https://images.pokemontcg.io/swsh4/25")
+            ),
+            selectedIds = emptySet(),
+            isSelectionMode = false,
+            settings = ListSettings(showPrices = true, isCompact = true),
+            preferSetLogo = true,
+            allPrices = emptyList(),
+            allVintagePrices = emptyList(),
+            onCardClick = {},
+            onCardLongClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Selection Mode")
+@Composable
+fun CollectionListViewSelectionPreview() {
+    VaultioTheme {
+        CollectionListView(
+            userCards = listOf(
+                mockCardWithDetails(1L, "Pikachu", "https://images.pokemontcg.io/swsh1/1"),
+                mockCardWithDetails(2L, "Charizard", "https://images.pokemontcg.io/swsh4/25")
+            ),
+            selectedIds = setOf(1L),
+            isSelectionMode = true,
+            settings = ListSettings(showPrices = true, isCompact = false),
+            preferSetLogo = true,
+            allPrices = emptyList(),
+            allVintagePrices = emptyList(),
+            onCardClick = {},
+            onCardLongClick = {}
+        )
+    }
+}
+
+private fun mockCardWithDetails(id: Long, name: String, imageUrl: String) = CardWithDetails(
     userCard = UserCardEntity(
-        id = id.toLong(),
-        cardId = id,
+        id = id,
+        cardId = id.toString(),
         quantity = 1,
-        dateAdded = System.currentTimeMillis()
+        dateAdded = System.currentTimeMillis(),
+        finish = "Normal",
+        condition = "Near Mint",
+        printing = "Standard"
     ),
     card = CardEntity(
-        id = id,
-        localId = id,
+        id = id.toString(),
+        localId = id.toString(),
         name = name,
-        image = "https://images.pokemontcg.io/swsh1/1",
+        image = imageUrl,
         setId = "swsh1",
         rarity = "Rare",
         category = "Pokemon",
         types = "Lightning",
-        dexId = "25"
+        dexId = id.toString()
     ),
     set = SetEntity(
         id = "swsh1",

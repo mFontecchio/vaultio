@@ -1,23 +1,43 @@
 package com.mrhayami.vaultio.ui.collection.components
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Badge
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -51,9 +71,12 @@ fun CollectionGridView(
         itemsIndexed(userCards, key = { _, item -> item.userCard.id }) { index, item ->
             val isSelected = selectedIds.contains(item.userCard.id)
             val isNew = System.currentTimeMillis() - item.userCard.dateAdded < 60_000 // 1 minute
-            
-            var visible by remember { mutableStateOf(false) }
-            LaunchedEffect(Unit) { visible = true }
+
+            val isInspectionMode = LocalInspectionMode.current
+            var visible by remember { mutableStateOf(isInspectionMode) }
+            LaunchedEffect(Unit) {
+                if (!isInspectionMode) visible = true
+            }
 
             AnimatedVisibility(
                 visible = visible,
@@ -82,7 +105,9 @@ fun CollectionGridView(
                         )
                         if (isSelected) {
                             Box(
-                                modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.2f)),
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(Color.Black.copy(alpha = 0.2f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
@@ -119,24 +144,42 @@ fun CollectionGridView(
 @Composable
 private fun CollectionGridViewPreview() {
     VaultioTheme {
-        CollectionGridView(
-            userCards = listOf(
-                mockCardWithDetails("1", "Pikachu"),
-                mockCardWithDetails("2", "Charizard"),
-                mockCardWithDetails("3", "Mewtwo"),
-                mockCardWithDetails("4", "Blastoise")
-            ),
-            selectedIds = setOf(2L),
-            isSelectionMode = false,
-            settings = GridSettings(columns = 2, showBadges = true),
-            onCardClick = {},
-            onCardLongClick = {}
-        )
+        Surface(color = MaterialTheme.colorScheme.background) {
+            CollectionGridView(
+                userCards = listOf(
+                    mockCardWithDetails(
+                        "1",
+                        "Pikachu",
+                        finish = "normal",
+                        printing = "1st edition"
+                    ),
+                    mockCardWithDetails("2", "Charizard", finish = "holofoil"),
+                    mockCardWithDetails("3", "Mewtwo", finish = "reverse holo"),
+                    mockCardWithDetails("4", "Blastoise", printing = "promo")
+                ),
+                selectedIds = emptySet(),
+                isSelectionMode = false,
+                settings = GridSettings(columns = 2, showBadges = true),
+                onCardClick = {},
+                onCardLongClick = {}
+            )
+        }
     }
 }
 
-private fun mockCardWithDetails(id: String, name: String) = CardWithDetails(
-    userCard = UserCardEntity(id = id.toLong(), cardId = id, quantity = 2),
+private fun mockCardWithDetails(
+    id: String,
+    name: String,
+    finish: String = "normal",
+    printing: String = "unlimited"
+) = CardWithDetails(
+    userCard = UserCardEntity(
+        id = id.toLong(),
+        cardId = id,
+        quantity = 2,
+        finish = finish,
+        printing = printing
+    ),
     card = CardEntity(
         id = id,
         localId = id,
@@ -158,3 +201,25 @@ private fun mockCardWithDetails(id: String, name: String) = CardWithDetails(
         releaseDate = "2020-02-07"
     )
 )
+
+@Preview(showBackground = true, name = "Selection Mode")
+@Composable
+private fun CollectionGridViewSelectionPreview() {
+    VaultioTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            CollectionGridView(
+                userCards = listOf(
+                    mockCardWithDetails("1", "Pikachu"),
+                    mockCardWithDetails("2", "Charizard"),
+                    mockCardWithDetails("3", "Mewtwo"),
+                    mockCardWithDetails("4", "Blastoise")
+                ),
+                selectedIds = setOf(1L, 3L),
+                isSelectionMode = true,
+                settings = GridSettings(columns = 2, showBadges = true),
+                onCardClick = {},
+                onCardLongClick = {}
+            )
+        }
+    }
+}

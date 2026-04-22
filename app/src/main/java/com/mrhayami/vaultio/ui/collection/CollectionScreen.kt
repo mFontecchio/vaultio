@@ -2,15 +2,10 @@
 
 package com.mrhayami.vaultio.ui.collection
 
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.rounded.FileDownload
-import androidx.compose.material.icons.rounded.FileUpload
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
@@ -41,10 +36,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -79,10 +74,13 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Deselect
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderCopy
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
@@ -91,7 +89,10 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -102,6 +103,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -143,6 +145,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.CardWithDetails
@@ -158,6 +161,7 @@ import com.mrhayami.vaultio.ui.collection.components.CollectionListView
 import com.mrhayami.vaultio.ui.collection.components.PokedexView
 import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.MetadataModal
+import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import kotlinx.coroutines.launch
@@ -620,7 +624,9 @@ fun CollectionContent(
 
     if (showMoveToFolderSheet) {
         ModalBottomSheet(onDismissRequest = { showMoveToFolderSheet = false }) {
-            Column(modifier = Modifier.padding(16.dp).navigationBarsPadding()) {
+            Column(modifier = Modifier
+                .padding(16.dp)
+                .navigationBarsPadding()) {
                 Text("Move to Folder", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
                 uiState.folders.forEach { folder ->
@@ -648,7 +654,9 @@ fun CollectionContent(
 
     if (showManageFolders) {
         ModalBottomSheet(onDismissRequest = { showManageFolders = false }) {
-            Column(modifier = Modifier.padding(16.dp).navigationBarsPadding()) {
+            Column(modifier = Modifier
+                .padding(16.dp)
+                .navigationBarsPadding()) {
                 Text("Manage Folders", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
                 LazyColumn {
@@ -750,7 +758,9 @@ fun CollectionContent(
                                     AsyncImage(
                                         model = "${item.card.image}/high.webp",
                                         contentDescription = null,
-                                        modifier = Modifier.fillMaxWidth().aspectRatio(0.718f),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(0.718f),
                                         contentScale = ContentScale.FillBounds
                                     )
                                     Box(
@@ -919,7 +929,9 @@ fun ViewSettingsSheet(
     pokedexSettings: PokedexSettings,
     onEvent: (CollectionEvent) -> Unit
 ) {
-    Column(modifier = Modifier.padding(16.dp).navigationBarsPadding()) {
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .navigationBarsPadding()) {
         Text("View Settings", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -951,7 +963,9 @@ fun ViewSettingsSheet(
 @Composable
 fun SettingsToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -1011,7 +1025,9 @@ fun FolderDialog(
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Icon", style = MaterialTheme.typography.labelLarge)
                 LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(icons) { iconName ->
@@ -1032,7 +1048,9 @@ fun FolderDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Theme Color", style = MaterialTheme.typography.labelLarge)
                 LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(colorOptions) { color ->
@@ -1043,7 +1061,9 @@ fun FolderDialog(
                                 .background(color)
                                 .border(
                                     width = 2.dp,
-                                    color = if (selectedColor == color.toArgb().toLong().toString()) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                    color = if (selectedColor == color.toArgb().toLong()
+                                            .toString()
+                                    ) MaterialTheme.colorScheme.primary else Color.Transparent,
                                     shape = CircleShape
                                 )
                                 .clickable { selectedColor = color.toArgb().toLong().toString() }
@@ -1087,7 +1107,7 @@ fun ExportSelectionDialog(
                         .clickable { exportAll = true }
                         .padding(vertical = 8.dp)
                 ) {
-                    androidx.compose.material3.RadioButton(
+                    RadioButton(
                         selected = exportAll,
                         onClick = { exportAll = true }
                     )
@@ -1102,7 +1122,7 @@ fun ExportSelectionDialog(
                         .clickable { exportAll = false }
                         .padding(vertical = 8.dp)
                 ) {
-                    androidx.compose.material3.RadioButton(
+                    RadioButton(
                         selected = !exportAll,
                         onClick = { exportAll = false }
                     )
@@ -1124,15 +1144,16 @@ fun ExportSelectionDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            selectedFolderIds = if (selectedFolderIds.contains(folder.id)) {
-                                                selectedFolderIds - folder.id
-                                            } else {
-                                                selectedFolderIds + folder.id
-                                            }
+                                            selectedFolderIds =
+                                                if (selectedFolderIds.contains(folder.id)) {
+                                                    selectedFolderIds - folder.id
+                                                } else {
+                                                    selectedFolderIds + folder.id
+                                                }
                                         }
                                         .padding(vertical = 4.dp)
                                 ) {
-                                    androidx.compose.material3.Checkbox(
+                                    Checkbox(
                                         checked = selectedFolderIds.contains(folder.id),
                                         onCheckedChange = { checked ->
                                             selectedFolderIds = if (checked) {
@@ -1251,10 +1272,46 @@ private fun CollectionContentEmptyPreview() {
             ),
             allPrices = emptyList(),
             allVintagePrices = emptyList(),
-            onEvent = {},
             onNavigateToScanner = {},
             onNavigateToCardDetail = {},
-            importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {}
+            importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {},
+            onEvent = {},
+            modifier = Modifier
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Add Card Modal")
+@Composable
+private fun AddCardModalPreview() {
+    VaultioTheme {
+        AddCardModal(
+            uiState = CollectionUiState(
+                searchResults = listOf(
+                    TcgDexCard(
+                        id = "swsh1-1",
+                        localId = "1",
+                        name = "Bulbasaur",
+                        image = "https://images.tcgdex.net/en/swsh/swsh1/1",
+                        rarity = "Common",
+                        category = "Pokemon"
+                    ),
+                    TcgDexCard(
+                        id = "swsh1-2",
+                        localId = "2",
+                        name = "Ivysaur",
+                        image = "https://images.tcgdex.net/en/swsh/swsh1/2",
+                        rarity = "Uncommon",
+                        category = "Pokemon"
+                    )
+                ),
+                isSearching = false,
+                folders = listOf(
+                    FolderEntity(id = 1L, name = "Favorites", icon = "star", color = "0xFF78C850")
+                )
+            ),
+            onEvent = {},
+            onDismiss = {}
         )
     }
 }
@@ -1285,7 +1342,9 @@ fun StickyControls(
             }
             
             item {
-                VerticalDivider(modifier = Modifier.height(24.dp).padding(horizontal = 4.dp))
+                VerticalDivider(modifier = Modifier
+                    .height(24.dp)
+                    .padding(horizontal = 4.dp))
             }
 
             item {
@@ -1363,12 +1422,7 @@ fun StickyControls(
 }
 
 
-
-
-
-
-
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddCardModal(
     uiState: CollectionUiState,
@@ -1449,8 +1503,8 @@ fun AddCardModal(
                                 if (card.rarity?.contains("Promo", ignoreCase = true) == true) {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     CardAttributeBadges(
-                                        finish = com.mrhayami.vaultio.data.PricingUtils.FINISH_NORMAL,
-                                        printing = com.mrhayami.vaultio.data.PricingUtils.PRINTING_PROMO
+                                        finish = PricingUtils.FINISH_NORMAL,
+                                        printing = PricingUtils.PRINTING_PROMO
                                     )
                                 }
                             }
@@ -1475,7 +1529,8 @@ fun AddCardModal(
                                     model = "${card.image}/low.webp",
                                     contentDescription = null,
                                     modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Fit
+                                    contentScale = ContentScale.Crop,
+                                    alignment = Alignment.TopCenter
                                 )
                             }
                         },
