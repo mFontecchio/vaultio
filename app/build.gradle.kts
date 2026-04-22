@@ -14,14 +14,14 @@ plugins {
 
 android {
     namespace = "com.mrhayami.vaultio"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.mrhayami.vaultio"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 3
-        versionName = "1.0.6r9"
+        versionName = "1.0.6r11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -102,4 +102,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     ksp(libs.androidx.room.compiler)
     ksp(libs.moshi.kotlin.codegen)
+    implementation(libs.vico.compose)
+    implementation(libs.vico.compose.m3)
+    implementation(libs.vico.views)
 }

@@ -240,3 +240,15 @@ interface TelemetryDao {
     @Query("SELECT * FROM telemetry_log ORDER BY timestamp DESC LIMIT 100")
     fun getRecentLogs(): Flow<List<TelemetryLogEntity>>
 }
+
+@Dao
+interface CollectionSnapshotDao {
+    @Query("SELECT * FROM collection_snapshots ORDER BY timestamp ASC")
+    fun getAllSnapshots(): Flow<List<CollectionSnapshotEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSnapshot(snapshot: CollectionSnapshotEntity): Long
+
+    @Query("DELETE FROM collection_snapshots WHERE timestamp < :threshold")
+    suspend fun deleteOldSnapshots(threshold: Long): Int
+}

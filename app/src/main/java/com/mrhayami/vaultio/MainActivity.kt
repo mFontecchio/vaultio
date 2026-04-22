@@ -12,18 +12,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -41,6 +36,8 @@ import com.mrhayami.vaultio.ui.scanner.ScannerScreen
 import com.mrhayami.vaultio.ui.screens.SetDownloadsScreen
 import com.mrhayami.vaultio.ui.screens.SetDownloadsViewModel
 import com.mrhayami.vaultio.ui.settings.SettingsScreen
+import com.mrhayami.vaultio.ui.stats.StatsScreen
+import com.mrhayami.vaultio.ui.stats.StatsViewModel
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import com.mrhayami.vaultio.ui.walkthrough.WalkthroughScreen
 
@@ -70,6 +67,7 @@ class MainActivity : ComponentActivity() {
                 val currentRoute = navBackStackEntry?.destination?.route
                 val showBottomBar = listOf(
                     Screen.Collection,
+                    Screen.Stats,
                     Screen.SetDownloads,
                     Screen.Settings
                 ).any { it.route == currentRoute }
@@ -122,6 +120,32 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToScanner = { navController.navigate(Screen.Scanner.route) },
                                     onNavigateToCardDetail = { id -> navController.navigate("card_detail/$id") }
                                 ) 
+                            }
+                            composable(Screen.Stats.route) {
+                                val viewModel: StatsViewModel = viewModel(
+                                    factory = remember(repository) {
+                                        object : androidx.lifecycle.ViewModelProvider.Factory {
+                                            override fun <T : androidx.lifecycle.ViewModel> create(
+                                                modelClass: Class<T>
+                                            ): T {
+                                                return StatsViewModel(repository) as T
+                                            }
+                                        }
+                                    }
+                                )
+                                val state by viewModel.state.collectAsState()
+                                StatsScreen(
+                                    state = state,
+                                    onEvent = viewModel::onEvent,
+                                    sideEffects = viewModel.sideEffects,
+                                    onNavigation = { effect ->
+                                        when (effect) {
+                                            com.mrhayami.vaultio.ui.stats.StatsEffect.Navigation.GoBack -> navController.popBackStack()
+                                            is com.mrhayami.vaultio.ui.stats.StatsEffect.Navigation.GoToCardDetail ->
+                                                navController.navigate("card_detail/${effect.userCardId}")
+                                        }
+                                    }
+                                )
                             }
                             composable(Screen.SetDownloads.route) { 
                                 val viewModel: SetDownloadsViewModel = viewModel(

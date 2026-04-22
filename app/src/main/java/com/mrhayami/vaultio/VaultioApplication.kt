@@ -1,18 +1,22 @@
 package com.mrhayami.vaultio
 
 import android.app.Application
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.VaultioDatabase
 import com.mrhayami.vaultio.data.remote.JustTcgApi
 import com.mrhayami.vaultio.data.remote.TcgDexApi
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import com.mrhayami.vaultio.data.workers.CollectionSnapshotWorker
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
-import java.util.concurrent.TimeUnit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import java.util.concurrent.TimeUnit
 
 class VaultioApplication : Application() {
 
@@ -64,9 +68,24 @@ class VaultioApplication : Application() {
             priceDao = database.priceDao(),
             apiUsageDao = database.apiUsageDao(),
             telemetryDao = database.telemetryDao(),
+            collectionSnapshotDao = database.collectionSnapshotDao(),
             tcgDexApi = tcgDexApi,
             justTcgApi = justTcgApi,
             userPreferencesRepository = userPreferencesRepository
+        )
+
+        scheduleDailySnapshot()
+    }
+
+    private fun scheduleDailySnapshot() {
+        val workRequest = PeriodicWorkRequestBuilder<CollectionSnapshotWorker>(24, TimeUnit.HOURS)
+            .addTag("collection_snapshot")
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "daily_collection_snapshot",
+            ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
         )
     }
 }

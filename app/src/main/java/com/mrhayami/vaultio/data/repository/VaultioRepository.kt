@@ -5,20 +5,46 @@ import com.mrhayami.vaultio.data.PokemonUtils
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.VintageSets
-import com.mrhayami.vaultio.data.local.*
-import com.mrhayami.vaultio.data.remote.*
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.async
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import com.mrhayami.vaultio.data.local.ApiUsageDao
+import com.mrhayami.vaultio.data.local.ApiUsageEntity
+import com.mrhayami.vaultio.data.local.CardDao
+import com.mrhayami.vaultio.data.local.CardEntity
+import com.mrhayami.vaultio.data.local.CardWithDetails
+import com.mrhayami.vaultio.data.local.CollectionExportDto
+import com.mrhayami.vaultio.data.local.CollectionSnapshotDao
+import com.mrhayami.vaultio.data.local.CollectionSnapshotEntity
+import com.mrhayami.vaultio.data.local.FolderCardCrossRef
+import com.mrhayami.vaultio.data.local.FolderDao
+import com.mrhayami.vaultio.data.local.FolderDto
+import com.mrhayami.vaultio.data.local.FolderEntity
+import com.mrhayami.vaultio.data.local.PriceDao
+import com.mrhayami.vaultio.data.local.PriceEntity
+import com.mrhayami.vaultio.data.local.SetDao
+import com.mrhayami.vaultio.data.local.SetEntity
+import com.mrhayami.vaultio.data.local.TelemetryDao
+import com.mrhayami.vaultio.data.local.TelemetryLogEntity
+import com.mrhayami.vaultio.data.local.UserCardDao
+import com.mrhayami.vaultio.data.local.UserCardDto
+import com.mrhayami.vaultio.data.local.UserCardEntity
+import com.mrhayami.vaultio.data.local.VintagePriceEntity
+import com.mrhayami.vaultio.data.remote.JustTcgApi
+import com.mrhayami.vaultio.data.remote.JustTcgMetadata
+import com.mrhayami.vaultio.data.remote.JustTcgVariant
+import com.mrhayami.vaultio.data.remote.TcgDexApi
+import com.mrhayami.vaultio.data.remote.TcgDexCard
+import com.mrhayami.vaultio.data.remote.TcgDexSet
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 private const val TAG = "VaultioRepository"
 
@@ -30,6 +56,7 @@ class VaultioRepository(
     private val priceDao: PriceDao,
     private val apiUsageDao: ApiUsageDao,
     private val telemetryDao: TelemetryDao,
+    private val collectionSnapshotDao: CollectionSnapshotDao,
     private val tcgDexApi: TcgDexApi,
     val justTcgApi: JustTcgApi,
     val userPreferencesRepository: UserPreferencesRepository,
@@ -652,4 +679,50 @@ class VaultioRepository(
             }
         }
     }
+
+    suspend fun calculateTotalCollectionValue(): Double = withContext(ioDispatcher) {
+        val userCards =
+            userCardDao.getAllUserCardsWithDetails().firstOrNull() ?: return@withContext 0.0
+        val allPrices = priceDao.getAllPrices().firstOrNull() ?: emptyList()
+        val allVintagePrices = priceDao.getAllVintagePrices().firstOrNull() ?: emptyList()
+
+        userCards.sumOf { details ->
+            val userCard = details.userCard
+            val card = details.card
+
+            val price = if (userCard.manualPrice != null) {
+                userCard.manualPrice
+            } else if (VintageSets.isVintageSet(card.setId)) {
+                allVintagePrices.find {
+                    it.cardId == userCard.cardId &&
+                            it.finish == userCard.finish &&
+                            it.printing == userCard.printing &&
+                            it.condition == userCard.condition
+                }?.marketPrice ?: 0.0
+            } else {
+                allPrices.find {
+                    it.cardId == userCard.cardId &&
+                            it.finish == userCard.finish &&
+                            it.condition == userCard.condition
+                }?.marketPrice ?: 0.0
+            }
+            price * userCard.quantity
+        }
+    }
+
+    suspend fun takeSnapshot() = withContext(ioDispatcher) {
+        val totalValue = calculateTotalCollectionValue()
+        val cardCount =
+            userCardDao.getAllUserCardsWithDetails().firstOrNull()?.sumOf { it.userCard.quantity }
+                ?: 0
+        collectionSnapshotDao.insertSnapshot(
+            CollectionSnapshotEntity(
+                totalValue = totalValue,
+                cardCount = cardCount
+            )
+        )
+    }
+
+    fun getAllSnapshots(): Flow<List<CollectionSnapshotEntity>> =
+        collectionSnapshotDao.getAllSnapshots()
 }

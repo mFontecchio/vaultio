@@ -152,3 +152,11 @@ data class TelemetryLogEntity(
     val latency: Long,
     val timestamp: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "collection_snapshots")
+data class CollectionSnapshotEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val totalValue: Double,
+    val cardCount: Int,
+    val timestamp: Long = System.currentTimeMillis()
+)
