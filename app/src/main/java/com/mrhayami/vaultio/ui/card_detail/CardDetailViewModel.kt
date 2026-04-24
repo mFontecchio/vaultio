@@ -4,12 +4,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.mrhayami.vaultio.data.local.CardWithDetails
+import com.mrhayami.vaultio.data.local.FolderCardCrossRef
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.PriceEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
-import com.mrhayami.vaultio.data.local.UserCardEntity
-import com.mrhayami.vaultio.data.local.FolderCardCrossRef
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -101,6 +99,16 @@ class CardDetailViewModel(
             is CardDetailEvent.AddCardToFolder -> addCardToFolder(event.folderId)
             is CardDetailEvent.RemoveCardFromFolder -> removeCardFromFolder(event.folderId)
             CardDetailEvent.ConsumeSaveSuccess -> consumeSaveSuccess()
+            is CardDetailEvent.GradeCard -> {
+                viewModelScope.launch {
+                    _sideEffects.send(
+                        CardDetailEffect.Navigation.ToGrading(
+                            userCardId,
+                            event.image
+                        )
+                    )
+                }
+            }
         }
     }
 

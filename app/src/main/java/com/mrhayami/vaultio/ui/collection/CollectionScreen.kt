@@ -10,6 +10,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -127,11 +128,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -272,11 +273,11 @@ fun CollectionContent(
     
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
-    
-    val onCardClick = remember(uiState.isSelectionMode) {
+
+    val onCardClick = remember(uiState.isSelectionMode, onEvent, onNavigateToCardDetail) {
         { id: Long -> if (uiState.isSelectionMode) onEvent(CollectionEvent.OnToggleSelection(id)) else onNavigateToCardDetail(id) }
     }
-    val onCardLongClick = remember {
+    val onCardLongClick = remember(onEvent) {
         { id: Long -> onEvent(CollectionEvent.OnToggleSelection(id)) }
     }
     val onDexClick = remember {
@@ -509,7 +510,7 @@ fun CollectionContent(
                         Icon(
                             imageVector = Icons.Rounded.Add,
                             contentDescription = if (fabExpanded) "Close Menu" else "Open Menu",
-                            modifier = Modifier.rotate(rotation)
+                            modifier = Modifier.graphicsLayer { rotationZ = rotation }
                         )
                     }
                 }
@@ -543,8 +544,16 @@ fun CollectionContent(
                     AnimatedContent(
                         targetState = uiState.viewMode,
                         transitionSpec = {
-                            (fadeIn() + scaleIn(initialScale = 0.92f))
-                                .togetherWith(fadeOut() + scaleOut(targetScale = 0.92f))
+                            (fadeIn(tween(200)) + scaleIn(
+                                initialScale = 0.95f,
+                                animationSpec = tween(200)
+                            ))
+                                .togetherWith(
+                                    fadeOut(tween(200)) + scaleOut(
+                                        targetScale = 0.95f,
+                                        animationSpec = tween(200)
+                                    )
+                                )
                                 .using(SizeTransform(clip = false))
                         },
                         label = "ViewModeTransition"
@@ -556,8 +565,8 @@ fun CollectionContent(
                                 isSelectionMode = uiState.isSelectionMode,
                                 settings = uiState.listSettings,
                                 preferSetLogo = uiState.preferSetLogo,
-                                allPrices = allPrices,
-                                allVintagePrices = allVintagePrices,
+//                                allPrices = allPrices,
+//                                allVintagePrices = allVintagePrices,
                                 onCardClick = onCardClick,
                                 onCardLongClick = onCardLongClick
                             )
@@ -630,6 +639,14 @@ fun CollectionContent(
                 Text("Move to Folder", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
                 uiState.folders.forEach { folder ->
+                    val clickableModifier = remember(folder.id) {
+                        Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                onEvent(CollectionEvent.OnMoveSelectedToFolder(folder.id))
+                                showMoveToFolderSheet = false
+                            }
+                    }
                     ListItem(
                         headlineContent = { Text(folder.name) },
                         leadingContent = {
@@ -639,12 +656,7 @@ fun CollectionContent(
                                 tint = folder.color?.let { Color(it.toLong().toInt()) } ?: MaterialTheme.colorScheme.primary
                             )
                         },
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable {
-                                onEvent(CollectionEvent.OnMoveSelectedToFolder(folder.id))
-                                showMoveToFolderSheet = false
-                            }
+                        modifier = clickableModifier
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -713,7 +725,7 @@ fun CollectionContent(
         // Use filtered cards so folder filtering applies to the detailed list too
         val collectedForDex = remember(selectedDexId, uiState.filteredUserCards) {
             uiState.filteredUserCards.filter { cardWithDetails ->
-                val card = cardWithDetails.card
+                val card = cardWithDetails.details.card
                 val dexIds = try {
                     card.dexIds?.let { listIntAdapter.fromJson(it) } ?: listOfNotNull(card.dexId?.toIntOrNull())
                 } catch (_: Exception) {
@@ -748,7 +760,7 @@ fun CollectionContent(
                         items(collectedForDex) { item ->
                             Card(
                                 onClick = {
-                                    onNavigateToCardDetail(item.userCard.id)
+                                    onNavigateToCardDetail(item.details.userCard.id)
                                     selectedDexId = null
                                 },
                                 shape = RoundedCornerShape(12.dp),
@@ -756,7 +768,7 @@ fun CollectionContent(
                             ) {
                                 Box {
                                     AsyncImage(
-                                        model = "${item.card.image}/high.webp",
+                                        model = "${item.details.card.image}/high.webp",
                                         contentDescription = null,
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -769,8 +781,8 @@ fun CollectionContent(
                                             .padding(6.dp)
                                     ) {
                                         CardAttributeBadges(
-                                            finish = item.userCard.finish,
-                                            printing = item.userCard.printing
+                                            finish = item.details.userCard.finish,
+                                            printing = item.details.userCard.printing
                                         )
                                     }
                                 }
@@ -894,7 +906,17 @@ fun SortFilterSheet(
             modifier = Modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("Mint", "Near Mint", "Lightly Played", "Moderately Played", "Heavily Played", "Damaged").forEach { cond ->
+            val conditions = remember {
+                listOf(
+                    "Mint",
+                    "Near Mint",
+                    "Lightly Played",
+                    "Moderately Played",
+                    "Heavily Played",
+                    "Damaged"
+                )
+            }
+            conditions.forEach { cond ->
                 FilterChip(
                     selected = uiState.filterSettings.conditions.contains(cond),
                     onClick = { onEvent(CollectionEvent.OnToggleConditionFilter(cond)) },
@@ -908,7 +930,9 @@ fun SortFilterSheet(
             modifier = Modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("Non Holo", "Holo", "Reverse Holo", "Textured", "Gold").forEach { finish ->
+            val finishes =
+                remember { listOf("Non Holo", "Holo", "Reverse Holo", "Textured", "Gold") }
+            finishes.forEach { finish ->
                 FilterChip(
                     selected = uiState.filterSettings.finishes.contains(finish),
                     onClick = { onEvent(CollectionEvent.OnToggleFinishFilter(finish)) },
@@ -983,31 +1007,44 @@ fun FolderDialog(
     var name by remember { mutableStateOf(folder.name) }
     var selectedIcon by remember { mutableStateOf(folder.icon ?: "folder") }
 
-    val colorOptions = listOf(
-        Color(0xFF78C850), // Grass
-        Color(0xFFF08030), // Fire
-        Color(0xFF6890F0), // Water
-        Color(0xFFF8D030), // Electric
-        Color(0xFFF85888), // Psychic
-        Color(0xFFA8A878), // Normal
-        Color(0xFFE0C068), // Ground
-        Color(0xFFA040A0), // Poison
-        Color(0xFFC03028), // Fighting
-        Color(0xFFB8A038), // Rock
-        Color(0xFFA8B820), // Bug
-        Color(0xFF705898), // Ghost
-        Color(0xFFB8B8D0), // Steel
-        Color(0xFF98D8D8), // Ice
-        Color(0xFF7038F8), // Dragon
-        Color(0xFF705848), // Dark
-        Color(0xFFEE99AC)  // Fairy
-    )
+    val colorOptions = remember {
+        listOf(
+            Color(0xFF78C850), // Grass
+            Color(0xFFF08030), // Fire
+            Color(0xFF6890F0), // Water
+            Color(0xFFF8D030), // Electric
+            Color(0xFFF85888), // Psychic
+            Color(0xFFA8A878), // Normal
+            Color(0xFFE0C068), // Ground
+            Color(0xFFA040A0), // Poison
+            Color(0xFFC03028), // Fighting
+            Color(0xFFB8A038), // Rock
+            Color(0xFFA8B820), // Bug
+            Color(0xFF705898), // Ghost
+            Color(0xFFB8B8D0), // Steel
+            Color(0xFF98D8D8), // Ice
+            Color(0xFF7038F8), // Dragon
+            Color(0xFF705848), // Dark
+            Color(0xFFEE99AC)  // Fairy
+        )
+    }
 
     var selectedColor by remember {
         mutableStateOf(folder.color ?: colorOptions[1].toArgb().toLong().toString())
     }
 
-    val icons = listOf("folder", "star", "favorite", "label", "history", "cloud", "auto_awesome", "bolt")
+    val icons = remember {
+        listOf(
+            "folder",
+            "star",
+            "favorite",
+            "label",
+            "history",
+            "cloud",
+            "auto_awesome",
+            "bolt"
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1138,10 +1175,9 @@ fun ExportSelectionDialog(
                             .padding(start = 32.dp)
                     ) {
                         LazyColumn {
-                            items(folders) { folder ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
+                            items(folders, key = { it.id }) { folder ->
+                                val rowModifier = remember(folder.id, selectedFolderIds) {
+                                    Modifier
                                         .fillMaxWidth()
                                         .clickable {
                                             selectedFolderIds =
@@ -1152,16 +1188,21 @@ fun ExportSelectionDialog(
                                                 }
                                         }
                                         .padding(vertical = 4.dp)
+                                }
+                                val onCheckedChange = remember(folder.id, selectedFolderIds) {
+                                    { checked: Boolean ->
+                                        selectedFolderIds =
+                                            if (checked) selectedFolderIds + folder.id else selectedFolderIds - folder.id
+                                    }
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = rowModifier
                                 ) {
                                     Checkbox(
                                         checked = selectedFolderIds.contains(folder.id),
-                                        onCheckedChange = { checked ->
-                                            selectedFolderIds = if (checked) {
-                                                selectedFolderIds + folder.id
-                                            } else {
-                                                selectedFolderIds - folder.id
-                                            }
-                                        }
+                                        onCheckedChange = onCheckedChange
                                     )
                                     Icon(
                                         getIconFromName(folder.icon),
@@ -1227,15 +1268,13 @@ private fun StickyControlsPreview() {
 }
 
 
-
-
-
-
-
-private fun mockCardWithDetails(id: String, name: String) = CardWithDetails(
+private fun mockCardWithDetails(id: String, name: String) = CardUiModel(
+    details = CardWithDetails(
     userCard = UserCardEntity(id = id.hashCode().toLong(), cardId = id, quantity = 1),
     card = CardEntity(id = id, localId = "1", name = name, image = "url", setId = "swsh1", rarity = "Common", category = "Pokemon", types = "Fire", dexId = "1"),
     set = SetEntity(id = "swsh1", name = "Sword & Shield", series = "Sword & Shield", logo = "url", symbol = "url", totalCards = 200, officialCards = 202, releaseDate = "2020-02-07")
+    ),
+    price = 123.00
 )
 
 @Preview(showBackground = true, name = "Collection Content Populated")
@@ -1244,7 +1283,12 @@ private fun CollectionContentPreview() {
     MaterialTheme {
         CollectionContent(
             uiState = CollectionUiState(
-                userCards = List(5) { mockCardWithDetails("swsh1-$it", "Pokemon Card $it") },
+                userCards = List(5) {
+                    mockCardWithDetails(
+                        "swsh1-$it",
+                        "Pokemon Card $it"
+                    ).details
+                },
                 filteredUserCards = List(5) { mockCardWithDetails("swsh1-$it", "Pokemon Card $it") },
                 folders = listOf(FolderEntity(id = 1L, name = "Favorites", icon = "star")),
                 totalValue = 420.69,
@@ -1496,6 +1540,12 @@ fun AddCardModal(
             
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(uiState.searchResults, key = { it.id }) { card ->
+                    val itemModifier = remember(card) {
+                        Modifier
+                            .padding(vertical = 4.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { selectedCard = card }
+                    }
                     ListItem(
                         headlineContent = { 
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1534,10 +1584,7 @@ fun AddCardModal(
                                 )
                             }
                         },
-                        modifier = Modifier
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { selectedCard = card }
+                        modifier = itemModifier
                     )
                 }
             }

@@ -1,6 +1,7 @@
 package com.mrhayami.vaultio.data.repository
 
 import android.util.Log
+import androidx.sqlite.db.SimpleSQLiteQuery
 import com.mrhayami.vaultio.data.PokemonUtils
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.UserPreferencesRepository
@@ -33,15 +34,20 @@ import com.mrhayami.vaultio.data.remote.JustTcgVariant
 import com.mrhayami.vaultio.data.remote.TcgDexApi
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.remote.TcgDexSet
+import com.mrhayami.vaultio.ui.collection.FilterSettings
+import com.mrhayami.vaultio.ui.collection.SortDirection
+import com.mrhayami.vaultio.ui.collection.SortMode
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.flow.flatMapMerge
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -80,6 +86,100 @@ class VaultioRepository(
     fun getPricesForCard(cardId: String): Flow<List<PriceEntity>> = priceDao.getPricesForCard(cardId)
 
     fun getVintagePricesForCard(cardId: String): Flow<List<VintagePriceEntity>> = priceDao.getVintagePricesForCard(cardId)
+
+    fun getFilteredUserCards(
+        searchQuery: String,
+        folderId: Long?,
+        sortMode: SortMode,
+        sortDirection: SortDirection,
+        filterSettings: FilterSettings
+    ): Flow<List<CardWithDetails>> {
+        val queryBuilder = StringBuilder()
+        val args = mutableListOf<Any>()
+
+        queryBuilder.append(
+            """
+            SELECT
+                uc.*,
+                c.id as card_id, c.localId as card_localId, c.name as card_name, c.image as card_image, c.setId as card_setId, c.rarity as card_rarity, c.category as card_category, c.types as card_types, c.dexId as card_dexId, c.dexIds as card_dexIds, c.pokemonName as card_pokemonName, c.tcgPlayerId as card_tcgPlayerId, c.pHash as card_pHash, c.lastUpdated as card_lastUpdated,
+                s.id as set_id, s.name as set_name, s.series as set_series, s.logo as set_logo, s.symbol as set_symbol, s.totalCards as set_totalCards, s.officialCards as set_officialCards, s.releaseDate as set_releaseDate, s.isDownloaded as set_isDownloaded, s.lastUpdated as set_lastUpdated
+            FROM user_cards uc
+            INNER JOIN cards c ON uc.cardId = c.id
+            INNER JOIN sets s ON c.setId = s.id
+        """
+        )
+
+        if (folderId != null) {
+            queryBuilder.append(" INNER JOIN folder_cards fc ON uc.id = fc.userCardId ")
+        }
+
+        queryBuilder.append(" WHERE 1=1 ")
+
+        if (folderId != null) {
+            queryBuilder.append(" AND fc.folderId = ? ")
+            args.add(folderId)
+        }
+
+        if (searchQuery.isNotBlank()) {
+            queryBuilder.append(" AND (c.name LIKE ? OR c.pokemonName LIKE ? OR s.name LIKE ?) ")
+            val likeQuery = "%$searchQuery%"
+            args.add(likeQuery)
+            args.add(likeQuery)
+            args.add(likeQuery)
+        }
+
+        if (filterSettings.rarities.isNotEmpty()) {
+            queryBuilder.append(" AND c.rarity IN (${filterSettings.rarities.joinToString { "?" }}) ")
+            args.addAll(filterSettings.rarities)
+        }
+
+        if (filterSettings.categories.isNotEmpty()) {
+            queryBuilder.append(" AND c.category IN (${filterSettings.categories.joinToString { "?" }}) ")
+            args.addAll(filterSettings.categories)
+        }
+
+        if (filterSettings.conditions.isNotEmpty()) {
+            queryBuilder.append(" AND uc.condition IN (${filterSettings.conditions.joinToString { "?" }}) ")
+            args.addAll(filterSettings.conditions)
+        }
+
+        if (filterSettings.finishes.isNotEmpty()) {
+            queryBuilder.append(" AND uc.finish IN (${filterSettings.finishes.joinToString { "?" }}) ")
+            args.addAll(filterSettings.finishes)
+        }
+
+        if (filterSettings.types.isNotEmpty()) {
+            // Types are comma-separated in DB
+            queryBuilder.append(" AND (")
+            filterSettings.types.forEachIndexed { index, type ->
+                if (index > 0) queryBuilder.append(" OR ")
+                queryBuilder.append(" c.types LIKE ? ")
+                args.add("%$type%")
+            }
+            queryBuilder.append(") ")
+        }
+
+        val orderBy = when (sortMode) {
+            SortMode.NAME -> "c.name"
+            SortMode.SET -> "s.releaseDate ${if (sortDirection == SortDirection.DESCENDING) "DESC" else "ASC"}, c.localId"
+            SortMode.VALUE -> "COALESCE(uc.manualPrice, 0.0)" // Note: Market prices are in a different table, so this only sorts by manual price or 0
+            SortMode.DATE_ADDED -> "uc.dateAdded"
+            SortMode.RARITY -> "c.rarity"
+            SortMode.QUANTITY -> "uc.quantity"
+            SortMode.NUMBER -> "c.localId"
+        }
+
+        val direction = if (sortDirection == SortDirection.DESCENDING) "DESC" else "ASC"
+
+        // Custom handling for VALUE sorting if it's not manual price requires a more complex join
+        // For now, we'll keep the ViewModel-side sorting for VALUE since it depends on the priceMap
+        if (sortMode != SortMode.VALUE) {
+            queryBuilder.append(" ORDER BY $orderBy $direction")
+        }
+
+        val query = SimpleSQLiteQuery(queryBuilder.toString(), args.toTypedArray())
+        return userCardDao.getFilteredUserCards(query)
+    }
 
     suspend fun refreshSets() {
         runCatching {
@@ -187,7 +287,11 @@ class VaultioRepository(
         null
     }
 
-    suspend fun addUserCard(card: TcgDexCard, userCardEntity: UserCardEntity, folderIds: List<Long> = emptyList()) {
+    suspend fun addUserCard(
+        card: TcgDexCard,
+        userCardEntity: UserCardEntity,
+        folderIds: List<Long> = emptyList()
+    ): Long {
         Log.d("Vaultio", "Adding card to collection: ${card.name} (${card.id})")
         val setId = card.id.substringBefore("-")
         ensureSetIsSynced(setId)
@@ -235,6 +339,7 @@ class VaultioRepository(
         }
 
         updateCardPrice(card.id)
+        return userCardIdResult
     }
 
     private suspend fun ensureSetIsSynced(setId: String) {
@@ -528,18 +633,28 @@ class VaultioRepository(
         return (usage?.dailyRemaining ?: 100) > 0
     }
 
-    suspend fun updatePricesBatch(cards: List<CardEntity>) = supervisorScope {
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    suspend fun updatePricesBatch(cards: List<CardEntity>) = withContext(ioDispatcher) {
         val (vintage, modern) = cards.partition { VintageSets.isVintageSet(it.setId) }
-        
-        val modernDeferred = modern.map { card ->
-            async(ioDispatcher) { updateCardPrice(card.id) }
-        }
-        
-        val vintageDeferred = vintage.map { card ->
-            async(ioDispatcher) { updateVintageCardPrice(card) }
-        }
-        
-        (modernDeferred + vintageDeferred).forEach { it.await() }
+
+        // Use a Flow with flatMapMerge to limit concurrency and avoid overloading the network/API
+        val concurrency = 4
+
+        (modern.map { it.id } + vintage.map { it.id }).asFlow()
+            .flatMapMerge(concurrency = concurrency) { cardId ->
+                flow {
+                    val card = cards.find { it.id == cardId }
+                    if (card != null) {
+                        if (VintageSets.isVintageSet(card.setId)) {
+                            updateVintageCardPrice(card)
+                        } else {
+                            updateCardPrice(card.id)
+                        }
+                    }
+                    emit(Unit)
+                }
+            }
+            .collect()
     }
 
     fun getApiUsageFlow(): Flow<ApiUsageEntity?> {
@@ -680,45 +795,41 @@ class VaultioRepository(
         }
     }
 
-    suspend fun calculateTotalCollectionValue(): Double = withContext(ioDispatcher) {
-        val userCards =
-            userCardDao.getAllUserCardsWithDetails().firstOrNull() ?: return@withContext 0.0
+    suspend fun takeSnapshot() = withContext(ioDispatcher) {
+        val userCards = userCardDao.getAllUserCardsWithDetails().firstOrNull() ?: return@withContext
         val allPrices = priceDao.getAllPrices().firstOrNull() ?: emptyList()
         val allVintagePrices = priceDao.getAllVintagePrices().firstOrNull() ?: emptyList()
 
-        userCards.sumOf { details ->
+        val priceMap = allPrices.associateBy { "${it.cardId}_${it.finish}_${it.condition}" }
+        val vintagePriceMap =
+            allVintagePrices.associateBy { "${it.cardId}_${it.finish}_${it.printing}_${it.condition}" }
+
+        var totalValue = 0.0
+        var totalQuantity = 0
+
+        userCards.forEach { details ->
             val userCard = details.userCard
             val card = details.card
+
+            totalQuantity += userCard.quantity
 
             val price = if (userCard.manualPrice != null) {
                 userCard.manualPrice
             } else if (VintageSets.isVintageSet(card.setId)) {
-                allVintagePrices.find {
-                    it.cardId == userCard.cardId &&
-                            it.finish == userCard.finish &&
-                            it.printing == userCard.printing &&
-                            it.condition == userCard.condition
-                }?.marketPrice ?: 0.0
+                val key =
+                    "${userCard.cardId}_${userCard.finish}_${userCard.printing}_${userCard.condition}"
+                vintagePriceMap[key]?.marketPrice ?: 0.0
             } else {
-                allPrices.find {
-                    it.cardId == userCard.cardId &&
-                            it.finish == userCard.finish &&
-                            it.condition == userCard.condition
-                }?.marketPrice ?: 0.0
+                val key = "${userCard.cardId}_${userCard.finish}_${userCard.condition}"
+                priceMap[key]?.marketPrice ?: 0.0
             }
-            price * userCard.quantity
+            totalValue += price * userCard.quantity
         }
-    }
 
-    suspend fun takeSnapshot() = withContext(ioDispatcher) {
-        val totalValue = calculateTotalCollectionValue()
-        val cardCount =
-            userCardDao.getAllUserCardsWithDetails().firstOrNull()?.sumOf { it.userCard.quantity }
-                ?: 0
         collectionSnapshotDao.insertSnapshot(
             CollectionSnapshotEntity(
                 totalValue = totalValue,
-                cardCount = cardCount
+                cardCount = totalQuantity
             )
         )
     }

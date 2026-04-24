@@ -6,8 +6,11 @@ import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
+import androidx.room.Relation
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 
 data class CardWithDetails(
@@ -16,7 +19,12 @@ data class CardWithDetails(
     @Embedded(prefix = "card_")
     val card: CardEntity,
     @Embedded(prefix = "set_")
-    val set: SetEntity
+    val set: SetEntity,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "userCardId"
+    )
+    val grade: CardGradeEntity? = null
 )
 
 @Dao
@@ -167,6 +175,12 @@ interface UserCardDao {
 
     @Query("DELETE FROM user_cards WHERE id IN (:userCardIds)")
     suspend fun deleteUserCards(userCardIds: List<Long>): Int
+
+    @Query("SELECT SUM(quantity) FROM user_cards")
+    suspend fun getTotalQuantity(): Int?
+
+    @Query("SELECT COUNT(*) FROM user_cards")
+    suspend fun getDistinctCardCount(): Int?
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFolderCardCrossRef(crossRef: FolderCardCrossRef): Long
@@ -179,6 +193,10 @@ interface UserCardDao {
 
     @Query("DELETE FROM folder_cards WHERE userCardId = :userCardId")
     suspend fun deleteFolderCardCrossRefsForUserCard(userCardId: Long): Int
+
+    @Transaction
+    @RawQuery(observedEntities = [UserCardEntity::class, CardEntity::class, SetEntity::class])
+    fun getFilteredUserCards(query: SupportSQLiteQuery): Flow<List<CardWithDetails>>
 
     @Query("SELECT * FROM folder_cards")
     fun getAllFolderCardCrossRefs(): Flow<List<FolderCardCrossRef>>
@@ -251,4 +269,16 @@ interface CollectionSnapshotDao {
 
     @Query("DELETE FROM collection_snapshots WHERE timestamp < :threshold")
     suspend fun deleteOldSnapshots(threshold: Long): Int
+}
+
+@Dao
+interface CardGradeDao {
+    @Query("SELECT * FROM card_grades WHERE userCardId = :userCardId")
+    fun getGradeForUserCard(userCardId: Long): Flow<CardGradeEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGrade(grade: CardGradeEntity): Long
+
+    @Query("DELETE FROM card_grades WHERE userCardId = :userCardId")
+    suspend fun deleteGradeForUserCard(userCardId: Long): Int
 }

@@ -14,22 +14,24 @@ import com.mrhayami.vaultio.data.repository.VaultioRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /** One frame's worth of extracted OCR data used by the consensus buffer. */
 private data class FrameDetection(val number: String?, val total: String?, val name: String?, val pHash: Long? = null)
 
 @Immutable
 data class ScannerUiState(
+    val autoCaptureTrigger: Long = 0L,
     val detectedText: String = "",
     val detectedNumber: String? = null,
     val detectedTotal: String? = null,
@@ -45,15 +47,29 @@ data class ScannerUiState(
     val hasCameraPermission: Boolean = false,
     val isTorchEnabled: Boolean = false,
     val isBulkMode: Boolean = false,
+    val isGradingMode: Boolean = false,
     val isPageScanMode: Boolean = false,
     val pageScanMode: PageScanMode = PageScanMode.IDLE,
     val pageScanCells: List<PageScanCell> = emptyList(),
     val bulkDefaults: BulkScanDefaults = BulkScanDefaults(),
     val bulkSessionLog: List<BulkScanEntry> = emptyList(),
-    val skippedCards: List<TcgDexCard> = emptyList()
+    val skippedCards: List<TcgDexCard> = emptyList(),
+    val isSaving: Boolean = false,
+    val targetUserCardId: Long? = null
 )
 
+sealed interface ScannerEffect {
+    // Cache for passing image from grading capture to grading screen in GradingRepository
+    // For now we'll pass it in the event if we can hold it, but since we use OnImageCapturedCallback in the compose, we need the compose side to send it or save it in GradingRepository directly.
+    data class NavigateToGrading(
+        val userCardId: Long,
+        val capturedImage: Bitmap? = null,
+        val pendingCard: TcgDexCard? = null
+    ) : ScannerEffect
+}
+
 sealed interface ScannerEvent {
+    data class SetTargetUserCard(val userCardId: Long) : ScannerEvent
     data object ResumeScanning : ScannerEvent
     data object ClearDetectedNumber : ScannerEvent
     data object ConsumeSaveSuccess : ScannerEvent
@@ -63,7 +79,8 @@ sealed interface ScannerEvent {
     data class LinesDetected(val lines: List<DetectedLine>, val pHash: Long?) : ScannerEvent
     data object ToggleBulkMode : ScannerEvent
     data object TogglePageScanMode : ScannerEvent
-    data class CapturePagePhoto(val bitmap: Bitmap) : ScannerEvent
+    data object ToggleGradingMode : ScannerEvent
+    data class CapturePhoto(val bitmap: Bitmap) : ScannerEvent
     data class ConfirmPageCell(val index: Int, val card: TcgDexCard?) : ScannerEvent
     data class RejectPageCell(val index: Int) : ScannerEvent
     data object SaveAllPageResults : ScannerEvent
@@ -80,6 +97,14 @@ sealed interface ScannerEvent {
         val folderIds: List<Long>
     ) : ScannerEvent
     data class SaveScannedCard(
+        val card: TcgDexCard,
+        val quantity: Int,
+        val condition: String,
+        val printing: String,
+        val finish: String,
+        val folderIds: List<Long>
+    ) : ScannerEvent
+    data class SaveAndGrade(
         val card: TcgDexCard,
         val quantity: Int,
         val condition: String,
@@ -122,6 +147,9 @@ class ScannerViewModel(
     }.flowOn(defaultDispatcher)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScannerUiState())
 
+    private val _effect = Channel<ScannerEffect>(Channel.BUFFERED)
+    val effect = _effect.receiveAsFlow()
+
     private var searchJob: Job? = null
     private var lastMatchedNumber: String? = null
 
@@ -141,13 +169,48 @@ class ScannerViewModel(
 
     fun onEvent(event: ScannerEvent) {
         when (event) {
+            is ScannerEvent.SetTargetUserCard -> {
+                _uiState.update { it.copy(targetUserCardId = event.userCardId) }
+                if (event.userCardId != -1L) {
+                    viewModelScope.launch(defaultDispatcher) {
+                        val userCard = repository.getUserCardByIdSync(event.userCardId)
+                        if (userCard != null) {
+                            val card = userCard.card
+                            val tcgDexCard = mapToTcgDexCard(card)
+                            _uiState.update { state ->
+                                state.copy(
+                                    isGradingMode = true,
+                                    autoSelectedCard = tcgDexCard,
+                                    isPaused = true,
+                                    isSearching = false,
+                                    autoCaptureTrigger = System.currentTimeMillis()
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             is ScannerEvent.LinesDetected -> onLinesDetected(event.lines, event.pHash)
             ScannerEvent.ResumeScanning -> resumeScanning()
             is ScannerEvent.CardSelected -> _uiState.update { it.copy(selectedCard = event.card) }
             is ScannerEvent.SaveScannedCard -> saveScannedCard(
-                event.card, event.quantity, event.condition, 
-                event.printing, event.finish, event.folderIds
+                event.card, event.quantity, event.condition,
+                event.printing, event.finish, event.folderIds,
+                navigateToGrading = false
             )
+
+            is ScannerEvent.SaveAndGrade -> {
+                viewModelScope.launch(defaultDispatcher) {
+                    // Navigate to grading with NO userCardId since we haven't saved it
+                    _effect.send(
+                        ScannerEffect.NavigateToGrading(
+                            -1L,
+                            activeCaptureForGrading,
+                            event.card
+                        )
+                    )
+                }
+            }
             ScannerEvent.ConsumeSaveSuccess -> consumeSaveSuccess()
             ScannerEvent.ClearDetectedNumber -> clearDetectedNumber()
             is ScannerEvent.PermissionResult -> _uiState.update { it.copy(hasCameraPermission = event.granted) }
@@ -170,6 +233,7 @@ class ScannerViewModel(
                 _uiState.update { it.copy(
                     isPageScanMode = !it.isPageScanMode,
                     isBulkMode = false,
+                    isGradingMode = false,
                     pageScanMode = PageScanMode.IDLE,
                     detectedNumber = null,
                     detectedTotal = null,
@@ -181,7 +245,26 @@ class ScannerViewModel(
                 lastMatchedNumber = null
                 detectionHistory.clear()
             }
-            is ScannerEvent.CapturePagePhoto -> capturePagePhoto(event.bitmap)
+
+            ScannerEvent.ToggleGradingMode -> {
+                _uiState.update {
+                    it.copy(
+                        isGradingMode = !it.isGradingMode,
+                        isBulkMode = false,
+                        isPageScanMode = false,
+                        detectedNumber = null,
+                        detectedTotal = null,
+                        detectedName = null,
+                        candidates = emptyList(),
+                        isSearching = false,
+                        autoSelectedCard = null
+                    )
+                }
+                lastMatchedNumber = null
+                detectionHistory.clear()
+            }
+
+            is ScannerEvent.CapturePhoto -> capturePhoto(event.bitmap)
             is ScannerEvent.ConfirmPageCell -> confirmPageCell(event.index, event.card)
             is ScannerEvent.RejectPageCell -> rejectPageCell(event.index)
             ScannerEvent.SaveAllPageResults -> saveAllPageResults()
@@ -198,21 +281,60 @@ class ScannerViewModel(
             ScannerEvent.UndoLastBulkScan -> undoLastBulkScan()
             ScannerEvent.ClearBulkSession -> _uiState.update { it.copy(bulkSessionLog = emptyList(), skippedCards = emptyList()) }
             is ScannerEvent.ConfirmSkippedCard -> {
-                saveScannedCard(event.card, event.quantity, event.condition, event.printing, event.finish, event.folderIds)
+                saveScannedCard(
+                    event.card,
+                    event.quantity,
+                    event.condition,
+                    event.printing,
+                    event.finish,
+                    event.folderIds,
+                    navigateToGrading = false
+                )
                 _uiState.update { it.copy(skippedCards = it.skippedCards.filter { c -> c.id != event.card.id }) }
             }
         }
     }
 
-    private fun capturePagePhoto(bitmap: Bitmap) {
-        _uiState.update { it.copy(pageScanMode = PageScanMode.PROCESSING, pageScanCells = emptyList()) }
-        viewModelScope.launch(defaultDispatcher) {
-            val cells = PageScanProcessor.processPage(bitmap)
-            _uiState.update { it.copy(pageScanCells = cells, pageScanMode = PageScanMode.REVIEWING) }
-            
-            // Start searching for each cell
-            cells.forEach { cell ->
-                searchCardForCell(cell)
+    private var activeCaptureForGrading: Bitmap? = null
+
+    private fun capturePhoto(bitmap: Bitmap) {
+        if (_uiState.value.isPageScanMode) {
+            _uiState.update {
+                it.copy(
+                    pageScanMode = PageScanMode.PROCESSING,
+                    pageScanCells = emptyList()
+                )
+            }
+            viewModelScope.launch(defaultDispatcher) {
+                val cells = PageScanProcessor.processPage(bitmap)
+                _uiState.update {
+                    it.copy(
+                        pageScanCells = cells,
+                        pageScanMode = PageScanMode.REVIEWING
+                    )
+                }
+
+                cells.forEach { cell ->
+                    searchCardForCell(cell)
+                }
+            }
+        } else if (_uiState.value.isGradingMode) {
+            val card = _uiState.value.autoSelectedCard
+            if (card != null) {
+                // Do not save the card immediately to the library when grading.
+                // Just cache the temp image and the pending card info, then navigate.
+                activeCaptureForGrading = bitmap
+                viewModelScope.launch {
+                    _effect.send(
+                        ScannerEffect.NavigateToGrading(
+                            -1L,
+                            activeCaptureForGrading,
+                            card
+                        )
+                    )
+                    activeCaptureForGrading = null
+                    resumeScanning()
+                }
             }
         }
     }
@@ -314,7 +436,7 @@ class ScannerViewModel(
             return
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(defaultDispatcher) {
             val defaults = _uiState.value.bulkDefaults
             confirmedCells.forEach { cell ->
                 cell.matchedCard?.let { card ->
@@ -337,7 +459,7 @@ class ScannerViewModel(
 
     private fun undoLastBulkScan() {
         val lastEntry = _uiState.value.bulkSessionLog.lastOrNull { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS } ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(defaultDispatcher) {
             try {
                 // If it's a new card, we delete the most recent UserCard record for this cardId.
                 // If it was a duplicate increment, we decrement the quantity.
@@ -515,7 +637,8 @@ class ScannerViewModel(
                             it.copy(
                                 autoSelectedCard = card,
                                 isSearching = false,
-                                isPaused = true
+                                isPaused = true,
+                                autoCaptureTrigger = if (it.isGradingMode) System.currentTimeMillis() else it.autoCaptureTrigger
                             )
                         }
                     }
@@ -618,7 +741,7 @@ class ScannerViewModel(
     }
 
     private fun saveBulkCard(card: TcgDexCard) {
-        viewModelScope.launch {
+        viewModelScope.launch(defaultDispatcher) {
             try {
                 val defaults = _uiState.value.bulkDefaults
                 repository.addUserCard(
@@ -675,10 +798,19 @@ class ScannerViewModel(
         ) }
     }
 
-    private fun saveScannedCard(card: TcgDexCard, quantity: Int, condition: String, printing: String, finish: String, folderIds: List<Long> = emptyList()) {
-        viewModelScope.launch {
+    private fun saveScannedCard(
+        card: TcgDexCard,
+        quantity: Int,
+        condition: String,
+        printing: String,
+        finish: String,
+        folderIds: List<Long> = emptyList(),
+        navigateToGrading: Boolean = false
+    ) {
+        viewModelScope.launch(defaultDispatcher) {
             try {
-                repository.addUserCard(
+                _uiState.update { it.copy(isSaving = true) }
+                val userCardId = repository.addUserCard(
                     card,
                     UserCardEntity(
                         cardId = card.id,
@@ -689,11 +821,24 @@ class ScannerViewModel(
                     ),
                     folderIds = folderIds
                 )
-                _uiState.update { it.copy(showSaveSuccess = true) }
+
+                if (navigateToGrading) {
+                    _effect.send(
+                        ScannerEffect.NavigateToGrading(
+                            userCardId,
+                            activeCaptureForGrading
+                        )
+                    )
+                    activeCaptureForGrading = null
+                } else {
+                    _uiState.update { it.copy(showSaveSuccess = true) }
+                }
                 resumeScanning()
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 _uiState.update { it.copy(errorMessage = "Failed to save card: ${e.message}") }
+            } finally {
+                _uiState.update { it.copy(isSaving = false) }
             }
         }
     }

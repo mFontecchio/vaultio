@@ -1,10 +1,14 @@
 package com.mrhayami.vaultio.ui.stats
 
 import android.content.res.Configuration
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,12 +43,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.CardWithDetails
@@ -56,16 +69,16 @@ import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModelProducer
-import com.patrykandpatrick.vico.compose.cartesian.data.CartesianValueFormatter
-import com.patrykandpatrick.vico.compose.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.compose.cartesian.data.lineSeries
-import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import java.text.NumberFormat
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -138,8 +151,10 @@ fun StatsScreen(
                 }
 
                 if (state.mostValuableCards.isNotEmpty()) {
-                    item { SectionTitle("Most Valuable Cards") }
-                    items(state.mostValuableCards) { cardWithValue ->
+                    item { SectionTitle("Top 5 Most Valuable Cards") }
+                    items(
+                        state.mostValuableCards,
+                        key = { it.details.userCard.id }) { cardWithValue ->
                         MostValuableCardItem(
                             cardWithValue = cardWithValue,
                             onClick = {
@@ -166,34 +181,90 @@ fun StatsScreen(
 
 @Composable
 fun SummaryCards(totalValue: Double, cardCount: Int) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Card(
-            modifier = Modifier.weight(1f),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(Modifier.padding(16.dp)) {
-                Icon(Icons.AutoMirrored.Rounded.TrendingUp, null)
-                Spacer(Modifier.height(8.dp))
-                Text("Total Value", style = MaterialTheme.typography.labelMedium)
+            // Total Value Section
+            Column(
+                modifier = Modifier.weight(1.1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.TrendingUp,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Total Value",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
                 Text(
-                    formatCurrency(totalValue),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                    text = formatCurrency(totalValue),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-        }
-        Card(
-            modifier = Modifier.weight(1f),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-        ) {
-            Column(Modifier.padding(16.dp)) {
-                Icon(Icons.Rounded.Collections, null)
-                Spacer(Modifier.height(8.dp))
-                Text("Total Cards", style = MaterialTheme.typography.labelMedium)
+
+            // Subtle Vertical Divider
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(32.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
+            )
+
+            // Total Cards Section
+            Column(
+                modifier = Modifier.weight(0.9f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Collections,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Total Cards",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
                 Text(
-                    cardCount.toString(),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                    text = cardCount.toString(),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -250,104 +321,271 @@ fun ValueHistoryChart(snapshots: List<CollectionSnapshotEntity>) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RarityDistributionChart(distribution: Map<String, Int>) {
-    val modelProducer = remember { CartesianChartModelProducer() }
     val sortedData = remember(distribution) {
-        distribution.toList().sortedByDescending { it.second }.take(8)
+        distribution.toList().sortedByDescending { it.second }.take(6)
     }
-    val bottomAxisValueFormatter = remember(sortedData) {
-        CartesianValueFormatter { _, value, _ ->
-            sortedData.getOrNull(value.toInt())?.first.orEmpty()
-        }
-    }
+    val totalCount = remember(distribution) { distribution.values.sum() }
 
-    LaunchedEffect(sortedData) {
-        modelProducer.runTransaction {
-            columnSeries {
-                series(sortedData.map { it.second.toFloat() })
+    val rarityColors = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.secondary,
+        MaterialTheme.colorScheme.tertiary,
+        MaterialTheme.colorScheme.error,
+        MaterialTheme.colorScheme.primaryContainer,
+        MaterialTheme.colorScheme.secondaryContainer,
+    )
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                DonutChart(
+                    data = sortedData,
+                    colors = rarityColors,
+                    modifier = Modifier
+                        .size(200.dp)
+                        .padding(16.dp)
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = totalCount.toString(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Total",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Legend
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                sortedData.forEachIndexed { index, pair ->
+                    val color = rarityColors[index % rarityColors.size]
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .size(10.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(color)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "${pair.first} (${(pair.second * 100f / totalCount).toInt()}%)",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
             }
         }
     }
+}
 
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            CartesianChartHost(
-                chart = rememberCartesianChart(
-                    rememberColumnCartesianLayer(),
-                    startAxis = VerticalAxis.rememberStart(),
-                    bottomAxis = HorizontalAxis.rememberBottom(
-                        valueFormatter = bottomAxisValueFormatter,
-                    ),
-                ),
-                modelProducer = modelProducer,
-                modifier = Modifier.height(200.dp),
+@Composable
+fun DonutChart(
+    data: List<Pair<String, Int>>,
+    colors: List<Color>,
+    modifier: Modifier = Modifier,
+    thickness: androidx.compose.ui.unit.Dp = 30.dp
+) {
+    if (data.isEmpty()) return
+
+    val total = data.sumOf { it.second }.toFloat()
+    val density = LocalDensity.current
+    val thicknessPx = with(density) { thickness.toPx() }
+
+    Canvas(modifier = modifier) {
+        var startAngle = -90f
+        data.forEachIndexed { index, pair ->
+            val sweepAngle = (pair.second / total) * 360f
+            drawArc(
+                color = colors[index % colors.size],
+                startAngle = startAngle,
+                sweepAngle = sweepAngle,
+                useCenter = false,
+                style = Stroke(width = thicknessPx)
             )
+            startAngle += sweepAngle
         }
     }
 }
 
 @Composable
 fun TypeDistributionChart(distribution: Map<String, Int>) {
-    val modelProducer = remember { CartesianChartModelProducer() }
     val sortedData = remember(distribution) {
-        distribution.toList().sortedByDescending { it.second }.take(10)
-    }
-    val bottomAxisValueFormatter = remember(sortedData) {
-        CartesianValueFormatter { _, value, _ ->
-            sortedData.getOrNull(value.toInt())?.first.orEmpty()
-        }
-    }
-
-    LaunchedEffect(sortedData) {
-        modelProducer.runTransaction {
-            columnSeries {
-                series(sortedData.map { it.second.toFloat() })
-            }
-        }
+        // Take top 7 types to keep the radar chart readable
+        distribution.toList().sortedByDescending { it.second }.take(7)
     }
 
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            CartesianChartHost(
-                chart = rememberCartesianChart(
-                    rememberColumnCartesianLayer(),
-                    startAxis = VerticalAxis.rememberStart(),
-                    bottomAxis = HorizontalAxis.rememberBottom(
-                        valueFormatter = bottomAxisValueFormatter,
-                    ),
-                ),
-                modelProducer = modelProducer,
-                modifier = Modifier.height(200.dp),
+        Column(
+            Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            RadarChart(
+                data = sortedData,
+                modifier = Modifier
+                    .size(280.dp)
+                    .padding(24.dp)
             )
         }
     }
 }
 
 @Composable
+fun RadarChart(
+    data: List<Pair<String, Int>>,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    gridColor: Color = MaterialTheme.colorScheme.outlineVariant,
+    labelStyle: TextStyle = MaterialTheme.typography.labelSmall.copy(
+        fontSize = 10.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+) {
+    if (data.isEmpty()) return
+
+    val textMeasurer = rememberTextMeasurer()
+    val maxVal = remember(data) { data.maxOf { it.second }.toFloat().coerceAtLeast(1f) }
+    val numLines = 4 // background grid circles
+
+    Canvas(modifier = modifier) {
+        val centerX = size.width / 2
+        val centerY = size.height / 2
+        val radius = size.width.coerceAtMost(size.height) / 2
+        val angleStep = (2 * PI / data.size).toFloat()
+
+        // Draw background grid
+        for (i in 1..numLines) {
+            val currentRadius = radius * (i.toFloat() / numLines)
+            val path = Path()
+            for (j in data.indices) {
+                val angle = j * angleStep - PI.toFloat() / 2
+                val x = centerX + currentRadius * cos(angle)
+                val y = centerY + currentRadius * sin(angle)
+                if (j == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            path.close()
+            drawPath(path, gridColor, style = Stroke(width = 1.dp.toPx()))
+        }
+
+        // Draw axes and labels
+        data.forEachIndexed { index, pair ->
+            val angle = index * angleStep - PI.toFloat() / 2
+            val x = centerX + radius * cos(angle)
+            val y = centerY + radius * sin(angle)
+
+            // Axis line
+            drawLine(gridColor, Offset(centerX, centerY), Offset(x, y), strokeWidth = 1.dp.toPx())
+
+            // Label
+            val label = pair.first
+            val textLayoutResult = textMeasurer.measure(label, style = labelStyle)
+            val textWidth = textLayoutResult.size.width
+            val textHeight = textLayoutResult.size.height
+
+            // Position label outside the radius
+            val labelPadding = 12.dp.toPx()
+            val labelX = centerX + (radius + labelPadding) * cos(angle) - textWidth / 2
+            val labelY = centerY + (radius + labelPadding) * sin(angle) - textHeight / 2
+
+            drawText(textLayoutResult, topLeft = Offset(labelX, labelY))
+        }
+
+        // Draw data polygon
+        val dataPath = Path()
+        data.forEachIndexed { index, pair ->
+            val angle = index * angleStep - PI.toFloat() / 2
+            val valueRadius = radius * (pair.second / maxVal)
+            val x = centerX + valueRadius * cos(angle)
+            val y = centerY + valueRadius * sin(angle)
+            if (index == 0) dataPath.moveTo(x, y) else dataPath.lineTo(x, y)
+        }
+        dataPath.close()
+
+        drawPath(dataPath, color.copy(alpha = 0.3f), style = Fill)
+        drawPath(dataPath, color, style = Stroke(width = 2.dp.toPx()))
+
+        // Draw points
+        data.forEachIndexed { index, pair ->
+            val angle = index * angleStep - PI.toFloat() / 2
+            val valueRadius = radius * (pair.second / maxVal)
+            val x = centerX + valueRadius * cos(angle)
+            val y = centerY + valueRadius * sin(angle)
+            drawCircle(color, radius = 4.dp.toPx(), center = Offset(x, y))
+        }
+    }
+}
+
+@Composable
 fun MostValuableCardItem(cardWithValue: CardWithValue, onClick: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val imageUrl = remember(cardWithValue.details.card.image) {
+        "${cardWithValue.details.card.image}/low.webp"
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
-                alpha = 0.5f
-            )
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         )
     ) {
         Row(
             modifier = Modifier.padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = cardWithValue.details.card.image,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(60.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                contentScale = ContentScale.Crop
-            )
+            Box(contentAlignment = Alignment.TopEnd) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(context)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter
+                )
+                if (cardWithValue.details.userCard.quantity > 1) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary,
+                        shape = RoundedCornerShape(bottomStart = 4.dp, topEnd = 4.dp),
+                        modifier = Modifier.clip(RoundedCornerShape(topEnd = 4.dp))
+                    ) {
+                        Text(
+                            text = "x${cardWithValue.details.userCard.quantity}",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -357,16 +595,27 @@ fun MostValuableCardItem(cardWithValue: CardWithValue, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${cardWithValue.details.card.rarity} • ${cardWithValue.details.set.name}",
-                    style = MaterialTheme.typography.bodySmall
+                    text = "${cardWithValue.details.card.rarity ?: "Unknown Rarity"} • ${cardWithValue.details.set.name}",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(
-                text = formatCurrency(cardWithValue.value),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = formatCurrency(cardWithValue.value * cardWithValue.details.userCard.quantity),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                if (cardWithValue.details.userCard.quantity > 1) {
+                    Text(
+                        text = "${formatCurrency(cardWithValue.value)} ea.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
@@ -376,7 +625,8 @@ fun SetCompletionItem(info: SetCompletionInfo) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(
+
+            AsyncImage(
                     model = info.logo,
                     contentDescription = null,
                     modifier = Modifier.size(24.dp)

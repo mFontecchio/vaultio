@@ -68,11 +68,12 @@ fun MetadataModal(
     card: TcgDexCard,
     modifier: Modifier = Modifier,
     folders: List<FolderEntity> = emptyList(),
+    initialCondition: String = PricingUtils.CONDITION_NM,
     onConfirm: (Int, String, String, String, List<Long>) -> Unit,
     onBack: () -> Unit
 ) {
     var quantity by remember { mutableIntStateOf(1) }
-    var condition by remember { mutableStateOf(PricingUtils.CONDITION_NM) }
+    var condition by remember { mutableStateOf(initialCondition) }
     var printing by remember { mutableStateOf(PricingUtils.PRINTING_UNLIMITED) }
     var finish by remember { mutableStateOf(PricingUtils.FINISH_NORMAL) }
     val selectedFolderIds = remember { mutableStateListOf<Long>() }

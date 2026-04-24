@@ -2,7 +2,6 @@ package com.mrhayami.vaultio.data
 
 import com.mrhayami.vaultio.data.local.PriceEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
-import com.mrhayami.vaultio.data.remote.JustTcgPrice
 import com.mrhayami.vaultio.data.remote.JustTcgVariant
 import com.mrhayami.vaultio.data.remote.TcgDexPriceItem
 import com.mrhayami.vaultio.data.remote.TcgDexTcgPlayerPricing

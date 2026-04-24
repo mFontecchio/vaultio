@@ -9,20 +9,47 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview as CameraPreview
-import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -33,29 +60,58 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Undo
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.FlashOff
+import androidx.compose.material.icons.rounded.FlashOn
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -79,22 +135,53 @@ import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.DropdownSelector
 import com.mrhayami.vaultio.ui.components.MetadataModal
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.Executors
+import kotlin.coroutines.resume
+import androidx.camera.core.Preview as CameraPreview
+import androidx.compose.ui.geometry.Size as ComposeSize
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ScannerScreen(
     repository: VaultioRepository,
+    targetUserCardId: Long = -1L,
     onNavigateBack: () -> Unit,
+    onNavigateToGrading: (Long, Bitmap, com.mrhayami.vaultio.data.remote.TcgDexCard?) -> Unit,
     viewModel: ScannerViewModel = viewModel(factory = ScannerViewModelFactory(repository))
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     val context = LocalContext.current
 
+    LaunchedEffect(targetUserCardId) {
+        viewModel.onEvent(ScannerEvent.SetTargetUserCard(targetUserCardId))
+    }
+
     LaunchedEffect(Unit) {
         if (!cameraPermissionState.status.isGranted) {
             cameraPermissionState.launchPermissionRequest()
+        }
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.effect.collect { effect ->
+            when (effect) {
+                is ScannerEffect.NavigateToGrading -> {
+                    effect.capturedImage?.let { bmp ->
+                        onNavigateToGrading(effect.userCardId, bmp, effect.pendingCard)
+                    } ?: run {
+                        // If no image was captured (e.g. they clicked "Grade" HUD button instead of camera button)
+                        // Make a fallback or block it? Let's just create a dummy so it doesn't crash since parameter changed
+                        onNavigateToGrading(
+                            effect.userCardId,
+                            Bitmap.createBitmap(800, 1200, Bitmap.Config.ARGB_8888),
+                            effect.pendingCard
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -182,12 +269,14 @@ fun ScannerContent(
                     }
                     val onPhotoCaptured = remember(onEventStable) {
                         { bitmap: Bitmap ->
-                            onEventStable(ScannerEvent.CapturePagePhoto(bitmap))
+                            onEventStable(ScannerEvent.CapturePhoto(bitmap))
                         }
                     }
                     CameraPreview(
                         isPageScanMode = uiState.isPageScanMode,
+                        isGradingMode = uiState.isGradingMode,
                         isTorchEnabled = uiState.isTorchEnabled,
+                        autoCaptureTrigger = uiState.autoCaptureTrigger,
                         onLinesDetected = onLinesDetected,
                         onPhotoCaptured = onPhotoCaptured
                     )
@@ -195,7 +284,11 @@ fun ScannerContent(
                     if (uiState.isPageScanMode) {
                         PageScanOverlay(isProcessing = uiState.pageScanMode == PageScanMode.PROCESSING)
                     } else {
-                        ScannerOverlay(isSearching = uiState.isSearching)
+                        ScannerOverlay(
+                            isSearching = uiState.isSearching,
+                            isGradingMode = uiState.isGradingMode,
+                            isTargetDetected = uiState.autoSelectedCard != null
+                        )
                     }
                 }
             }
@@ -203,8 +296,16 @@ fun ScannerContent(
             // Header
             AnimatedVisibility(
                 visible = uiState.pageScanMode != PageScanMode.REVIEWING,
-                enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
-                exit = fadeOut() + slideOutVertically(targetOffsetY = { -it })
+                enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                        slideInVertically(
+                            initialOffsetY = { -it },
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                        ),
+                exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                        slideOutVertically(
+                            targetOffsetY = { -it },
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                        )
             ) {
                 Row(
                     modifier = Modifier
@@ -232,11 +333,12 @@ fun ScannerContent(
                     ) {
                         Row(modifier = Modifier.padding(4.dp)) {
                             ModeButton(
-                                selected = !uiState.isBulkMode && !uiState.isPageScanMode,
+                                selected = !uiState.isBulkMode && !uiState.isPageScanMode && !uiState.isGradingMode,
                                 icon = Icons.Rounded.Search,
                                 onClick = { 
                                     if (uiState.isBulkMode) onEvent(ScannerEvent.ToggleBulkMode)
                                     if (uiState.isPageScanMode) onEvent(ScannerEvent.TogglePageScanMode)
+                                    if (uiState.isGradingMode) onEvent(ScannerEvent.ToggleGradingMode)
                                 }
                             )
                             ModeButton(
@@ -248,6 +350,11 @@ fun ScannerContent(
                                 selected = uiState.isPageScanMode,
                                 icon = Icons.Rounded.GridView,
                                 onClick = { onEvent(ScannerEvent.TogglePageScanMode) }
+                            )
+                            ModeButton(
+                                selected = uiState.isGradingMode,
+                                icon = Icons.Rounded.AutoFixHigh,
+                                onClick = { onEvent(ScannerEvent.ToggleGradingMode) }
                             )
                         }
                     }
@@ -285,8 +392,10 @@ fun ScannerContent(
             ) {
                 AnimatedVisibility(
                     visible = (uiState.detectedNumber != null || uiState.isSearching) && !uiState.isPageScanMode,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
+                    enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                            expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+                    exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                            shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
                 ) {
                     Surface(
                         color = Color.Black.copy(alpha = 0.6f),
@@ -325,9 +434,18 @@ fun ScannerContent(
 
             // High Confidence Match
             AnimatedVisibility(
-                visible = uiState.autoSelectedCard != null && !uiState.isBulkMode,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                visible = uiState.autoSelectedCard != null && !uiState.isBulkMode && !uiState.isGradingMode,
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = spring(
+                        stiffness = Spring.StiffnessMediumLow,
+                        dampingRatio = Spring.DampingRatioLowBouncy
+                    )
+                ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 uiState.autoSelectedCard?.let { card ->
@@ -341,7 +459,9 @@ fun ScannerContent(
                         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
@@ -349,7 +469,10 @@ fun ScannerContent(
                                 shadowElevation = 4.dp
                             ) {
                                 AsyncImage(
-                                    model = "${card.image}/low.webp",
+                                    model = coil.request.ImageRequest.Builder(LocalContext.current)
+                                        .data("${card.image}/low.webp")
+                                        .crossfade(true)
+                                        .build(),
                                     contentDescription = null,
                                     modifier = Modifier
                                         .size(80.dp, 112.dp)
@@ -393,14 +516,73 @@ fun ScannerContent(
 
                                 Spacer(modifier = Modifier.height(12.dp))
 
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(
-                                        onClick = { onEvent(ScannerEvent.CardSelected(card)) },
-                                        modifier = Modifier.fillMaxWidth().height(40.dp),
-                                        shape = RoundedCornerShape(12.dp),
-                                        contentPadding = PaddingValues(horizontal = 16.dp)
-                                    ) {
-                                        Text("Add Details", style = MaterialTheme.typography.labelLarge)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (uiState.isGradingMode) {
+                                        Button(
+                                            onClick = {
+                                                onEvent(
+                                                    ScannerEvent.SaveAndGrade(
+                                                        card = card,
+                                                        quantity = 1,
+                                                        condition = PricingUtils.CONDITION_NM,
+                                                        printing = PricingUtils.PRINTING_UNLIMITED,
+                                                        finish = PricingUtils.FINISH_NORMAL,
+                                                        folderIds = emptyList()
+                                                    )
+                                                )
+                                            },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(40.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFF00E676),
+                                                contentColor = Color.Black
+                                            )
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.AutoFixHigh,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                "Grade",
+                                                style = MaterialTheme.typography.labelLarge
+                                            )
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = { onEvent(ScannerEvent.ResumeScanning) },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(40.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp)
+                                        ) {
+                                            Text(
+                                                "Cancel",
+                                                style = MaterialTheme.typography.labelLarge
+                                            )
+                                        }
+                                    } else {
+                                        Button(
+                                            onClick = { onEvent(ScannerEvent.CardSelected(card)) },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(40.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                            contentPadding = PaddingValues(horizontal = 16.dp)
+                                        ) {
+                                            Text(
+                                                "Add Details",
+                                                style = MaterialTheme.typography.labelLarge
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -409,11 +591,63 @@ fun ScannerContent(
                 }
             }
 
+            // Grading Mode HUD
+            AnimatedVisibility(
+                visible = uiState.isGradingMode && uiState.autoSelectedCard != null,
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 180.dp)
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.AutoFixHigh,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Found ${uiState.autoSelectedCard?.name}. Press capture to grade.",
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             // Bulk Mode HUD
             AnimatedVisibility(
                 visible = uiState.isBulkMode,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = spring(
+                        stiffness = Spring.StiffnessMediumLow,
+                        dampingRatio = Spring.DampingRatioLowBouncy
+                    )
+                ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 BulkModeHUD(
@@ -532,7 +766,10 @@ fun CandidateItem(
                 modifier = Modifier.size(48.dp, 68.dp)
             ) {
                 AsyncImage(
-                    model = "${card.image}/low.webp",
+                    model = coil.request.ImageRequest.Builder(LocalContext.current)
+                        .data("${card.image}/low.webp")
+                        .crossfade(true)
+                        .build(),
                     contentDescription = null,
                     modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
                 )
@@ -578,13 +815,15 @@ fun BulkSettingsSheet(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                val conditions = listOf(
-                    com.mrhayami.vaultio.data.PricingUtils.CONDITION_NM,
-                    com.mrhayami.vaultio.data.PricingUtils.CONDITION_LP,
-                    com.mrhayami.vaultio.data.PricingUtils.CONDITION_MP,
-                    com.mrhayami.vaultio.data.PricingUtils.CONDITION_HP,
-                    com.mrhayami.vaultio.data.PricingUtils.CONDITION_DMG
-                )
+                val conditions = remember {
+                    listOf(
+                        com.mrhayami.vaultio.data.PricingUtils.CONDITION_NM,
+                        com.mrhayami.vaultio.data.PricingUtils.CONDITION_LP,
+                        com.mrhayami.vaultio.data.PricingUtils.CONDITION_MP,
+                        com.mrhayami.vaultio.data.PricingUtils.CONDITION_HP,
+                        com.mrhayami.vaultio.data.PricingUtils.CONDITION_DMG
+                    )
+                }
                 DropdownSelector(
                     "Default Condition",
                     uiState.bulkDefaults.condition,
@@ -595,12 +834,14 @@ fun BulkSettingsSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                val printings = listOf(
-                    com.mrhayami.vaultio.data.PricingUtils.PRINTING_UNLIMITED,
-                    com.mrhayami.vaultio.data.PricingUtils.PRINTING_SHADOWLESS,
-                    com.mrhayami.vaultio.data.PricingUtils.PRINTING_PROMO,
-                    com.mrhayami.vaultio.data.PricingUtils.PRINTING_1ST_EDITION
-                )
+                val printings = remember {
+                    listOf(
+                        com.mrhayami.vaultio.data.PricingUtils.PRINTING_UNLIMITED,
+                        com.mrhayami.vaultio.data.PricingUtils.PRINTING_SHADOWLESS,
+                        com.mrhayami.vaultio.data.PricingUtils.PRINTING_PROMO,
+                        com.mrhayami.vaultio.data.PricingUtils.PRINTING_1ST_EDITION
+                    )
+                }
                 DropdownSelector(
                     "Default Printing",
                     uiState.bulkDefaults.printing,
@@ -611,13 +852,15 @@ fun BulkSettingsSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                val finishes = listOf(
-                    com.mrhayami.vaultio.data.PricingUtils.FINISH_NORMAL,
-                    com.mrhayami.vaultio.data.PricingUtils.FINISH_HOLOFOIL,
-                    com.mrhayami.vaultio.data.PricingUtils.FINISH_REVERSE_HOLO,
-                    com.mrhayami.vaultio.data.PricingUtils.FINISH_TEXTURED,
-                    com.mrhayami.vaultio.data.PricingUtils.FINISH_GOLD
-                )
+                val finishes = remember {
+                    listOf(
+                        com.mrhayami.vaultio.data.PricingUtils.FINISH_NORMAL,
+                        com.mrhayami.vaultio.data.PricingUtils.FINISH_HOLOFOIL,
+                        com.mrhayami.vaultio.data.PricingUtils.FINISH_REVERSE_HOLO,
+                        com.mrhayami.vaultio.data.PricingUtils.FINISH_TEXTURED,
+                        com.mrhayami.vaultio.data.PricingUtils.FINISH_GOLD
+                    )
+                }
                 DropdownSelector(
                     "Default Finish",
                     uiState.bulkDefaults.finish,
@@ -668,9 +911,16 @@ fun BulkModeHUD(
     onEvent: (ScannerEvent) -> Unit,
     onShowSkippedReview: () -> Unit
 ) {
-    val lastSaved = uiState.bulkSessionLog.lastOrNull { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS }
-    val skippedCount = uiState.skippedCards.distinctBy { it.id }.size
-    val totalScanned = uiState.bulkSessionLog.filter { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS }.sumOf { it.quantity }
+    val lastSaved = remember(uiState.bulkSessionLog) {
+        uiState.bulkSessionLog.lastOrNull { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS }
+    }
+    val skippedCount = remember(uiState.skippedCards) {
+        uiState.skippedCards.distinctBy { it.id }.size
+    }
+    val totalScanned = remember(uiState.bulkSessionLog) {
+        uiState.bulkSessionLog.filter { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS }
+            .sumOf { it.quantity }
+    }
 
     Column(
         modifier = Modifier
@@ -729,7 +979,10 @@ fun BulkModeHUD(
                         modifier = Modifier.size(48.dp, 68.dp)
                     ) {
                         AsyncImage(
-                            model = "${lastSaved.card.image}/low.webp",
+                            model = coil.request.ImageRequest.Builder(LocalContext.current)
+                                .data("${lastSaved.card.image}/low.webp")
+                                .crossfade(true)
+                                .build(),
                             contentDescription = null,
                             modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
                         )
@@ -763,7 +1016,9 @@ fun BulkModeHUD(
                     }
                 } else {
                     Box(
-                        modifier = Modifier.fillMaxWidth().height(68.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(68.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -786,7 +1041,9 @@ fun SkippedReviewSheet(
     onDismiss: () -> Unit
 ) {
     var selectedCardForReview by remember { mutableStateOf<TcgDexCard?>(null) }
-    val skippedCards = uiState.skippedCards.distinctBy { it.id }
+    val skippedCards = remember(uiState.skippedCards) {
+        uiState.skippedCards.distinctBy { it.id }
+    }
 
     if (selectedCardForReview != null) {
         MetadataModal(
@@ -864,7 +1121,9 @@ fun ModeButton(
         Icon(
             icon,
             contentDescription = null,
-            modifier = Modifier.padding(8.dp).size(20.dp)
+            modifier = Modifier
+                .padding(8.dp)
+                .size(20.dp)
         )
     }
 }
@@ -872,7 +1131,9 @@ fun ModeButton(
 @Composable
 fun CameraPreview(
     isPageScanMode: Boolean = false,
+    isGradingMode: Boolean = false,
     isTorchEnabled: Boolean = false,
+    autoCaptureTrigger: Long = 0L,
     onLinesDetected: (List<DetectedLine>, Long?) -> Unit,
     onPhotoCaptured: (Bitmap) -> Unit = {}
 ) {
@@ -897,14 +1158,70 @@ fun CameraPreview(
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val executor = remember { Executors.newSingleThreadExecutor() }
-    
-    var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
-    var cameraControl: CameraControl? by remember { mutableStateOf(null) }
+
+    var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
     var showFlash by remember { mutableStateOf(false) }
+    var cameraControl by remember { mutableStateOf<CameraControl?>(null) }
 
-    LaunchedEffect(isTorchEnabled, cameraControl) {
-        cameraControl?.enableTorch(isTorchEnabled)
+    LaunchedEffect(autoCaptureTrigger) {
+        if (autoCaptureTrigger > 0L && imageCapture != null) {
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            showFlash = true
+            imageCapture?.takePicture(
+                ContextCompat.getMainExecutor(context),
+                object : ImageCapture.OnImageCapturedCallback() {
+                    override fun onCaptureSuccess(image: ImageProxy) {
+                        val bitmap = image.toBitmap()
+                        val rotation = image.imageInfo.rotationDegrees
+                        val matrix =
+                            android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
+                        val rotatedBitmap = Bitmap.createBitmap(
+                            bitmap,
+                            0,
+                            0,
+                            bitmap.width,
+                            bitmap.height,
+                            matrix,
+                            true
+                        )
+
+                        val pv = previewViewRef ?: return
+                        val cropRect = ScannerGeometry.getCropRect(
+                            bitmapWidth = rotatedBitmap.width,
+                            bitmapHeight = rotatedBitmap.height,
+                            viewportWidth = pv.width.toFloat(),
+                            viewportHeight = pv.height.toFloat(),
+                            isPageScanMode = isPageScanMode
+                        )
+
+                        val cropped = try {
+                            Bitmap.createBitmap(
+                                rotatedBitmap,
+                                cropRect.left,
+                                cropRect.top,
+                                cropRect.width(),
+                                cropRect.height()
+                            )
+                        } catch (e: Exception) {
+                            rotatedBitmap // fallback if bounds exceed
+                        }
+
+                        showFlash = false
+                        onPhotoCaptured(cropped)
+                        image.close()
+                    }
+
+                    override fun onError(exception: androidx.camera.core.ImageCaptureException) {
+                        showFlash = false
+                        Toast.makeText(
+                            context,
+                            "Failed to capture: ${exception.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                })
+        }
     }
 
     LaunchedEffect(showFlash) {
@@ -931,7 +1248,7 @@ fun CameraPreview(
             .build()
     }
 
-    LaunchedEffect(isPageScanMode, lifecycleOwner, previewViewRef) {
+    LaunchedEffect(isPageScanMode, isGradingMode, lifecycleOwner, previewViewRef) {
         val previewView = previewViewRef ?: return@LaunchedEffect
         
         val cameraProvider = suspendCancellableCoroutine<ProcessCameraProvider> { continuation ->
@@ -969,12 +1286,13 @@ fun CameraPreview(
 
         try {
             val camera = cameraProvider.unbindAll().let {
-                if (isPageScanMode) {
+                if (isPageScanMode || isGradingMode) {
                     cameraProvider.bindToLifecycle(
                         lifecycleOwner,
                         CameraSelector.DEFAULT_BACK_CAMERA,
                         preview,
-                        capture
+                        capture,
+                        imageAnalysis // allow scanning while showing button
                     )
                 } else {
                     cameraProvider.bindToLifecycle(
@@ -1010,7 +1328,7 @@ fun CameraPreview(
             )
         }
 
-        if (isPageScanMode) {
+        if (isPageScanMode || isGradingMode) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -1027,14 +1345,13 @@ fun CameraPreview(
                                 val matrix = android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
                                 val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
                                 
-                                // Viewport Alignment: Calculate visible area based on screen aspect ratio
                                 val pv = previewViewRef ?: return
                                 val cropRect = ScannerGeometry.getCropRect(
                                     bitmapWidth = rotatedBitmap.width,
                                     bitmapHeight = rotatedBitmap.height,
                                     viewportWidth = pv.width.toFloat(),
                                     viewportHeight = pv.height.toFloat(),
-                                    isPageScanMode = true
+                                    isPageScanMode = isPageScanMode
                                 )
                                 
                                 val cropped = try {
@@ -1052,7 +1369,6 @@ fun CameraPreview(
                                 onPhotoCaptured(cropped)
                                 image.close()
                                 
-                                // Clean up intermediate bitmaps
                                 if (bitmap != cropped) bitmap.recycle()
                                 if (rotatedBitmap != bitmap && rotatedBitmap != cropped) rotatedBitmap.recycle()
                             }
@@ -1263,7 +1579,7 @@ fun PageCellReviewItem(
     Card(
         modifier = Modifier
             .aspectRatio(0.715f) // Standard card aspect ratio
-            .clickable { 
+            .clickable {
                 if (cell.isConfirmed) onEvent(ScannerEvent.RejectPageCell(cell.id))
                 else onEvent(ScannerEvent.ConfirmPageCell(cell.id, cell.matchedCard))
             },
@@ -1277,7 +1593,10 @@ fun PageCellReviewItem(
         Box(modifier = Modifier.fillMaxSize()) {
             if (cell.matchedCard != null) {
                 AsyncImage(
-                    model = "${cell.matchedCard.image}/low.webp",
+                    model = coil.request.ImageRequest.Builder(LocalContext.current)
+                        .data("${cell.matchedCard.image}/low.webp")
+                        .crossfade(true)
+                        .build(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
@@ -1325,7 +1644,9 @@ fun PageCellReviewItem(
 
             if (cell.status == PageScanCellStatus.SCANNING) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp).align(Alignment.Center),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .align(Alignment.Center),
                     strokeWidth = 2.dp
                 )
             }
@@ -1347,9 +1668,13 @@ fun PageCellReviewItem(
 }
 
 @Composable
-fun ScannerOverlay(isSearching: Boolean) {
+fun ScannerOverlay(
+    isSearching: Boolean,
+    isGradingMode: Boolean = false,
+    isTargetDetected: Boolean = false
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "scanning")
-    val scannerLineAnim by infiniteTransition.animateFloat(
+    val scannerLineAnimState = infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -1359,13 +1684,26 @@ fun ScannerOverlay(isSearching: Boolean) {
         label = "scannerLine"
     )
 
-    val primaryColor = MaterialTheme.colorScheme.primary
+    val primaryColor by animateColorAsState(
+        targetValue = when {
+            isGradingMode && isTargetDetected -> Color(0xFF00E676)
+            isGradingMode -> Color(0xFFFFC107)
+            isSearching -> MaterialTheme.colorScheme.primary
+            else -> Color.White.copy(alpha = 0.8f)
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "primaryColor"
+    )
+
+    val secondaryColor =
+        if (isGradingMode) Color(0xFF00B0FF) else MaterialTheme.colorScheme.secondary
 
     Canvas(
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
     ) {
+        val scannerLineAnim = scannerLineAnimState.value
         val rect = ScannerGeometry.getOverlayRect(size, isPageScanMode = false)
         val rectWidth = rect.width
         val rectHeight = rect.height
@@ -1375,7 +1713,7 @@ fun ScannerOverlay(isSearching: Boolean) {
         val cornerSize = 40.dp.toPx()
 
         // Background mask
-        drawRect(color = Color.Black.copy(alpha = 0.5f))
+        drawRect(color = Color.Black.copy(alpha = 0.6f))
         drawRoundRect(
             color = Color.Transparent,
             topLeft = Offset(left, top),
@@ -1384,9 +1722,40 @@ fun ScannerOverlay(isSearching: Boolean) {
             blendMode = BlendMode.Clear
         )
 
+        // Phase 2: AI Safe Zone AR Overlay
+        if (isGradingMode) {
+            // Draw "Safe Zone" inner guide
+            val inset = 20.dp.toPx()
+            drawRoundRect(
+                color = secondaryColor.copy(alpha = 0.2f),
+                topLeft = Offset(left + inset, top + inset),
+                size = ComposeSize(rectWidth - (inset * 2), rectHeight - (inset * 2)),
+                cornerRadius = CornerRadius(cornerRadius / 2),
+                style = Stroke(
+                    width = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                )
+            )
+
+            // Centering Crosshair
+            val crossSize = 15.dp.toPx()
+            drawLine(
+                color = secondaryColor.copy(alpha = 0.4f),
+                start = Offset(left + (rectWidth / 2) - crossSize, top + (rectHeight / 2)),
+                end = Offset(left + (rectWidth / 2) + crossSize, top + (rectHeight / 2)),
+                strokeWidth = 2.dp.toPx()
+            )
+            drawLine(
+                color = secondaryColor.copy(alpha = 0.4f),
+                start = Offset(left + (rectWidth / 2), top + (rectHeight / 2) - crossSize),
+                end = Offset(left + (rectWidth / 2), top + (rectHeight / 2) + crossSize),
+                strokeWidth = 2.dp.toPx()
+            )
+        }
+
         // Draw scanning line
         val lineY = top + (rectHeight * scannerLineAnim)
-        if (isSearching) {
+        if (isSearching || isGradingMode) {
             drawRect(
                 brush = Brush.verticalGradient(
                     colors = listOf(
@@ -1404,7 +1773,7 @@ fun ScannerOverlay(isSearching: Boolean) {
 
         // Draw the corner brackets
         val strokeWidth = 3.dp.toPx()
-        val bracketColor = if (isSearching) primaryColor else Color.White.copy(alpha = 0.8f)
+        val bracketColor = primaryColor
 
         // Top Left
         drawPath(

@@ -22,7 +22,10 @@ data class SetEntity(
 
 @Entity(
     tableName = "cards",
-    indices = [Index(value = ["setId"])]
+    indices = [
+        Index(value = ["setId"]),
+        Index(value = ["pokemonName"])
+    ]
 )
 data class CardEntity(
     @PrimaryKey val id: String,
@@ -43,7 +46,10 @@ data class CardEntity(
 
 @Entity(
     tableName = "user_cards",
-    indices = [Index(value = ["cardId"])]
+    indices = [
+        Index(value = ["cardId"]),
+        Index(value = ["dateAdded"])
+    ]
 )
 data class UserCardEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -158,5 +164,29 @@ data class CollectionSnapshotEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val totalValue: Double,
     val cardCount: Int,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "card_grades",
+    foreignKeys = [
+        ForeignKey(
+            entity = UserCardEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["userCardId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["userCardId"])]
+)
+data class CardGradeEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userCardId: Long,
+    val overallScore: Double,
+    val centeringScore: Double,
+    val cornersScore: Double,
+    val edgesScore: Double,
+    val surfaceScore: Double,
+    val reasoning: String,
     val timestamp: Long = System.currentTimeMillis()
 )

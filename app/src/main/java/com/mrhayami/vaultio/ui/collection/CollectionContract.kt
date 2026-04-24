@@ -45,7 +45,14 @@ data class PokedexEntry(
     val cardCount: Int,
     val totalQuantity: Int,
     val representativeImage: String?,
+    val spriteUrl: String,
     val isCollected: Boolean
+)
+
+@Immutable
+data class CardUiModel(
+    val details: CardWithDetails,
+    val price: Double
 )
 
 @Immutable
@@ -55,7 +62,7 @@ data class CollectionUiState(
     val sortDirection: SortDirection = SortDirection.DESCENDING,
     val filterSettings: FilterSettings = FilterSettings(),
     val userCards: List<CardWithDetails> = emptyList(),
-    val filteredUserCards: List<CardWithDetails> = emptyList(),
+    val filteredUserCards: List<CardUiModel> = emptyList(),
     val pokedexEntries: List<PokedexEntry> = emptyList(),
     val folders: List<FolderEntity> = emptyList(),
     val selectedFolderId: Long? = null,

@@ -5,8 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -30,6 +30,8 @@ import com.mrhayami.vaultio.data.DarkThemeConfig
 import com.mrhayami.vaultio.data.ThemeBrand
 import com.mrhayami.vaultio.ui.card_detail.CardDetailScreen
 import com.mrhayami.vaultio.ui.collection.CollectionScreen
+import com.mrhayami.vaultio.ui.grading.GradingScreen
+import com.mrhayami.vaultio.ui.grading.GradingViewModel
 import com.mrhayami.vaultio.ui.navigation.Screen
 import com.mrhayami.vaultio.ui.navigation.VaultioNavigationBar
 import com.mrhayami.vaultio.ui.scanner.ScannerScreen
@@ -47,6 +49,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val app = application as VaultioApplication
         val repository = app.repository
+        val gradingRepository = app.gradingRepository
         val userPreferencesRepository = app.userPreferencesRepository
         
         setContent {
@@ -160,11 +163,69 @@ class MainActivity : ComponentActivity() {
                                 SetDownloadsScreen(viewModel) 
                             }
                             composable(Screen.Settings.route) { SettingsScreen(repository, userPreferencesRepository) }
-                            composable(Screen.Scanner.route) { 
+                            composable(
+                                route = "scanner?userCardId={userCardId}",
+                                arguments = listOf(navArgument("userCardId") {
+                                    type = NavType.LongType; defaultValue = -1L
+                                })
+                            ) { backStackEntry ->
+                                val userCardId =
+                                    backStackEntry.arguments?.getLong("userCardId") ?: -1L
                                 ScannerScreen(
                                     repository = repository,
+                                    targetUserCardId = userCardId,
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToGrading = { id, bmp, pendingCard ->
+                                        gradingRepository.activeGradingImage = bmp
+                                        if (pendingCard != null) {
+                                            gradingRepository.pendingCardToGrade = pendingCard
+                                        }
+                                        navController.navigate("grading/$id")
+                                    }
+                                )
+                            }
+                            composable(
+                                route = Screen.Grading.route,
+                                arguments = listOf(navArgument("userCardId") {
+                                    type = NavType.LongType
+                                }),
+                                enterTransition = {
+                                    slideIntoContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Up,
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                    ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                                },
+                                exitTransition = {
+                                    slideOutOfContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Down,
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                    ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                                }
+                            ) { backStackEntry ->
+                                val userCardId =
+                                    backStackEntry.arguments?.getLong("userCardId") ?: 0L
+                                val viewModel: GradingViewModel = viewModel(
+                                    factory = remember(gradingRepository, repository) {
+                                        object : androidx.lifecycle.ViewModelProvider.Factory {
+                                            override fun <T : androidx.lifecycle.ViewModel> create(
+                                                modelClass: Class<T>
+                                            ): T {
+                                                return GradingViewModel(
+                                                    gradingRepository,
+                                                    repository
+                                                ) as T
+                                            }
+                                        }
+                                    }
+                                )
+                                val state by viewModel.state.collectAsState()
+                                GradingScreen(
+                                    state = state,
+                                    userCardId = userCardId,
+                                    onEvent = viewModel::onEvent,
+                                    sideEffects = viewModel.sideEffects,
                                     onNavigateBack = { navController.popBackStack() }
-                                ) 
+                                )
                             }
                             composable(
                                 route = "card_detail/{userCardId}",
@@ -172,26 +233,20 @@ class MainActivity : ComponentActivity() {
                                 enterTransition = {
                                     slideIntoContainer(
                                         AnimatedContentTransitionScope.SlideDirection.Left,
-                                        animationSpec = tween(500, easing = FastOutSlowInEasing)
-                                    ) + fadeIn(animationSpec = tween(500))
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                    ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
                                 },
                                 exitTransition = {
-                                    slideOutOfContainer(
-                                        AnimatedContentTransitionScope.SlideDirection.Left,
-                                        animationSpec = tween(500, easing = FastOutSlowInEasing)
-                                    ) + fadeOut(animationSpec = tween(500))
+                                    fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
                                 },
                                 popEnterTransition = {
-                                    slideIntoContainer(
-                                        AnimatedContentTransitionScope.SlideDirection.Right,
-                                        animationSpec = tween(500, easing = FastOutSlowInEasing)
-                                    ) + fadeIn(animationSpec = tween(500))
+                                    fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
                                 },
                                 popExitTransition = {
                                     slideOutOfContainer(
                                         AnimatedContentTransitionScope.SlideDirection.Right,
-                                        animationSpec = tween(500, easing = FastOutSlowInEasing)
-                                    ) + fadeOut(animationSpec = tween(500))
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                    ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
                                 }
                             ) { backStackEntry ->
                                 val userCardId = backStackEntry.arguments?.getLong("userCardId") ?: 0L
@@ -203,6 +258,13 @@ class MainActivity : ComponentActivity() {
                                         navController.navigate("card_detail/$id") {
                                             popUpTo("card_detail/$userCardId") { inclusive = true }
                                         }
+                                    },
+                                    onNavigateToGrading = { id, bmp ->
+                                        gradingRepository.activeGradingImage = bmp
+                                        navController.navigate("grading/$id")
+                                    },
+                                    onNavigateToScannerGrading = { id ->
+                                        navController.navigate("scanner?userCardId=$id")
                                     }
                                 )
                             }

@@ -8,6 +8,7 @@ import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.VaultioDatabase
 import com.mrhayami.vaultio.data.remote.JustTcgApi
 import com.mrhayami.vaultio.data.remote.TcgDexApi
+import com.mrhayami.vaultio.data.repository.GradingRepository
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.data.workers.CollectionSnapshotWorker
 import com.squareup.moshi.Moshi
@@ -21,6 +22,7 @@ import java.util.concurrent.TimeUnit
 class VaultioApplication : Application() {
 
     lateinit var repository: VaultioRepository
+    lateinit var gradingRepository: GradingRepository
     lateinit var userPreferencesRepository: UserPreferencesRepository
 
     override fun onCreate() {
@@ -72,6 +74,11 @@ class VaultioApplication : Application() {
             tcgDexApi = tcgDexApi,
             justTcgApi = justTcgApi,
             userPreferencesRepository = userPreferencesRepository
+        )
+
+        gradingRepository = GradingRepository(
+            context = this,
+            cardGradeDao = database.cardGradeDao()
         )
 
         scheduleDailySnapshot()

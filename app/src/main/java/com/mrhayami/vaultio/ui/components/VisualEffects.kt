@@ -1,31 +1,55 @@
 package com.mrhayami.vaultio.ui.components
 
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.*
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.*
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectDragGestures
 import com.mrhayami.vaultio.data.PricingUtils
-import kotlin.math.*
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.pow
+import kotlin.math.sin
 import kotlin.random.Random
-
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
 
 /**
  * ADVANCED TCG HOLOFOIL SHADER
@@ -116,116 +140,136 @@ fun Modifier.holoEffect(
         )
     }
 
-    this.then(interactiveModifier).graphicsLayer {
-        rotationX = effX
-        rotationY = effY
-        cameraDistance = 15f * density
+    this
+        .then(interactiveModifier)
+        .graphicsLayer {
+            rotationX = effX
+            rotationY = effY
+            cameraDistance = 15f * density
 
-        // Integrated Shadow that follows the card tilt
-        shadowElevation = 6.dp.toPx()
-        shape = RoundedCornerShape(cornerRadius)
+            // Integrated Shadow that follows the card tilt
+            shadowElevation = 6.dp.toPx()
+            shape = RoundedCornerShape(cornerRadius)
 
-        // CRITICAL: Disable clipping so tilted edges and shadow are not cut off
-        clip = false
-    }.drawWithContent {
-        drawContent()
-        val w = size.width
-        val h = size.height
-
-        if (w <= 0f || h <= 0f) return@drawWithContent
-
-        // Mask the holo effects to the card's rounded corners
-        val cardPath = Path().apply {
-            addRoundRect(
-                RoundRect(
-                    rect = Rect(0f, 0f, w, h),
-                    cornerRadius = CornerRadius(cornerRadius.toPx())
-                )
-            )
+            // CRITICAL: Disable clipping so tilted edges and shadow are not cut off
+            clip = false
         }
+        .drawWithContent {
+            drawContent()
+            val w = size.width
+            val h = size.height
 
-        clipPath(cardPath) {
-            val isReverseHolo = finish == PricingUtils.FINISH_REVERSE_HOLO
+            if (w <= 0f || h <= 0f) return@drawWithContent
 
-            // Light direction moves with card tilt
-            val lX = (gyroY / 15f).coerceIn(-1f, 1f)
-            val lY = (-gyroX / 15f).coerceIn(-1f, 1f)
-            val sheenProgress = (lX + lY + 1f) / 2f
+            // Mask the holo effects to the card's rounded corners
+            val cardPath = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        rect = Rect(0f, 0f, w, h),
+                        cornerRadius = CornerRadius(cornerRadius.toPx())
+                    )
+                )
+            }
 
-            // 1. DYNAMIC SPECTRAL SWEEP (The "Foil Sheen")
-            drawRect(
-                brush = Brush.linearGradient(
-                    colors = rainbowColors,
-                    start = Offset(sheenProgress * w * 2f - w, 0f),
-                    end = Offset(sheenProgress * w * 2f, h)
-                ),
-                alpha = if (isReverseHolo) 0.15f else 0.22f,
-                blendMode = BlendMode.ColorDodge
-            )
+            clipPath(cardPath) {
+                val isReverseHolo = finish == PricingUtils.FINISH_REVERSE_HOLO
 
-            // 2. SPECULAR SHINE / FLARE (Glossy bands)
-            drawRect(
-                brush = Brush.linearGradient(
-                    0.45f to Color.Transparent,
-                    0.5f to Color.White.copy(alpha = 0.35f),
-                    0.55f to Color.Transparent,
-                    start = Offset(sheenProgress * w * 3f - w * 1.5f, 0f),
-                    end = Offset(sheenProgress * w * 3f, h)
-                ),
-                blendMode = BlendMode.Screen
-            )
+                // Light direction moves with card tilt
+                val lX = (gyroY / 15f).coerceIn(-1f, 1f)
+                val lY = (-gyroX / 15f).coerceIn(-1f, 1f)
+                val sheenProgress = (lX + lY + 1f) / 2f
 
-            // 3. COSMOS GRAINS WITH PARALLAX
-            grainProperties.forEach { grain ->
-                // Parallax shift based on tilt to simulate depth
-                val px = grain.pos.x * w + (lX * grain.parallaxFactor)
-                val py = grain.pos.y * h + (lY * grain.parallaxFactor)
+                // 1. DYNAMIC SPECTRAL SWEEP (The "Foil Sheen")
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = rainbowColors,
+                        start = Offset(sheenProgress * w * 2f - w, 0f),
+                        end = Offset(sheenProgress * w * 2f, h)
+                    ),
+                    alpha = if (isReverseHolo) 0.15f else 0.22f,
+                    blendMode = BlendMode.ColorDodge
+                )
 
-                // Calculate if grain is hit by the light sheen
-                val distToSheen = abs(grain.pos.x + grain.pos.y - sheenProgress * 2f) / 2f
-                val influence = (1f - (distToSheen * 1.5f)).coerceIn(0f, 1f).pow(5)
-                val intensity = influence * grain.reflectivity
+                // 2. SPECULAR SHINE / FLARE (Glossy bands)
+                drawRect(
+                    brush = Brush.linearGradient(
+                        0.45f to Color.Transparent,
+                        0.5f to Color.White.copy(alpha = 0.35f),
+                        0.55f to Color.Transparent,
+                        start = Offset(sheenProgress * w * 3f - w * 1.5f, 0f),
+                        end = Offset(sheenProgress * w * 3f, h)
+                    ),
+                    blendMode = BlendMode.Screen
+                )
 
-                // Masking Logic (Artwork area approx center-top)
-                val isInArtArea = grain.pos.x in 0.15f..0.85f && grain.pos.y in 0.12f..0.62f
-                val shouldShowGrain = if (isReverseHolo) !isInArtArea else (isFullArt || isInArtArea)
+                // 3. COSMOS GRAINS WITH PARALLAX
+                grainProperties.forEach { grain ->
+                    // Parallax shift based on tilt to simulate depth
+                    val px = grain.pos.x * w + (lX * grain.parallaxFactor)
+                    val py = grain.pos.y * h + (lY * grain.parallaxFactor)
 
-                if (intensity > 0.01f && shouldShowGrain) {
-                    val colorPos = (grain.pos.x + grain.pos.y + sheenProgress) % 1f
-                    val grainColor = interpolateRainbow(rainbowColors, colorPos).copy(alpha = intensity * 0.8f)
-                    
-                    when (grain.patternType) {
-                        GrainType.DOT -> {
-                            drawCircle(
-                                color = grainColor,
-                                radius = grain.size.dp.toPx(),
-                                center = Offset(px, py),
-                                blendMode = BlendMode.Screen
-                            )
-                        }
-                        GrainType.GLOW_DOT -> {
-                            drawCircle(
-                                color = grainColor,
-                                radius = grain.size.dp.toPx() * 1.5f,
-                                center = Offset(px, py),
-                                blendMode = BlendMode.Screen
-                            )
-                            drawCircle(
-                                color = grainColor.copy(alpha = intensity * 0.3f),
-                                radius = grain.size.dp.toPx() * 4f,
-                                center = Offset(px, py),
-                                blendMode = BlendMode.Screen
-                            )
-                        }
-                        GrainType.STAR -> {
-                            val starSize = grain.size.dp.toPx() * 6f * intensity
-                            if (starSize > 0f) {
-                                withTransform({
-                                    translate(px, py)
-                                    rotate(effX * 2f + effY * 2f + grain.pos.x * 360f)
-                                }) {
-                                    drawLine(color = grainColor, start = Offset(-starSize, 0f), end = Offset(starSize, 0f), strokeWidth = 1.dp.toPx())
-                                    drawLine(color = grainColor, start = Offset(0f, -starSize), end = Offset(0f, starSize), strokeWidth = 1.dp.toPx())
+                    // Calculate if grain is hit by the light sheen
+                    val distToSheen = abs(grain.pos.x + grain.pos.y - sheenProgress * 2f) / 2f
+                    val influence = (1f - (distToSheen * 1.5f)).coerceIn(0f, 1f).pow(5)
+                    val intensity = influence * grain.reflectivity
+
+                    // Masking Logic (Artwork area approx center-top)
+                    val isInArtArea = grain.pos.x in 0.15f..0.85f && grain.pos.y in 0.12f..0.62f
+                    val shouldShowGrain =
+                        if (isReverseHolo) !isInArtArea else (isFullArt || isInArtArea)
+
+                    if (intensity > 0.01f && shouldShowGrain) {
+                        val colorPos = (grain.pos.x + grain.pos.y + sheenProgress) % 1f
+                        val grainColor = interpolateRainbow(
+                            rainbowColors,
+                            colorPos
+                        ).copy(alpha = intensity * 0.8f)
+
+                        when (grain.patternType) {
+                            GrainType.DOT -> {
+                                drawCircle(
+                                    color = grainColor,
+                                    radius = grain.size.dp.toPx(),
+                                    center = Offset(px, py),
+                                    blendMode = BlendMode.Screen
+                                )
+                            }
+
+                            GrainType.GLOW_DOT -> {
+                                drawCircle(
+                                    color = grainColor,
+                                    radius = grain.size.dp.toPx() * 1.5f,
+                                    center = Offset(px, py),
+                                    blendMode = BlendMode.Screen
+                                )
+                                drawCircle(
+                                    color = grainColor.copy(alpha = intensity * 0.3f),
+                                    radius = grain.size.dp.toPx() * 4f,
+                                    center = Offset(px, py),
+                                    blendMode = BlendMode.Screen
+                                )
+                            }
+
+                            GrainType.STAR -> {
+                                val starSize = grain.size.dp.toPx() * 6f * intensity
+                                if (starSize > 0f) {
+                                    withTransform({
+                                        translate(px, py)
+                                        rotate(effX * 2f + effY * 2f + grain.pos.x * 360f)
+                                    }) {
+                                        drawLine(
+                                            color = grainColor,
+                                            start = Offset(-starSize, 0f),
+                                            end = Offset(starSize, 0f),
+                                            strokeWidth = 1.dp.toPx()
+                                        )
+                                        drawLine(
+                                            color = grainColor,
+                                            start = Offset(0f, -starSize),
+                                            end = Offset(0f, starSize),
+                                            strokeWidth = 1.dp.toPx()
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -233,7 +277,6 @@ fun Modifier.holoEffect(
                 }
             }
         }
-    }
 }
 
 private fun interpolateRainbow(colors: List<Color>, progress: Float): Color {
@@ -284,7 +327,8 @@ fun Modifier.shimmerEffect(
         label = "shimmer_translation"
     )
 
-    this.graphicsLayer(clip = false)
+    this
+        .graphicsLayer(clip = false)
         .drawWithContent {
             drawContent()
             val cardPath = Path().apply {
@@ -324,11 +368,12 @@ fun Modifier.energyEffect(
     val normalizedType = type.lowercase()
     val reusablePath = remember { Path() }
 
-    this.graphicsLayer(clip = false)
+    this
+        .graphicsLayer(clip = false)
         .drawWithContent {
             drawContent()
             if (size.width <= 0f || size.height <= 0f) return@drawWithContent
-            
+
             when (normalizedType) {
                 "fire" -> drawEmbers(progress)
                 "grass" -> drawForestSpirit(progress, reusablePath)
@@ -355,7 +400,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawEmbers(progress
         val y = size.height * (1f - actualPhase)
         val alpha = sin(actualPhase * PI.toFloat())
         val sizePx = (1f + random.nextFloat() * 3f).dp.toPx()
-        
+
         val emberColor = when(i % 4) {
             0 -> Color(0xFFFF3D00)
             1 -> Color(0xFFFF9100)

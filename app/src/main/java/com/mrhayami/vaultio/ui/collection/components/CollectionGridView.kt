@@ -1,8 +1,5 @@
 package com.mrhayami.vaultio.ui.collection.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -28,16 +25,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -45,15 +37,18 @@ import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
+import com.mrhayami.vaultio.ui.collection.CardUiModel
 import com.mrhayami.vaultio.ui.collection.GridSettings
 import com.mrhayami.vaultio.ui.components.CardAttributeBadges
+import com.mrhayami.vaultio.ui.components.EntranceType
 import com.mrhayami.vaultio.ui.components.shimmerEffect
+import com.mrhayami.vaultio.ui.components.staggeredEntrance
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CollectionGridView(
-    userCards: List<CardWithDetails>,
+    userCards: List<CardUiModel>,
     selectedIds: Set<Long>,
     isSelectionMode: Boolean,
     settings: GridSettings,
@@ -61,6 +56,8 @@ fun CollectionGridView(
     onCardLongClick: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val gridLoadTime = remember { System.currentTimeMillis() }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(settings.columns),
         contentPadding = PaddingValues(8.dp, 8.dp, 8.dp, 80.dp),
@@ -68,71 +65,89 @@ fun CollectionGridView(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier.navigationBarsPadding()
     ) {
-        itemsIndexed(userCards, key = { _, item -> item.userCard.id }) { index, item ->
-            val isSelected = selectedIds.contains(item.userCard.id)
-            val isNew = System.currentTimeMillis() - item.userCard.dateAdded < 60_000 // 1 minute
+        itemsIndexed(userCards, key = { _, item -> item.details.userCard.id }) { index, item ->
+            val id = item.details.userCard.id
+            val isSelected = selectedIds.contains(id)
+            val isNew =
+                remember(item.details.userCard.dateAdded) { System.currentTimeMillis() - item.details.userCard.dateAdded < 60_000 }
 
-            val isInspectionMode = LocalInspectionMode.current
-            var visible by remember { mutableStateOf(isInspectionMode) }
-            LaunchedEffect(Unit) {
-                if (!isInspectionMode) visible = true
-            }
+            val isInitialLoad = remember { System.currentTimeMillis() - gridLoadTime < 500 }
 
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(durationMillis = 400, delayMillis = (index % 12) * 40)) +
-                        scaleIn(initialScale = 0.8f, animationSpec = androidx.compose.animation.core.tween(durationMillis = 400, delayMillis = (index % 12) * 40)),
-                modifier = Modifier.animateItem()
-            ) {
-                Card(
-                    modifier = Modifier.combinedClickable(
-                        onClick = { onCardClick(item.userCard.id) },
-                        onLongClick = { onCardLongClick(item.userCard.id) }
+            val onClick = remember(id, onCardClick) { { onCardClick(id) } }
+            val onLongClick = remember(id, onCardLongClick) { { onCardLongClick(id) } }
+
+            Card(
+                modifier = Modifier
+                    .staggeredEntrance(
+                        index = index,
+                        type = EntranceType.ScaleUp,
+                        enabled = isInitialLoad
+                    )
+                    .animateItem()
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClick = onLongClick
                     ),
-                    shape = RoundedCornerShape(8.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = if (isSelected) androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
-                ) {
-                    Box {
-                        AsyncImage(
-                            model = "${item.card.image}/high.webp",
-                            contentDescription = null,
+                shape = RoundedCornerShape(8.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = if (isSelected) androidx.compose.foundation.BorderStroke(
+                    3.dp,
+                    MaterialTheme.colorScheme.primary
+                ) else null
+            ) {
+                Box {
+                    val imageModifier = remember(isNew) {
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(0.718f)
+                            .shimmerEffect(show = isNew)
+                    }
+                    AsyncImage(
+                        model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                            .data("${item.details.card.image}/high.webp")
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        modifier = imageModifier,
+                        contentScale = ContentScale.FillBounds
+                    )
+                    if (isSelected) {
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(0.718f)
-                                .shimmerEffect(show = isNew),
-                            contentScale = ContentScale.FillBounds
-                        )
-                        if (isSelected) {
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .background(Color.Black.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
-                            }
-                        } else if (settings.showBadges) {
-                            Badge(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(4.dp),
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ) {
-                                Text("${item.userCard.quantity}", modifier = Modifier.padding(2.dp))
-                            }
-                        }
-                        
-                        if (!isSelected) {
-                            CardAttributeBadges(
-                                finish = item.userCard.finish,
-                                printing = item.userCard.printing,
-                                modifier = Modifier
-                                    .align(Alignment.BottomStart)
-                                    .padding(4.dp)
+                                .matchParentSize()
+                                .background(Color.Black.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.CheckCircle,
+                                null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(48.dp)
                             )
                         }
+                    } else if (settings.showBadges) {
+                        Badge(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(4.dp),
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ) {
+                            Text(
+                                "${item.details.userCard.quantity}",
+                                modifier = Modifier.padding(2.dp)
+                            )
+                        }
+                    }
+
+                    if (!isSelected) {
+                        CardAttributeBadges(
+                            finish = item.details.userCard.finish,
+                            printing = item.details.userCard.printing,
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(4.dp)
+                        )
                     }
                 }
             }
@@ -147,15 +162,34 @@ private fun CollectionGridViewPreview() {
         Surface(color = MaterialTheme.colorScheme.background) {
             CollectionGridView(
                 userCards = listOf(
-                    mockCardWithDetails(
-                        "1",
-                        "Pikachu",
-                        finish = "normal",
-                        printing = "1st edition"
+                    CardUiModel(
+                        mockCardWithDetails(
+                            1L,
+                            "Pikachu",
+                            "https://images.pokemontcg.io/swsh1/1"
+                        ), 1.99
                     ),
-                    mockCardWithDetails("2", "Charizard", finish = "holofoil"),
-                    mockCardWithDetails("3", "Mewtwo", finish = "reverse holo"),
-                    mockCardWithDetails("4", "Blastoise", printing = "promo")
+                    CardUiModel(
+                        mockCardWithDetails(
+                            2L,
+                            "Charizard",
+                            "https://images.pokemontcg.io/swsh4/25"
+                        ), 299.99
+                    ),
+                    CardUiModel(
+                        mockCardWithDetails(
+                            3L,
+                            "Mewtwo",
+                            "https://images.pokemontcg.io/base1/10"
+                        ), 49.99
+                    ),
+                    CardUiModel(
+                        mockCardWithDetails(
+                            4L,
+                            "Blastoise",
+                            "https://images.pokemontcg.io/swsh4/1"
+                        ), 89.99
+                    )
                 ),
                 selectedIds = emptySet(),
                 isSelectionMode = false,
@@ -167,41 +201,6 @@ private fun CollectionGridViewPreview() {
     }
 }
 
-private fun mockCardWithDetails(
-    id: String,
-    name: String,
-    finish: String = "normal",
-    printing: String = "unlimited"
-) = CardWithDetails(
-    userCard = UserCardEntity(
-        id = id.toLong(),
-        cardId = id,
-        quantity = 2,
-        finish = finish,
-        printing = printing
-    ),
-    card = CardEntity(
-        id = id,
-        localId = id,
-        name = name,
-        image = "https://images.pokemontcg.io/swsh1/1",
-        setId = "swsh1",
-        rarity = "Rare",
-        category = "Pokemon",
-        types = "Lightning",
-        dexId = "25"
-    ),
-    set = SetEntity(
-        id = "swsh1",
-        name = "Sword & Shield",
-        series = "Sword & Shield",
-        logo = "",
-        symbol = "",
-        totalCards = 202,
-        releaseDate = "2020-02-07"
-    )
-)
-
 @Preview(showBackground = true, name = "Selection Mode")
 @Composable
 private fun CollectionGridViewSelectionPreview() {
@@ -209,10 +208,34 @@ private fun CollectionGridViewSelectionPreview() {
         Surface(color = MaterialTheme.colorScheme.background) {
             CollectionGridView(
                 userCards = listOf(
-                    mockCardWithDetails("1", "Pikachu"),
-                    mockCardWithDetails("2", "Charizard"),
-                    mockCardWithDetails("3", "Mewtwo"),
-                    mockCardWithDetails("4", "Blastoise")
+                    CardUiModel(
+                        mockCardWithDetails(
+                            1L,
+                            "Pikachu",
+                            "https://images.pokemontcg.io/swsh1/1"
+                        ), 1.99
+                    ),
+                    CardUiModel(
+                        mockCardWithDetails(
+                            2L,
+                            "Charizard",
+                            "https://images.pokemontcg.io/swsh4/25"
+                        ), 299.99
+                    ),
+                    CardUiModel(
+                        mockCardWithDetails(
+                            3L,
+                            "Mewtwo",
+                            "https://images.pokemontcg.io/base1/10"
+                        ), 49.99
+                    ),
+                    CardUiModel(
+                        mockCardWithDetails(
+                            4L,
+                            "Blastoise",
+                            "https://images.pokemontcg.io/swsh4/1"
+                        ), 89.99
+                    )
                 ),
                 selectedIds = setOf(1L, 3L),
                 isSelectionMode = true,
@@ -223,3 +246,36 @@ private fun CollectionGridViewSelectionPreview() {
         }
     }
 }
+
+private fun mockCardWithDetails(id: Long, name: String, imageUrl: String) = CardWithDetails(
+    userCard = UserCardEntity(
+        id = id,
+        cardId = id.toString(),
+        quantity = 1,
+        dateAdded = System.currentTimeMillis(),
+        finish = "Normal",
+        condition = "Near Mint",
+        printing = "Standard"
+    ),
+    card = CardEntity(
+        id = id.toString(),
+        localId = id.toString(),
+        name = name,
+        image = imageUrl,
+        setId = "swsh1",
+        rarity = "Rare",
+        category = "Pokemon",
+        types = "Lightning",
+        dexId = id.toString()
+    ),
+    set = SetEntity(
+        id = "swsh1",
+        name = "Sword & Shield",
+        series = "Sword & Shield",
+        logo = "https://assets.tcgdex.net/en/sets/swsh1/logo.png",
+        symbol = "https://assets.tcgdex.net/en/sets/swsh1/symbol.png",
+        totalCards = 202,
+        releaseDate = "2020-02-07"
+    )
+)
+

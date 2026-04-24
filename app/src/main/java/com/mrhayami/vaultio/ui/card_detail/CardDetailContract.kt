@@ -39,6 +39,7 @@ sealed interface CardDetailEvent {
     data class AddCardToFolder(val folderId: Long) : CardDetailEvent
     data class RemoveCardFromFolder(val folderId: Long) : CardDetailEvent
     data object ConsumeSaveSuccess : CardDetailEvent
+    data class GradeCard(val image: android.graphics.Bitmap? = null) : CardDetailEvent
 }
 
 /** One-time effects that the Screen reacts to. */
@@ -46,5 +47,7 @@ sealed interface CardDetailEffect {
     sealed interface Navigation : CardDetailEffect {
         data object Back : Navigation
         data class ToCard(val userCardId: Long) : Navigation
+        data class ToGrading(val userCardId: Long, val image: android.graphics.Bitmap? = null) :
+            Navigation
     }
 }

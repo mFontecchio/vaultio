@@ -2,14 +2,22 @@ package com.mrhayami.vaultio.ui.collection.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
@@ -24,6 +32,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.ui.collection.PokedexEntry
 import com.mrhayami.vaultio.ui.collection.PokedexSettings
+import com.mrhayami.vaultio.ui.components.EntranceType
+import com.mrhayami.vaultio.ui.components.staggeredEntrance
 
 @Composable
 fun PokedexView(
@@ -32,6 +42,8 @@ fun PokedexView(
     onDexClick: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val gridLoadTime = remember { System.currentTimeMillis() }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
         contentPadding = PaddingValues(8.dp, 8.dp, 8.dp, 80.dp),
@@ -39,22 +51,19 @@ fun PokedexView(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier.navigationBarsPadding()
     ) {
-        items(entries, key = { it.dexNumber }) { entry ->
+        itemsIndexed(entries, key = { _, it -> it.dexNumber }) { index, entry ->
             val isCollected = entry.isCollected
-            val spriteUrl = if (settings.useOfficialArt) {
-                if (settings.useShinySprites) {
-                    "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/shiny/${entry.dexNumber}.png"
-                } else {
-                    "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${entry.dexNumber}.png"
-                }
-            } else {
-                val spriteType = if (settings.useShinySprites) "shiny" else "pokemon"
-                "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/$spriteType/${entry.dexNumber}.png"
-            }
+            val isInitialLoad = remember { System.currentTimeMillis() - gridLoadTime < 500 }
 
             Box(
                 modifier = Modifier
                     .aspectRatio(1f)
+                    .staggeredEntrance(
+                        index = index,
+                        type = EntranceType.ScaleUp,
+                        enabled = isInitialLoad
+                    )
+                    .animateItem()
                     .background(
                         if (isCollected) MaterialTheme.colorScheme.primaryContainer
                         else MaterialTheme.colorScheme.surfaceVariant,
@@ -70,7 +79,10 @@ fun PokedexView(
                     Text("#${entry.dexNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Box(contentAlignment = Alignment.Center) {
                         AsyncImage(
-                            model = spriteUrl,
+                            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                .data(entry.spriteUrl)
+                                .crossfade(true)
+                                .build(),
                             contentDescription = null,
                             modifier = Modifier.size(48.dp),
                             contentScale = ContentScale.Fit,
@@ -107,6 +119,7 @@ private fun PokedexViewPreview() {
                     cardCount = 1,
                     totalQuantity = 1,
                     representativeImage = null,
+                    spriteUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${it + 1}.png",
                     isCollected = it % 2 == 0
                 )
             },

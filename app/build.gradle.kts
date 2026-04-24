@@ -7,7 +7,6 @@ val localProps = Properties().also { props ->
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
 }
@@ -21,7 +20,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 3
-        versionName = "1.0.6r11"
+        versionName = "1.0.6r12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -105,4 +104,7 @@ dependencies {
     implementation(libs.vico.compose)
     implementation(libs.vico.compose.m3)
     implementation(libs.vico.views)
+
+    // AI & Vision (2026 Standards)
+    // MediaPipe removed natively to fix 16 KB page size issues on Android 15.
 }

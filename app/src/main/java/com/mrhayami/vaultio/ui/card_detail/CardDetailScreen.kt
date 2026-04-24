@@ -1,19 +1,75 @@
 package com.mrhayami.vaultio.ui.card_detail
 
+import android.graphics.Bitmap
 import android.widget.Toast
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Done
+import androidx.compose.material.icons.rounded.HelpOutline
+import androidx.compose.material.icons.rounded.ImageNotSupported
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,21 +78,40 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.VintageSets
-import androidx.compose.ui.tooling.preview.Preview
-import com.mrhayami.vaultio.data.local.*
+import com.mrhayami.vaultio.data.local.CardEntity
+import com.mrhayami.vaultio.data.local.CardWithDetails
+import com.mrhayami.vaultio.data.local.FolderEntity
+import com.mrhayami.vaultio.data.local.PriceEntity
+import com.mrhayami.vaultio.data.local.SetEntity
+import com.mrhayami.vaultio.data.local.UserCardEntity
+import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.repository.VaultioRepository
-import com.mrhayami.vaultio.ui.theme.*
-import com.mrhayami.vaultio.ui.components.*
+import com.mrhayami.vaultio.ui.components.CardAttributeBadges
+import com.mrhayami.vaultio.ui.components.energyEffect
+import com.mrhayami.vaultio.ui.components.holoEffect
+import com.mrhayami.vaultio.ui.components.shimmerEffect
+import com.mrhayami.vaultio.ui.theme.EnergyDarkness
+import com.mrhayami.vaultio.ui.theme.EnergyDragon
+import com.mrhayami.vaultio.ui.theme.EnergyFairy
+import com.mrhayami.vaultio.ui.theme.EnergyFighting
+import com.mrhayami.vaultio.ui.theme.EnergyFire
+import com.mrhayami.vaultio.ui.theme.EnergyGrass
+import com.mrhayami.vaultio.ui.theme.EnergyLightning
+import com.mrhayami.vaultio.ui.theme.EnergyMetal
+import com.mrhayami.vaultio.ui.theme.EnergyPsychic
+import com.mrhayami.vaultio.ui.theme.EnergyWater
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -44,6 +119,8 @@ fun CardDetailContent(
     uiState: CardDetailUiState,
     onNavigateBack: () -> Unit,
     onEvent: (CardDetailEvent) -> Unit,
+    onNavigateToGradingWithImage: ((Bitmap) -> Unit)? = null,
+    onNavigateToScannerGrading: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -83,9 +160,19 @@ fun CardDetailContent(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { 
-                        onEvent(CardDetailEvent.SaveChanges(quantity, condition, printing, finish)) 
-                    }) {
+                    val onSaveClick = remember(quantity, condition, printing, finish) {
+                        {
+                            onEvent(
+                                CardDetailEvent.SaveChanges(
+                                    quantity,
+                                    condition,
+                                    printing,
+                                    finish
+                                )
+                            )
+                        }
+                    }
+                    IconButton(onClick = onSaveClick) {
                         Icon(Icons.Rounded.Done, contentDescription = "Save")
                     }
                     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -133,18 +220,27 @@ fun CardDetailContent(
                             card.rarity?.contains("Star", ignoreCase = true) == true ||
                             card.rarity?.contains("2 Star", ignoreCase = true) == true ||
                             card.rarity?.contains("3 Star", ignoreCase = true) == true
-            
-            val currentPrice = if (isVintage) {
-                uiState.vintagePrices.find { 
-                    it.finish == userCard.finish && 
-                    it.condition == userCard.condition &&
-                    it.printing == userCard.printing
-                } ?: uiState.vintagePrices.firstOrNull()
-            } else {
-                uiState.prices.find { 
-                    it.finish == userCard.finish && 
-                    it.condition == userCard.condition 
-                } ?: uiState.prices.firstOrNull()
+
+            val currentPrice = remember(
+                isVintage,
+                uiState.vintagePrices,
+                uiState.prices,
+                userCard.finish,
+                userCard.condition,
+                userCard.printing
+            ) {
+                if (isVintage) {
+                    uiState.vintagePrices.find {
+                        it.finish == userCard.finish &&
+                                it.condition == userCard.condition &&
+                                it.printing == userCard.printing
+                    } ?: uiState.vintagePrices.firstOrNull()
+                } else {
+                    uiState.prices.find {
+                        it.finish == userCard.finish &&
+                                it.condition == userCard.condition
+                    } ?: uiState.prices.firstOrNull()
+                }
             }
 
             val marketPriceValue = when (currentPrice) {
@@ -229,14 +325,17 @@ fun CardDetailContent(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 48.dp, horizontal = 12.dp), // Increased padding for 3D tilt
+                                .padding(
+                                    vertical = 24.dp,
+                                    horizontal = 12.dp
+                                ), // 48 Increased padding for 3D tilt
                             contentAlignment = Alignment.Center
                         ) {
                             // The card container applies effects and rotation.
                             // We use a Box instead of a Surface to avoid restrictive clipping.
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.8f) // Slightly smaller width for more rotation room
+                                    .fillMaxWidth(0.9f) // Slightly smaller width for more rotation room
                                     .aspectRatio(0.718f)
                                     .holoEffect(
                                         finish = finish,
@@ -284,16 +383,16 @@ fun CardDetailContent(
                                             set.symbol ?: set.logo ?: "https://assets.tcgdex.net/en/sets/${set.id}/symbol.png"
                                         }
                                     }
-                                    
+
                                     AsyncImage(
                                         model = setIcon,
                                         contentDescription = null,
-                                        modifier = Modifier.size(32.dp),
+                                        modifier = Modifier.size(48.dp),
                                         contentScale = ContentScale.Fit,
                                         error = rememberVectorPainter(Icons.Rounded.ImageNotSupported)
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    
+
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(set.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -334,7 +433,10 @@ fun CardDetailContent(
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        val priceText = NumberFormat.getCurrencyInstance(Locale.US).format(marketPriceValue)
+                                        val priceText = remember(marketPriceValue) {
+                                            NumberFormat.getCurrencyInstance(Locale.US)
+                                                .format(marketPriceValue)
+                                        }
                                         Text(priceText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
                                         Spacer(modifier = Modifier.weight(1f))
                                         IconButton(
@@ -364,23 +466,32 @@ fun CardDetailContent(
                     if (isVintage && uiState.vintagePrices.isNotEmpty()) {
                         AnimatedVisibility(
                             visible = true,
-                            enter = slideInVertically(animationSpec = tween(500, delayMillis = 300, easing = FastOutSlowInEasing)) { it / 2 } + 
+                            enter = slideInVertically(
+                                animationSpec = tween(
+                                    500,
+                                    delayMillis = 300,
+                                    easing = FastOutSlowInEasing
+                                )
+                            ) { it / 2 } +
                                     fadeIn(tween(500, delayMillis = 300, easing = FastOutSlowInEasing))
                         ) {
                             Column {
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text("Edition Pricing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.height(8.dp))
-                                
+
                                 Surface(
                                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                                     shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        val variantsByEdition = uiState.vintagePrices
-                                            .filter { it.condition == condition && it.finish == finish }
-                                            .groupBy { it.printing }
+                                        val variantsByEdition =
+                                            remember(uiState.vintagePrices, condition, finish) {
+                                                uiState.vintagePrices
+                                                    .filter { it.condition == condition && it.finish == finish }
+                                                    .groupBy { it.printing }
+                                            }
 
                                         if (variantsByEdition.isEmpty()) {
                                             Text(
@@ -389,12 +500,14 @@ fun CardDetailContent(
                                                 modifier = Modifier.padding(8.dp)
                                             )
                                         } else {
-                                            val editions = listOf(
-                                                PricingUtils.PRINTING_1ST_EDITION,
-                                                PricingUtils.PRINTING_SHADOWLESS,
-                                                PricingUtils.PRINTING_UNLIMITED
-                                            )
-                                            
+                                            val editions = remember {
+                                                listOf(
+                                                    PricingUtils.PRINTING_1ST_EDITION,
+                                                    PricingUtils.PRINTING_SHADOWLESS,
+                                                    PricingUtils.PRINTING_UNLIMITED
+                                                )
+                                            }
+
                                             editions.forEach { edition ->
                                                 val price = variantsByEdition[edition]?.firstOrNull()?.marketPrice
                                                 if (price != null) {
@@ -411,8 +524,12 @@ fun CardDetailContent(
                                                             fontWeight = if (printing == edition) FontWeight.Bold else FontWeight.Normal,
                                                             color = if (printing == edition) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                                         )
+                                                        val formattedPrice = remember(price) {
+                                                            NumberFormat.getCurrencyInstance(Locale.US)
+                                                                .format(price)
+                                                        }
                                                         Text(
-                                                            NumberFormat.getCurrencyInstance(Locale.US).format(price),
+                                                            formattedPrice,
                                                             style = MaterialTheme.typography.bodyLarge,
                                                             fontWeight = FontWeight.Bold
                                                         )
@@ -428,20 +545,96 @@ fun CardDetailContent(
 
                     AnimatedVisibility(
                         visible = true,
-                        enter = slideInVertically(animationSpec = tween(500, delayMillis = 400, easing = FastOutSlowInEasing)) { it / 2 } + 
+                        enter = slideInVertically(
+                            animationSpec = tween(
+                                500,
+                                delayMillis = 400,
+                                easing = FastOutSlowInEasing
+                            )
+                        ) { it / 2 } +
                                 fadeIn(tween(500, delayMillis = 400, easing = FastOutSlowInEasing))
                     ) {
                         Column {
                             Spacer(modifier = Modifier.height(24.dp))
 
                             Text("Collection Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            
+
+                            val formattedDate = remember(userCard.dateAdded) {
+                                SimpleDateFormat(
+                                    "MMM dd, yyyy",
+                                    Locale.US
+                                ).format(Date(userCard.dateAdded))
+                            }
                             Text(
-                                "Added on ${SimpleDateFormat("MMM dd, yyyy", Locale.US).format(Date(userCard.dateAdded))}",
+                                "Added on $formattedDate",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(bottom = 16.dp)
                             )
+
+                            if (details.grade != null) {
+                                var showGradeHint by remember { mutableStateOf(false) }
+
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(24.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 16.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    "Estimated Grade",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                IconButton(
+                                                    onClick = { showGradeHint = true },
+                                                    modifier = Modifier
+                                                        .padding(start = 4.dp)
+                                                        .size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Rounded.HelpOutline,
+                                                        contentDescription = "Grade Reasoning",
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            }
+                                            Text(
+                                                String.format(
+                                                    Locale.US,
+                                                    "%.1f",
+                                                    details.grade.overallScore
+                                                ),
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (showGradeHint) {
+                                    AlertDialog(
+                                        onDismissRequest = { showGradeHint = false },
+                                        title = { Text("AI Grading Reasoning") },
+                                        text = { Text(details.grade.reasoning) },
+                                        shape = RoundedCornerShape(28.dp),
+                                        confirmButton = {
+                                            TextButton(onClick = {
+                                                showGradeHint = false
+                                            }) { Text("Close") }
+                                        }
+                                    )
+                                }
+                            }
 
                             Surface(
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
@@ -458,20 +651,31 @@ fun CardDetailContent(
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier
-                                                .background(MaterialTheme.colorScheme.surface, CircleShape)
+                                                .background(
+                                                    MaterialTheme.colorScheme.surface,
+                                                    CircleShape
+                                                )
                                                 .padding(horizontal = 4.dp)
                                         ) {
-                                            IconButton(onClick = { if (quantity > 1) quantity-- }) { 
-                                                Icon(Icons.Rounded.Remove, null, tint = MaterialTheme.colorScheme.primary) 
+                                            IconButton(onClick = { if (quantity > 1) quantity-- }) {
+                                                Icon(
+                                                    Icons.Rounded.Remove,
+                                                    null,
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
                                             }
                                             Text(
-                                                quantity.toString(), 
-                                                style = MaterialTheme.typography.titleLarge, 
+                                                quantity.toString(),
+                                                style = MaterialTheme.typography.titleLarge,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.padding(horizontal = 12.dp)
                                             )
-                                            IconButton(onClick = { quantity++ }) { 
-                                                Icon(Icons.Rounded.Add, null, tint = MaterialTheme.colorScheme.primary) 
+                                            IconButton(onClick = { quantity++ }) {
+                                                Icon(
+                                                    Icons.Rounded.Add,
+                                                    null,
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
                                             }
                                         }
                                     }
@@ -521,13 +725,24 @@ fun CardDetailContent(
                                     )
 
                                     if (quantity > 1) {
-                                        val canSplit = condition != userCard.condition || 
-                                                      printing != userCard.printing || 
+                                        val canSplit = condition != userCard.condition ||
+                                                printing != userCard.printing ||
                                                       finish != userCard.finish
 
                                         Spacer(modifier = Modifier.height(16.dp))
+                                        val onSplitClick = remember(condition, printing, finish) {
+                                            {
+                                                onEvent(
+                                                    CardDetailEvent.SplitCard(
+                                                        condition,
+                                                        printing,
+                                                        finish
+                                                    )
+                                                )
+                                            }
+                                        }
                                         Button(
-                                            onClick = { onEvent(CardDetailEvent.SplitCard(condition, printing, finish)) },
+                                            onClick = onSplitClick,
                                             enabled = canSplit,
                                             modifier = Modifier.fillMaxWidth(),
                                             colors = ButtonDefaults.buttonColors(
@@ -546,6 +761,37 @@ fun CardDetailContent(
                                             modifier = Modifier.padding(top = 4.dp, start = 8.dp)
                                         )
                                     }
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    val cameraLauncher =
+                                        rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+                                            if (bitmap != null) {
+                                                onNavigateToGradingWithImage?.invoke(bitmap)
+                                            }
+                                        }
+
+                                    Button(
+                                        onClick = {
+                                            if (onNavigateToScannerGrading != null) {
+                                                onNavigateToScannerGrading()
+                                            } else if (onNavigateToGradingWithImage != null) {
+                                                cameraLauncher.launch(null)
+                                            } else {
+                                                onEvent(CardDetailEvent.GradeCard(null))
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF00E676),
+                                            contentColor = Color.White
+                                        )
+                                    ) {
+                                        Icon(Icons.Rounded.AutoFixHigh, null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("AI Grading Assistant")
+                                    }
                                 }
                             }
                         }
@@ -553,7 +799,13 @@ fun CardDetailContent(
 
                     AnimatedVisibility(
                         visible = true,
-                        enter = slideInVertically(animationSpec = tween(500, delayMillis = 500, easing = FastOutSlowInEasing)) { it / 2 } + 
+                        enter = slideInVertically(
+                            animationSpec = tween(
+                                500,
+                                delayMillis = 500,
+                                easing = FastOutSlowInEasing
+                            )
+                        ) { it / 2 } +
                                 fadeIn(tween(500, delayMillis = 500, easing = FastOutSlowInEasing))
                     ) {
                         Column {
@@ -567,7 +819,7 @@ fun CardDetailContent(
                                     val isInFolder = uiState.cardFolderIds.contains(folder.id)
                                     FilterChip(
                                         selected = isInFolder,
-                                        onClick = { 
+                                        onClick = {
                                             if (isInFolder) onEvent(CardDetailEvent.RemoveCardFromFolder(folder.id))
                                             else onEvent(CardDetailEvent.AddCardToFolder(folder.id))
                                         },
@@ -615,7 +867,9 @@ fun CardDetailScreen(
     repository: VaultioRepository,
     userCardId: Long,
     onNavigateBack: () -> Unit,
-    onNavigateToCard: (Long) -> Unit = {}
+    onNavigateToCard: (Long) -> Unit = {},
+    onNavigateToGrading: (Long, Bitmap?) -> Unit = { _, _ -> },
+    onNavigateToScannerGrading: (Long) -> Unit = {}
 ) {
     val viewModel: CardDetailViewModel = viewModel(
         factory = CardDetailViewModelFactory(repository, SavedStateHandle(mapOf("userCardId" to userCardId)))
@@ -627,6 +881,10 @@ fun CardDetailScreen(
             when (effect) {
                 CardDetailEffect.Navigation.Back -> onNavigateBack()
                 is CardDetailEffect.Navigation.ToCard -> onNavigateToCard(effect.userCardId)
+                is CardDetailEffect.Navigation.ToGrading -> onNavigateToGrading(
+                    effect.userCardId,
+                    effect.image
+                )
             }
         }
     }
@@ -634,10 +892,13 @@ fun CardDetailScreen(
     CardDetailContent(
         uiState = uiState,
         onNavigateBack = onNavigateBack,
-        onEvent = viewModel::onEvent
+        onEvent = viewModel::onEvent,
+        onNavigateToGradingWithImage = { bitmap ->
+            viewModel.onEvent(CardDetailEvent.GradeCard(bitmap))
+        },
+        onNavigateToScannerGrading = { onNavigateToScannerGrading(userCardId) }
     )
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -659,7 +920,9 @@ fun DetailDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable, true).fillMaxWidth(),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryEditable, true)
+                .fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = MaterialTheme.colorScheme.surface,

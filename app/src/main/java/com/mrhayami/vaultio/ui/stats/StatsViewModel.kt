@@ -48,8 +48,8 @@ class StatsViewModel(
                 val totalCount = userCards.sumOf { it.userCard.quantity }
 
                 val mostValuable = cardWithValueList
-                    .sortedByDescending { it.value }
-                    .take(10)
+                    .sortedByDescending { it.value * it.details.userCard.quantity }
+                    .take(5)
 
                 val rarityDist = userCards.groupBy { it.card.rarity ?: "Unknown" }
                     .mapValues { it.value.sumOf { c -> c.userCard.quantity } }
