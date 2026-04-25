@@ -7,13 +7,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Badge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,7 +60,7 @@ fun PokedexView(
 
             Box(
                 modifier = Modifier
-                    .aspectRatio(1f)
+                    .aspectRatio(1f / 1.15f)
                     .staggeredEntrance(
                         index = index,
                         type = EntranceType.ScaleUp,
@@ -72,11 +75,24 @@ fun PokedexView(
                     .clickable { onDexClick(entry.dexNumber) },
                 contentAlignment = Alignment.Center
             ) {
+                if (entry.cardCount > 0) {
+                    Badge(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp),
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ) {
+                        Text(
+                            "${entry.cardCount}",
+                            modifier = Modifier.padding(2.dp)
+                        )
+                    }
+                }
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(4.dp)
                 ) {
-                    Text("#${entry.dexNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Box(contentAlignment = Alignment.Center) {
                         AsyncImage(
                             model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
@@ -84,7 +100,9 @@ fun PokedexView(
                                 .crossfade(true)
                                 .build(),
                             contentDescription = null,
-                            modifier = Modifier.size(48.dp),
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .aspectRatio(1f),
                             contentScale = ContentScale.Fit,
                             alpha = if (isCollected) 1f else 0.3f,
                             colorFilter = if (isCollected) null else ColorFilter.colorMatrix(
@@ -92,13 +110,29 @@ fun PokedexView(
                             )
                         )
                     }
+                    Text(
+                        "#${entry.dexNumber}",
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        style = TextStyle(
+                            platformStyle = PlatformTextStyle(
+                                includeFontPadding = false // Removes the top/bottom extra space
+                            )
+                        )
+                    )
                     if (isCollected && entry.pokemonName != null) {
                         Text(
                             entry.pokemonName,
-                            fontSize = 8.sp,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
+                            style = TextStyle(
+                                platformStyle = PlatformTextStyle(
+                                    includeFontPadding = false // Removes the top/bottom extra space
+                                )
+                            )
                         )
                     }
                 }

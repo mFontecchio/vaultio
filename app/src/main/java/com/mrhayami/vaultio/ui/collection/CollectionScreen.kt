@@ -67,6 +67,7 @@ import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CatchingPokemon
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Cloud
@@ -1424,7 +1425,7 @@ fun StickyControls(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.padding(start = 16.dp)) {
+            Column(modifier = Modifier.padding(start = 4.dp)) {
                 Text(
                     if (uiState.viewMode == ViewMode.POKEDEX) "${uiState.pokedexEntries.count { it.isCollected }} / ${uiState.pokedexEntries.size} Collected"
                     else "${uiState.totalQuantity} Cards",
@@ -1442,7 +1443,7 @@ fun StickyControls(
             }
 
             SingleChoiceSegmentedButtonRow(
-                modifier = Modifier.padding(end = 16.dp),
+                modifier = Modifier.padding(end = 4.dp),
             ) {
                 SegmentedButton(
                     selected = uiState.viewMode == ViewMode.LIST,
@@ -1458,7 +1459,14 @@ fun StickyControls(
                     selected = uiState.viewMode == ViewMode.POKEDEX,
                     onClick = { onEvent(CollectionEvent.OnViewModeChange(ViewMode.POKEDEX)) },
                     shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
-                ) { Icon(Icons.Rounded.AutoAwesome, contentDescription = "Pokedex") }
+                ) {
+                    Icon(Icons.Rounded.CatchingPokemon, contentDescription = "Pokedex")
+//                    Image(
+//                        painter = painterResource(id = R.drawable.pokedex),
+//                        contentDescription = "Pokedex",
+//                        modifier = Modifier.size(24.dp)
+//                    )
+                }
             }
         }
         HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
