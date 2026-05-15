@@ -1188,6 +1188,10 @@ fun CameraPreview(
     var showFlash by remember { mutableStateOf(false) }
     var cameraControl by remember { mutableStateOf<CameraControl?>(null) }
 
+    LaunchedEffect(isTorchEnabled, cameraControl) {
+        cameraControl?.enableTorch(isTorchEnabled)
+    }
+
     LaunchedEffect(autoCaptureTrigger) {
         if (autoCaptureTrigger > 0L && imageCapture != null) {
             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
