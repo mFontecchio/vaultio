@@ -18,6 +18,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -45,6 +46,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -55,8 +57,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Undo
@@ -67,6 +71,7 @@ import androidx.compose.material.icons.rounded.FlashOff
 import androidx.compose.material.icons.rounded.FlashOn
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
@@ -77,8 +82,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -117,6 +124,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -129,6 +138,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.mrhayami.vaultio.data.PricingUtils
+import com.mrhayami.vaultio.data.local.PriceEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.components.CardAttributeBadges
@@ -137,6 +147,7 @@ import com.mrhayami.vaultio.ui.components.MetadataModal
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.Locale
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import androidx.camera.core.Preview as CameraPreview
@@ -236,6 +247,7 @@ fun ScannerScreen(
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScannerContent(
@@ -247,7 +259,17 @@ fun ScannerContent(
     modifier: Modifier = Modifier
 ) {
     val onEventStable = remember(onEvent) { onEvent }
-    
+
+    val fabOffset by animateDpAsState(
+        targetValue = when {
+            uiState.isPriceCheckMode && uiState.priceCheckInfo != null -> 460.dp
+            uiState.isBulkMode -> 120.dp
+            uiState.autoSelectedCard != null && !uiState.isGradingMode -> 180.dp
+            else -> 0.dp
+        },
+        label = "fabOffset"
+    )
+
     Box(modifier = modifier.fillMaxSize()) {
         if (uiState.hasCameraPermission) {
             if (uiState.pageScanMode == PageScanMode.REVIEWING) {
@@ -287,7 +309,8 @@ fun ScannerContent(
                         ScannerOverlay(
                             isSearching = uiState.isSearching,
                             isGradingMode = uiState.isGradingMode,
-                            isTargetDetected = uiState.autoSelectedCard != null
+                            isPriceCheckMode = uiState.isPriceCheckMode,
+                            isTargetDetected = uiState.autoSelectedCard != null || uiState.priceCheckInfo != null
                         )
                     }
                 }
@@ -324,40 +347,6 @@ fun ScannerContent(
                     }
                     
                     Spacer(modifier = Modifier.weight(1f))
-
-                    // Mode Selector
-                    Surface(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        shape = CircleShape,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
-                    ) {
-                        Row(modifier = Modifier.padding(4.dp)) {
-                            ModeButton(
-                                selected = !uiState.isBulkMode && !uiState.isPageScanMode && !uiState.isGradingMode,
-                                icon = Icons.Rounded.Search,
-                                onClick = { 
-                                    if (uiState.isBulkMode) onEvent(ScannerEvent.ToggleBulkMode)
-                                    if (uiState.isPageScanMode) onEvent(ScannerEvent.TogglePageScanMode)
-                                    if (uiState.isGradingMode) onEvent(ScannerEvent.ToggleGradingMode)
-                                }
-                            )
-                            ModeButton(
-                                selected = uiState.isBulkMode,
-                                icon = Icons.Rounded.Layers,
-                                onClick = { onEvent(ScannerEvent.ToggleBulkMode) }
-                            )
-                            ModeButton(
-                                selected = uiState.isPageScanMode,
-                                icon = Icons.Rounded.GridView,
-                                onClick = { onEvent(ScannerEvent.TogglePageScanMode) }
-                            )
-                            ModeButton(
-                                selected = uiState.isGradingMode,
-                                icon = Icons.Rounded.AutoFixHigh,
-                                onClick = { onEvent(ScannerEvent.ToggleGradingMode) }
-                            )
-                        }
-                    }
 
                     IconButton(
                         onClick = { onEvent(ScannerEvent.ToggleTorch) },
@@ -434,7 +423,7 @@ fun ScannerContent(
 
             // High Confidence Match
             AnimatedVisibility(
-                visible = uiState.autoSelectedCard != null && !uiState.isBulkMode && !uiState.isGradingMode,
+                visible = uiState.autoSelectedCard != null && !uiState.isBulkMode && !uiState.isGradingMode && !uiState.isPriceCheckMode,
                 enter = slideInVertically(
                     initialOffsetY = { it },
                     animationSpec = spring(
@@ -714,6 +703,36 @@ fun ScannerContent(
             }
         }
 
+        // Price Check HUD
+        AnimatedVisibility(
+            visible = uiState.isPriceCheckMode && uiState.priceCheckInfo != null,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            uiState.priceCheckInfo?.let { info ->
+                PriceCheckHUD(info = info, onReset = { onEvent(ScannerEvent.ResumeScanning) })
+            }
+        }
+
+        // Scanner Mode Selector (Expandable FAB)
+        if (uiState.hasCameraPermission && uiState.pageScanMode != PageScanMode.REVIEWING) {
+            ScannerModeFab(
+                activeMode = uiState.activeMode,
+                onModeSelected = { onEvent(ScannerEvent.SelectMode(it)) },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+                    .padding(bottom = fabOffset)
+                    .navigationBarsPadding()
+            )
+        }
+
+        // Idle State Overlay
+        if (uiState.hasCameraPermission && uiState.activeMode == ScannerMode.IDLE && uiState.pageScanMode != PageScanMode.REVIEWING) {
+            ScannerIdleOverlay(onModeSelected = { onEvent(ScannerEvent.SelectMode(it)) })
+        }
+
         if (uiState.selectedCard != null) {
             ModalBottomSheet(
                 onDismissRequest = { onEvent(ScannerEvent.CardSelected(null)) },
@@ -731,6 +750,7 @@ fun ScannerContent(
         }
     }
 }
+
 
 @Composable
 fun CandidateItem(
@@ -905,6 +925,7 @@ fun BulkSettingsSheet(
     }
 }
 
+
 @Composable
 fun BulkModeHUD(
     uiState: ScannerUiState,
@@ -1033,6 +1054,7 @@ fun BulkModeHUD(
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SkippedReviewSheet(
@@ -1105,6 +1127,7 @@ fun SkippedReviewSheet(
     }
 }
 
+
 @Composable
 fun ModeButton(
     selected: Boolean,
@@ -1127,6 +1150,7 @@ fun ModeButton(
         )
     }
 }
+
 
 @Composable
 fun CameraPreview(
@@ -1392,6 +1416,7 @@ fun CameraPreview(
     }
 }
 
+
 @Composable
 fun PageScanOverlay(isProcessing: Boolean) {
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -1492,6 +1517,7 @@ fun PageScanOverlay(isProcessing: Boolean) {
     }
 }
 
+
 @Composable
 fun PageScanReviewContent(
     uiState: ScannerUiState,
@@ -1568,6 +1594,7 @@ fun PageScanReviewContent(
         }
     }
 }
+
 
 @Composable
 fun PageCellReviewItem(
@@ -1667,10 +1694,12 @@ fun PageCellReviewItem(
     }
 }
 
+
 @Composable
 fun ScannerOverlay(
     isSearching: Boolean,
     isGradingMode: Boolean = false,
+    isPriceCheckMode: Boolean = false,
     isTargetDetected: Boolean = false
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "scanning")
@@ -1688,6 +1717,8 @@ fun ScannerOverlay(
         targetValue = when {
             isGradingMode && isTargetDetected -> Color(0xFF00E676)
             isGradingMode -> Color(0xFFFFC107)
+            isPriceCheckMode && isTargetDetected -> Color(0xFF00E676)
+            isPriceCheckMode -> Color(0xFF00B0FF)
             isSearching -> MaterialTheme.colorScheme.primary
             else -> Color.White.copy(alpha = 0.8f)
         },
@@ -1853,6 +1884,7 @@ fun ScannerOverlay(
     }
 }
 
+
 @Preview(showBackground = true)
 @Composable
 fun CandidateItemPreview() {
@@ -1871,15 +1903,17 @@ fun CandidateItemPreview() {
     }
 }
 
+
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 fun ScannerOverlayPreview() {
     VaultioTheme {
         Box(modifier = Modifier.fillMaxSize()) {
-            ScannerOverlay(isSearching = true)
+            ScannerOverlay(isSearching = true, isPriceCheckMode = false)
         }
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable
@@ -1894,6 +1928,7 @@ fun ScannerContentPermissionPreview() {
         )
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable
@@ -1913,6 +1948,7 @@ fun ScannerContentSearchingPreview() {
         )
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable
@@ -1938,6 +1974,7 @@ fun ScannerContentAutoSelectedPreview() {
     }
 }
 
+
 @Preview(showBackground = true)
 @Composable
 fun BulkSettingsPreview() {
@@ -1957,6 +1994,7 @@ fun BulkSettingsPreview() {
     }
 }
 
+
 @Preview(showBackground = true)
 @Composable
 fun BulkHUDPreview() {
@@ -1964,7 +2002,7 @@ fun BulkHUDPreview() {
         Box(modifier = Modifier.fillMaxSize()) {
             BulkModeHUD(
                 uiState = ScannerUiState(
-                    isBulkMode = true,
+                    activeMode = ScannerMode.BULK,
                     bulkSessionLog = listOf(
                         BulkScanEntry(
                             card = TcgDexCard("1", "1", "Pikachu", null, null, null),
@@ -1985,6 +2023,7 @@ fun BulkHUDPreview() {
     }
 }
 
+
 @Preview(showBackground = true)
 @Composable
 fun SkippedReviewPreview() {
@@ -2004,6 +2043,7 @@ fun SkippedReviewPreview() {
     }
 }
 
+
 @Preview(showBackground = true)
 @Composable
 fun PageScanReviewPreview() {
@@ -2011,7 +2051,7 @@ fun PageScanReviewPreview() {
         Surface {
             PageScanReviewContent(
                 uiState = ScannerUiState(
-                    isPageScanMode = true,
+                    activeMode = ScannerMode.PAGE,
                     pageScanMode = PageScanMode.REVIEWING,
                     pageScanCells = List(9) { i ->
                         PageScanCell(
@@ -2036,6 +2076,7 @@ fun PageScanReviewPreview() {
     }
 }
 
+
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 fun PageScanOverlayIdlePreview() {
@@ -2045,6 +2086,7 @@ fun PageScanOverlayIdlePreview() {
         }
     }
 }
+
 
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
@@ -2056,6 +2098,7 @@ fun PageScanOverlayProcessingPreview() {
     }
 }
 
+
 @Preview(showBackground = true)
 @Composable
 fun ScannerContentBulkModePreview() {
@@ -2063,7 +2106,7 @@ fun ScannerContentBulkModePreview() {
         ScannerContent(
             uiState = ScannerUiState(
                 hasCameraPermission = true,
-                isBulkMode = true,
+                activeMode = ScannerMode.BULK,
                 bulkSessionLog = listOf(
                     BulkScanEntry(
                         card = TcgDexCard("1", "1", "Pikachu", null, null, null),
@@ -2079,3 +2122,411 @@ fun ScannerContentBulkModePreview() {
         )
     }
 }
+
+
+@Composable
+fun ScannerModeFab(
+    activeMode: ScannerMode,
+    onModeSelected: (ScannerMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val modes = listOf(
+        ScannerMode.SEARCH to ("Search" to Icons.Rounded.Search),
+        ScannerMode.PRICE_CHECK to ("Price Check" to Icons.Rounded.Payments),
+        ScannerMode.BULK to ("Bulk Scan" to Icons.Rounded.Layers),
+        ScannerMode.PAGE to ("Page Scan" to Icons.Rounded.GridView),
+        ScannerMode.GRADING to ("AI Grading" to Icons.Rounded.AutoFixHigh)
+    )
+
+    val currentModeInfo = modes.find { it.first == activeMode }
+    val currentIcon = currentModeInfo?.second?.second ?: Icons.Rounded.PhotoCamera
+    val currentLabel = currentModeInfo?.second?.first ?: "Select Mode"
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
+        ) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                modes.forEach { (mode, info) ->
+                    if (mode != activeMode) {
+                        ExtendedFloatingActionButton(
+                            onClick = {
+                                onModeSelected(mode)
+                                expanded = false
+                            },
+                            icon = { Icon(info.second, contentDescription = null) },
+                            text = { Text(info.first) },
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            shape = CircleShape
+                        )
+                    }
+                }
+            }
+        }
+
+        ExtendedFloatingActionButton(
+            onClick = { expanded = !expanded },
+            icon = {
+                Icon(
+                    if (expanded) Icons.Rounded.Close else currentIcon,
+                    contentDescription = null
+                )
+            },
+            text = { Text(if (expanded) "Close" else currentLabel) },
+            containerColor = if (activeMode == ScannerMode.IDLE) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
+            contentColor = if (activeMode == ScannerMode.IDLE) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary,
+            shape = CircleShape,
+            expanded = expanded || activeMode != ScannerMode.IDLE
+        )
+    }
+}
+
+
+@Composable
+fun ScannerIdleOverlay(
+    onModeSelected: (ScannerMode) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.7f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Icon(
+                Icons.Rounded.PhotoCamera,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = Color.White.copy(alpha = 0.5f)
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                "Select a scanning mode to begin",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "Pause active scanning to save battery and focus on what you need.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Button(
+                    onClick = { onModeSelected(ScannerMode.SEARCH) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Search")
+                }
+                Button(
+                    onClick = { onModeSelected(ScannerMode.PRICE_CHECK) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                ) {
+                    Text("Price Check")
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun PriceCheckHUD(
+    info: PriceCheckInfo,
+    onReset: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .padding(16.dp)
+            .fillMaxWidth()
+            .heightIn(max = 450.dp),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                verticalAlignment = Alignment.Top
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    shadowElevation = 4.dp
+                ) {
+                    AsyncImage(
+                        model = coil.request.ImageRequest.Builder(LocalContext.current)
+                            .data("${info.card.image}/low.webp")
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(60.dp, 84.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = info.card.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = info.card.id,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                FilledTonalIconButton(
+                    onClick = onReset,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Close")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (info.isFetching) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(strokeWidth = 3.dp)
+                }
+            } else if (info.prices.isEmpty() && info.vintagePrices.isEmpty()) {
+                Text(
+                    "No pricing data available for this card.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 8.dp)
+                ) {
+                    // Standard Prices
+                    info.prices
+                        .sortedWith(compareBy({ it.finish }, { it.condition }))
+                        .forEach { price ->
+                            PriceRow(
+                                label = "${price.finish.replaceFirstChar { it.uppercase() }} • ${price.condition}",
+                                marketPrice = price.marketPrice,
+                                lowPrice = price.lowPrice,
+                                highPrice = price.highPrice
+                            )
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(
+                                    alpha = 0.3f
+                                )
+                            )
+                        }
+
+                    // Vintage Prices
+                    info.vintagePrices
+                        .sortedWith(compareBy({ it.printing }, { it.finish }, { it.condition }))
+                        .forEach { price ->
+                            PriceRow(
+                                label = "${price.printing.replaceFirstChar { it.uppercase() }} ${price.finish.replaceFirstChar { it.uppercase() }} • ${price.condition}",
+                                marketPrice = price.marketPrice,
+                                lowPrice = price.lowPrice,
+                                highPrice = price.highPrice
+                            )
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(
+                                    alpha = 0.3f
+                                )
+                            )
+                        }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun PriceRow(
+    label: String,
+    marketPrice: Double?,
+    lowPrice: Double?,
+    highPrice: Double?
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+            if (lowPrice != null && highPrice != null) {
+                Text(
+                    text = "Range: $${String.format(Locale.US, "%.2f", lowPrice)} - $${
+                        String.format(
+                            Locale.US,
+                            "%.2f",
+                            highPrice
+                        )
+                    }",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Text(
+            text = marketPrice?.let { "$${String.format(Locale.US, "%.2f", it)}" } ?: "N/A",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
+}
+
+
+@Preview(showBackground = true)
+@Composable
+fun PriceRowPreview() {
+    VaultioTheme {
+        Surface {
+            Column(modifier = Modifier.padding(16.dp)) {
+                PriceRow(
+                    label = "Holo • Near Mint",
+                    marketPrice = 12.50,
+                    lowPrice = 10.00,
+                    highPrice = 15.00
+                )
+                PriceRow(
+                    label = "Normal • Lightly Played",
+                    marketPrice = 5.25,
+                    lowPrice = 4.50,
+                    highPrice = 6.00
+                )
+                PriceRow(
+                    label = "Secret Rare • Mint",
+                    marketPrice = null,
+                    lowPrice = null,
+                    highPrice = null
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun ScannerModeFabPreview() {
+    VaultioTheme {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            contentAlignment = Alignment.BottomEnd
+        ) {
+            ScannerModeFab(
+                activeMode = ScannerMode.SEARCH,
+                onModeSelected = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun PriceCheckHUDPreview() {
+    VaultioTheme {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            PriceCheckHUD(
+                info = PriceCheckInfo(
+                    card = TcgDexCard(
+                        id = "swsh1-1",
+                        localId = "1",
+                        name = "Bulbasaur",
+                        image = "https://assets.tcgdex.net/en/swsh/swsh1/1",
+                        rarity = "Common",
+                        category = "Pokemon"
+                    ),
+                    prices = listOf(
+                        PriceEntity(
+                            cardId = "swsh1-1",
+                            finish = "Holo",
+                            condition = "Near Mint",
+                            marketPrice = 15.0,
+                            lowPrice = 12.0,
+                            midPrice = 14.0,
+                            highPrice = 18.0,
+                            source = "tcgdex"
+                        ),
+                        PriceEntity(
+                            cardId = "swsh1-1",
+                            finish = "Normal",
+                            condition = "Lightly Played",
+                            marketPrice = 5.0,
+                            lowPrice = 4.0,
+                            midPrice = 4.5,
+                            highPrice = 6.0,
+                            source = "tcgdex"
+                        )
+                    ),
+                    isFetching = false
+                ),
+                onReset = {}
+            )
+        }
+    }
+}
+
+
+
+
+
+

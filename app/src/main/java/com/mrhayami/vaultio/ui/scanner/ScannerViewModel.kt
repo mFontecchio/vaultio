@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -46,21 +47,23 @@ data class ScannerUiState(
     val errorMessage: String? = null,
     val hasCameraPermission: Boolean = false,
     val isTorchEnabled: Boolean = false,
-    val isBulkMode: Boolean = false,
-    val isGradingMode: Boolean = false,
-    val isPageScanMode: Boolean = false,
+    val activeMode: ScannerMode = ScannerMode.IDLE,
     val pageScanMode: PageScanMode = PageScanMode.IDLE,
     val pageScanCells: List<PageScanCell> = emptyList(),
     val bulkDefaults: BulkScanDefaults = BulkScanDefaults(),
     val bulkSessionLog: List<BulkScanEntry> = emptyList(),
     val skippedCards: List<TcgDexCard> = emptyList(),
+    val priceCheckInfo: PriceCheckInfo? = null,
     val isSaving: Boolean = false,
-    val targetUserCardId: Long? = null
-)
+    val targetUserCardId: Long? = null,
+) {
+    val isBulkMode: Boolean get() = activeMode == ScannerMode.BULK
+    val isGradingMode: Boolean get() = activeMode == ScannerMode.GRADING
+    val isPageScanMode: Boolean get() = activeMode == ScannerMode.PAGE
+    val isPriceCheckMode: Boolean get() = activeMode == ScannerMode.PRICE_CHECK
+}
 
 sealed interface ScannerEffect {
-    // Cache for passing image from grading capture to grading screen in GradingRepository
-    // For now we'll pass it in the event if we can hold it, but since we use OnImageCapturedCallback in the compose, we need the compose side to send it or save it in GradingRepository directly.
     data class NavigateToGrading(
         val userCardId: Long,
         val capturedImage: Bitmap? = null,
@@ -77,9 +80,7 @@ sealed interface ScannerEvent {
     data class PermissionResult(val granted: Boolean) : ScannerEvent
     data object ToggleTorch : ScannerEvent
     data class LinesDetected(val lines: List<DetectedLine>, val pHash: Long?) : ScannerEvent
-    data object ToggleBulkMode : ScannerEvent
-    data object TogglePageScanMode : ScannerEvent
-    data object ToggleGradingMode : ScannerEvent
+    data class SelectMode(val mode: ScannerMode) : ScannerEvent
     data class CapturePhoto(val bitmap: Bitmap) : ScannerEvent
     data class ConfirmPageCell(val index: Int, val card: TcgDexCard?) : ScannerEvent
     data class RejectPageCell(val index: Int) : ScannerEvent
@@ -152,6 +153,7 @@ class ScannerViewModel(
 
     private var searchJob: Job? = null
     private var lastMatchedNumber: String? = null
+    private var activeCaptureForGrading: Bitmap? = null
 
     // Ring buffer storing the last 5 frame detections for multi-frame consensus.
     private val detectionHistory = ArrayDeque<FrameDetection>()
@@ -179,7 +181,7 @@ class ScannerViewModel(
                             val tcgDexCard = mapToTcgDexCard(card)
                             _uiState.update { state ->
                                 state.copy(
-                                    isGradingMode = true,
+                                    activeMode = ScannerMode.GRADING,
                                     autoSelectedCard = tcgDexCard,
                                     isPaused = true,
                                     isSearching = false,
@@ -192,7 +194,13 @@ class ScannerViewModel(
             }
             is ScannerEvent.LinesDetected -> onLinesDetected(event.lines, event.pHash)
             ScannerEvent.ResumeScanning -> resumeScanning()
-            is ScannerEvent.CardSelected -> _uiState.update { it.copy(selectedCard = event.card) }
+            is ScannerEvent.CardSelected -> {
+                if (_uiState.value.isPriceCheckMode && event.card != null) {
+                    handlePriceCheck(event.card)
+                } else {
+                    _uiState.update { it.copy(selectedCard = event.card) }
+                }
+            }
             is ScannerEvent.SaveScannedCard -> saveScannedCard(
                 event.card, event.quantity, event.condition,
                 event.printing, event.finish, event.folderIds,
@@ -201,7 +209,6 @@ class ScannerViewModel(
 
             is ScannerEvent.SaveAndGrade -> {
                 viewModelScope.launch(defaultDispatcher) {
-                    // Navigate to grading with NO userCardId since we haven't saved it
                     _effect.send(
                         ScannerEffect.NavigateToGrading(
                             -1L,
@@ -215,55 +222,27 @@ class ScannerViewModel(
             ScannerEvent.ClearDetectedNumber -> clearDetectedNumber()
             is ScannerEvent.PermissionResult -> _uiState.update { it.copy(hasCameraPermission = event.granted) }
             ScannerEvent.ToggleTorch -> _uiState.update { it.copy(isTorchEnabled = !it.isTorchEnabled) }
-            ScannerEvent.ToggleBulkMode -> {
+            is ScannerEvent.SelectMode -> {
+                val currentMode = _uiState.value.activeMode
+                val nextMode = if (currentMode == event.mode) ScannerMode.IDLE else event.mode
+
+                searchJob?.cancel()
                 _uiState.update { it.copy(
-                    isBulkMode = !it.isBulkMode,
-                    isPageScanMode = false,
+                    activeMode = nextMode,
                     detectedNumber = null,
                     detectedTotal = null,
                     detectedName = null,
                     candidates = emptyList(),
                     isSearching = false,
-                    autoSelectedCard = null
+                    isPaused = false,
+                    autoSelectedCard = null,
+                    selectedCard = null,
+                    priceCheckInfo = null,
+                    pageScanMode = if (nextMode == ScannerMode.PAGE) PageScanMode.IDLE else it.pageScanMode
                 ) }
                 lastMatchedNumber = null
                 detectionHistory.clear()
             }
-            ScannerEvent.TogglePageScanMode -> {
-                _uiState.update { it.copy(
-                    isPageScanMode = !it.isPageScanMode,
-                    isBulkMode = false,
-                    isGradingMode = false,
-                    pageScanMode = PageScanMode.IDLE,
-                    detectedNumber = null,
-                    detectedTotal = null,
-                    detectedName = null,
-                    candidates = emptyList(),
-                    isSearching = false,
-                    autoSelectedCard = null
-                ) }
-                lastMatchedNumber = null
-                detectionHistory.clear()
-            }
-
-            ScannerEvent.ToggleGradingMode -> {
-                _uiState.update {
-                    it.copy(
-                        isGradingMode = !it.isGradingMode,
-                        isBulkMode = false,
-                        isPageScanMode = false,
-                        detectedNumber = null,
-                        detectedTotal = null,
-                        detectedName = null,
-                        candidates = emptyList(),
-                        isSearching = false,
-                        autoSelectedCard = null
-                    )
-                }
-                lastMatchedNumber = null
-                detectionHistory.clear()
-            }
-
             is ScannerEvent.CapturePhoto -> capturePhoto(event.bitmap)
             is ScannerEvent.ConfirmPageCell -> confirmPageCell(event.index, event.card)
             is ScannerEvent.RejectPageCell -> rejectPageCell(event.index)
@@ -295,8 +274,6 @@ class ScannerViewModel(
         }
     }
 
-    private var activeCaptureForGrading: Bitmap? = null
-
     private fun capturePhoto(bitmap: Bitmap) {
         if (_uiState.value.isPageScanMode) {
             _uiState.update {
@@ -321,8 +298,6 @@ class ScannerViewModel(
         } else if (_uiState.value.isGradingMode) {
             val card = _uiState.value.autoSelectedCard
             if (card != null) {
-                // Do not save the card immediately to the library when grading.
-                // Just cache the temp image and the pending card info, then navigate.
                 activeCaptureForGrading = bitmap
                 viewModelScope.launch {
                     _effect.send(
@@ -339,149 +314,10 @@ class ScannerViewModel(
         }
     }
 
-    private fun searchCardForCell(cell: PageScanCell) {
-        viewModelScope.launch(defaultDispatcher) {
-            _uiState.update { state ->
-                state.copy(pageScanCells = state.pageScanCells.map { 
-                    if (it.id == cell.id) it.copy(status = PageScanCellStatus.SCANNING) else it 
-                })
-            }
-
-            val ocr = cell.ocrResult ?: ""
-            val numMatch = numberRegex.find(normalizeOcrTextForNumbers(ocr))
-            val localId = numMatch?.groupValues?.get(1)
-            val totalCount = numMatch?.groupValues?.get(2)
-            val name = cleanCardName(ocr).takeIf { it.isNotEmpty() }
-
-            if (localId == null) {
-                _uiState.update { state ->
-                    state.copy(pageScanCells = state.pageScanCells.map { 
-                        if (it.id == cell.id) it.copy(status = PageScanCellStatus.NOT_FOUND) else it 
-                    })
-                }
-                return@launch
-            }
-
-            try {
-                val numberNorm = if (localId.all { it.isDigit() }) localId.padStart(3, '0') else localId
-                var localResults = repository.searchLocalCards(numberNorm)
-                val totalInt = totalCount?.toIntOrNull()
-                
-                if (totalInt != null) {
-                    val withTotal = repository.searchLocalCardsWithTotal(numberNorm, totalInt)
-                    if (withTotal.isNotEmpty()) localResults = withTotal
-                }
-
-                // Simplified matching for page scan to keep it fast
-                val finalCandidates = if (localResults.size == 1) {
-                    localResults.map { mapToTcgDexCard(it) }
-                } else {
-                    val remoteResults = try { repository.searchTcgDexByLocalId(localId) } catch (e: Exception) { 
-                        if (e is kotlinx.coroutines.CancellationException) throw e
-                        emptyList() 
-                    }
-                    (localResults.map { mapToTcgDexCard(it) } + remoteResults).distinctBy { it.id }
-                }
-
-                val bestMatch = if (name != null) {
-                    finalCandidates.maxByOrNull { calculateSimilarity(it.name, name) }
-                } else {
-                    finalCandidates.firstOrNull()
-                }
-
-                _uiState.update { state ->
-                    state.copy(pageScanCells = state.pageScanCells.map { 
-                        if (it.id == cell.id) {
-                            it.copy(
-                                matchedCard = bestMatch,
-                                status = if (bestMatch != null) {
-                                    if (finalCandidates.size > 1 && name == null) PageScanCellStatus.AMBIGUOUS 
-                                    else PageScanCellStatus.MATCHED
-                                } else PageScanCellStatus.NOT_FOUND
-                            )
-                        } else it 
-                    })
-                }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                _uiState.update { state ->
-                    state.copy(pageScanCells = state.pageScanCells.map { 
-                        if (it.id == cell.id) it.copy(status = PageScanCellStatus.ERROR) else it 
-                    })
-                }
-            }
-        }
-    }
-
-    private fun confirmPageCell(index: Int, card: TcgDexCard?) {
-        _uiState.update { state ->
-            state.copy(pageScanCells = state.pageScanCells.map { 
-                if (it.id == index) it.copy(matchedCard = card, isConfirmed = true, status = PageScanCellStatus.MATCHED) else it 
-            })
-        }
-    }
-
-    private fun rejectPageCell(index: Int) {
-        _uiState.update { state ->
-            state.copy(pageScanCells = state.pageScanCells.map { 
-                if (it.id == index) it.copy(isConfirmed = false) else it 
-            })
-        }
-    }
-
-    private fun saveAllPageResults() {
-        val confirmedCells = _uiState.value.pageScanCells.filter { it.isConfirmed && it.matchedCard != null }
-        if (confirmedCells.isEmpty()) {
-            _uiState.update { it.copy(pageScanMode = PageScanMode.IDLE) }
-            return
-        }
-
-        viewModelScope.launch(defaultDispatcher) {
-            val defaults = _uiState.value.bulkDefaults
-            confirmedCells.forEach { cell ->
-                cell.matchedCard?.let { card ->
-                    repository.addUserCard(
-                        card,
-                        UserCardEntity(
-                            cardId = card.id,
-                            quantity = 1,
-                            condition = defaults.condition,
-                            printing = defaults.printing,
-                            finish = defaults.finish
-                        ),
-                        folderIds = defaults.folderIds
-                    )
-                }
-            }
-            _uiState.update { it.copy(pageScanMode = PageScanMode.IDLE, showSaveSuccess = true) }
-        }
-    }
-
-    private fun undoLastBulkScan() {
-        val lastEntry = _uiState.value.bulkSessionLog.lastOrNull { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS } ?: return
-        viewModelScope.launch(defaultDispatcher) {
-            try {
-                // If it's a new card, we delete the most recent UserCard record for this cardId.
-                // If it was a duplicate increment, we decrement the quantity.
-                // However, the current DAO might not expose the exact record ID.
-                // As a heuristic for "undo", we find the most recent user card for this ID and remove it.
-                repository.deleteLastUserCardInstance(lastEntry.card.id)
-
-                _uiState.update { it.copy(
-                    bulkSessionLog = it.bulkSessionLog.dropLast(1)
-                ) }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                _uiState.update { it.copy(errorMessage = "Undo failed: ${e.message}") }
-            }
-        }
-    }
-
     private fun onLinesDetected(lines: List<DetectedLine>, pHash: Long?) {
-        if (_uiState.value.isPaused || _uiState.value.isSearching) return
+        if (_uiState.value.activeMode == ScannerMode.IDLE || _uiState.value.isPaused || _uiState.value.isSearching) return
 
         viewModelScope.launch(defaultDispatcher) {
-            // --- Name extraction: restrict to top 25% of the frame ---
             val topLines = lines
                 .filter { (it.boundingBox?.top?.toFloat() ?: Float.MAX_VALUE) / it.imageHeight < 0.25f }
                 .sortedBy { it.boundingBox?.top ?: Int.MAX_VALUE }
@@ -495,7 +331,6 @@ class ScannerViewModel(
                 }
             }
 
-            // --- Collector-number extraction: restrict to bottom 25% of the frame ---
             var bestLocalId: String? = null
             var bestTotal: String? = null
             val numberCandidates = lines.filter {
@@ -511,7 +346,6 @@ class ScannerViewModel(
                 bestTotal = numMatch.groupValues[2]
             }
 
-            // --- Multi-frame consensus: update ring buffer ---
             synchronized(detectionHistory) {
                 if (detectionHistory.size >= 5) detectionHistory.removeFirst()
                 detectionHistory.addLast(FrameDetection(number = bestLocalId, total = bestTotal, name = bestName, pHash = pHash))
@@ -519,7 +353,6 @@ class ScannerViewModel(
 
             if (bestLocalId == null) return@launch
             
-            // Consensus for Number & Total
             val (consensusTotal, consensusName) = synchronized(detectionHistory) {
                 val count = detectionHistory.count { it.number == bestLocalId }
                 if (count < 3) {
@@ -544,7 +377,6 @@ class ScannerViewModel(
                 total to name
             }
 
-            // Skip re-searching a card that is already the active match.
             if (bestLocalId == lastMatchedNumber && consensusTotal == _uiState.value.detectedTotal) return@launch
 
             _uiState.update { it.copy(
@@ -566,20 +398,16 @@ class ScannerViewModel(
         viewModelScope.launch(defaultDispatcher) {
             try {
                 val numberNorm = if (localId.all { it.isDigit() }) localId.padStart(3, '0') else localId
-                
-                // 1. HIGH ACCURACY LOCAL SEARCH: Number + Set Total
                 var localResults = emptyList<CardEntity>()
                 val totalInt = totalCount?.toIntOrNull()
                 if (totalInt != null) {
                     localResults = repository.searchLocalCardsWithTotal(numberNorm, totalInt)
                 }
                 
-                // 2. FALLBACK LOCAL SEARCH: Just Number
                 if (localResults.isEmpty()) {
                     localResults = repository.searchLocalCards(numberNorm)
                 }
 
-                // 3. Image Hash Disambiguation (NEW)
                 if (pHash != null && localResults.size > 1) {
                     val hashed = localResults.filter { it.pHash != null }
                     if (hashed.isNotEmpty()) {
@@ -590,7 +418,6 @@ class ScannerViewModel(
                     }
                 }
 
-                // 4. Name Filtering on Local Results
                 if (name != null && localResults.size > 1) {
                     val filtered = localResults.filter { card ->
                         calculateSimilarity(card.name, name) > 0.6f
@@ -598,7 +425,6 @@ class ScannerViewModel(
                     if (filtered.isNotEmpty()) localResults = filtered
                 }
 
-                // 5. API SEARCH: ONLY if local results are inconclusive or empty
                 val finalCandidates = if (localResults.size == 1) {
                     localResults.map { mapToTcgDexCard(it) }
                 } else {
@@ -626,11 +452,12 @@ class ScannerViewModel(
                     filtered
                 }
 
-                // 6. Update UI
                 if (finalCandidates.size == 1) {
                     val card = finalCandidates.first()
                     if (_uiState.value.isBulkMode) {
                         saveBulkCard(card)
+                    } else if (_uiState.value.isPriceCheckMode) {
+                        handlePriceCheck(card)
                     } else {
                         lastMatchedNumber = localId
                         _uiState.update {
@@ -647,7 +474,7 @@ class ScannerViewModel(
                         _uiState.update { state ->
                             state.copy(
                                 bulkSessionLog = state.bulkSessionLog + BulkScanEntry(
-                                    card = finalCandidates.first(), // Show one of them as skipped
+                                    card = finalCandidates.first(),
                                     status = BulkScanStatus.SKIPPED_AMBIGUOUS
                                 ),
                                 skippedCards = state.skippedCards + finalCandidates,
@@ -667,6 +494,180 @@ class ScannerViewModel(
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 _uiState.update { it.copy(isSearching = false, errorMessage = "Search failed: ${e.message}") }
+            }
+        }
+    }
+
+    private fun handlePriceCheck(card: TcgDexCard) {
+        lastMatchedNumber = card.localId
+        _uiState.update {
+            it.copy(
+                priceCheckInfo = PriceCheckInfo(card = card, isFetching = true),
+                isSearching = false,
+                isPaused = true,
+                candidates = emptyList(),
+                detectedNumber = null,
+                detectedTotal = null,
+                detectedName = null
+            )
+        }
+
+        viewModelScope.launch(defaultDispatcher) {
+            repository.updateCardPrice(card.id)
+            val prices = repository.getPricesForCard(card.id).first()
+            val vintagePrices = repository.getVintagePricesForCard(card.id).first()
+            _uiState.update {
+                it.copy(
+                    priceCheckInfo = it.priceCheckInfo?.copy(
+                        prices = prices,
+                        vintagePrices = vintagePrices,
+                        isFetching = false
+                    )
+                )
+            }
+        }
+    }
+
+    private fun searchCardForCell(cell: PageScanCell) {
+        viewModelScope.launch(defaultDispatcher) {
+            _uiState.update { state ->
+                state.copy(pageScanCells = state.pageScanCells.map {
+                    if (it.id == cell.id) it.copy(status = PageScanCellStatus.SCANNING) else it
+                })
+            }
+
+            val ocr = cell.ocrResult ?: ""
+            val numMatch = numberRegex.find(normalizeOcrTextForNumbers(ocr))
+            val localId = numMatch?.groupValues?.get(1)
+            val totalCount = numMatch?.groupValues?.get(2)
+            val name = cleanCardName(ocr).takeIf { it.isNotEmpty() }
+
+            if (localId == null) {
+                _uiState.update { state ->
+                    state.copy(pageScanCells = state.pageScanCells.map {
+                        if (it.id == cell.id) it.copy(status = PageScanCellStatus.NOT_FOUND) else it
+                    })
+                }
+                return@launch
+            }
+
+            try {
+                val numberNorm =
+                    if (localId.all { it.isDigit() }) localId.padStart(3, '0') else localId
+                var localResults = repository.searchLocalCards(numberNorm)
+                val totalInt = totalCount?.toIntOrNull()
+
+                if (totalInt != null) {
+                    val withTotal = repository.searchLocalCardsWithTotal(numberNorm, totalInt)
+                    if (withTotal.isNotEmpty()) localResults = withTotal
+                }
+
+                val finalCandidates = if (localResults.size == 1) {
+                    localResults.map { mapToTcgDexCard(it) }
+                } else {
+                    val remoteResults = try {
+                        repository.searchTcgDexByLocalId(localId)
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        emptyList()
+                    }
+                    (localResults.map { mapToTcgDexCard(it) } + remoteResults).distinctBy { it.id }
+                }
+
+                val bestMatch = if (name != null) {
+                    finalCandidates.maxByOrNull { calculateSimilarity(it.name, name) }
+                } else {
+                    finalCandidates.firstOrNull()
+                }
+
+                _uiState.update { state ->
+                    state.copy(pageScanCells = state.pageScanCells.map {
+                        if (it.id == cell.id) {
+                            it.copy(
+                                matchedCard = bestMatch,
+                                status = if (bestMatch != null) {
+                                    if (finalCandidates.size > 1 && name == null) PageScanCellStatus.AMBIGUOUS
+                                    else PageScanCellStatus.MATCHED
+                                } else PageScanCellStatus.NOT_FOUND
+                            )
+                        } else it
+                    })
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _uiState.update { state ->
+                    state.copy(pageScanCells = state.pageScanCells.map {
+                        if (it.id == cell.id) it.copy(status = PageScanCellStatus.ERROR) else it
+                    })
+                }
+            }
+        }
+    }
+
+    private fun confirmPageCell(index: Int, card: TcgDexCard?) {
+        _uiState.update { state ->
+            state.copy(pageScanCells = state.pageScanCells.map {
+                if (it.id == index) it.copy(
+                    matchedCard = card,
+                    isConfirmed = true,
+                    status = PageScanCellStatus.MATCHED
+                ) else it
+            })
+        }
+    }
+
+    private fun rejectPageCell(index: Int) {
+        _uiState.update { state ->
+            state.copy(pageScanCells = state.pageScanCells.map {
+                if (it.id == index) it.copy(isConfirmed = false) else it
+            })
+        }
+    }
+
+    private fun saveAllPageResults() {
+        val confirmedCells =
+            _uiState.value.pageScanCells.filter { it.isConfirmed && it.matchedCard != null }
+        if (confirmedCells.isEmpty()) {
+            _uiState.update { it.copy(pageScanMode = PageScanMode.IDLE) }
+            return
+        }
+
+        viewModelScope.launch(defaultDispatcher) {
+            val defaults = _uiState.value.bulkDefaults
+            confirmedCells.forEach { cell ->
+                cell.matchedCard?.let { card ->
+                    repository.addUserCard(
+                        card,
+                        UserCardEntity(
+                            cardId = card.id,
+                            quantity = 1,
+                            condition = defaults.condition,
+                            printing = defaults.printing,
+                            finish = defaults.finish
+                        ),
+                        folderIds = defaults.folderIds
+                    )
+                }
+            }
+            _uiState.update { it.copy(pageScanMode = PageScanMode.IDLE, showSaveSuccess = true) }
+        }
+    }
+
+    private fun undoLastBulkScan() {
+        val lastEntry =
+            _uiState.value.bulkSessionLog.lastOrNull { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS }
+                ?: return
+        viewModelScope.launch(defaultDispatcher) {
+            try {
+                repository.deleteLastUserCardInstance(lastEntry.card.id)
+                _uiState.update {
+                    it.copy(
+                        bulkSessionLog = it.bulkSessionLog.dropLast(1)
+                    )
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _uiState.update { it.copy(errorMessage = "Undo failed: ${e.message}") }
             }
         }
     }
@@ -791,6 +792,7 @@ class ScannerViewModel(
             isPaused = false,
             autoSelectedCard = null,
             selectedCard = null,
+            priceCheckInfo = null,
             detectedNumber = null,
             detectedTotal = null,
             detectedName = null,
