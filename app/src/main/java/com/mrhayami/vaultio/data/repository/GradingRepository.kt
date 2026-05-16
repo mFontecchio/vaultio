@@ -172,7 +172,7 @@ class GradingRepository(
             cornersScore = corners,
             edgesScore = edges,
             surfaceScore = surface,
-            reasoning = text.take(500)
+            reasoning = text.take(2000)
         )
     }
 

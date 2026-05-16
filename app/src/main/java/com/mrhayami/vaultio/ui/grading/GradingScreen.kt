@@ -522,6 +522,7 @@ fun GradeDetailedBreakdown(grade: CardGradeEntity) {
                     val annotatedReasoning = rememberMarkdownText(grade.reasoning)
                     Text(
                         text = annotatedReasoning,
+                        modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyMedium,
                         lineHeight = 20.sp
                     )
