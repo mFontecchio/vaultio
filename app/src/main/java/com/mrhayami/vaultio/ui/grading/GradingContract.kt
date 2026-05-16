@@ -1,10 +1,12 @@
 package com.mrhayami.vaultio.ui.grading
 
 import android.graphics.Bitmap
+import androidx.compose.runtime.Immutable
 import com.mrhayami.vaultio.data.local.CardGradeEntity
 import com.mrhayami.vaultio.data.repository.GeminiNanoClient
 
 /** UI State for the Grading Screen/Mode */
+@Immutable
 data class GradingViewState(
     val isLoading: Boolean = false,
     val isAnalyzing: Boolean = false,
@@ -15,7 +17,7 @@ data class GradingViewState(
     val showModelDownloadPrompt: Boolean = false,
     val modelStatus: GeminiNanoClient.ModelStatus = GeminiNanoClient.ModelStatus.Unavailable,
     val pendingCard: com.mrhayami.vaultio.data.remote.TcgDexCard? = null,
-    val folders: List<com.mrhayami.vaultio.data.local.FolderEntity> = emptyList()
+    val folders: List<com.mrhayami.vaultio.data.local.FolderEntity> = emptyList(),
 )
 
 /** User actions for Grading */
@@ -27,7 +29,7 @@ sealed interface GradingEvent {
         val condition: String,
         val printing: String,
         val finish: String,
-        val folderIds: List<Long>
+        val folderIds: List<Long>,
     ) : GradingEvent
 
     data object Reset : GradingEvent

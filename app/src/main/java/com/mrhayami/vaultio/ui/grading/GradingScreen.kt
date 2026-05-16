@@ -21,7 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.Button
@@ -53,8 +53,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,9 +66,10 @@ import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.local.CardGradeEntity
 import com.mrhayami.vaultio.data.repository.GeminiNanoClient
 import com.mrhayami.vaultio.ui.components.MetadataModal
-import com.mrhayami.vaultio.ui.components.ThreeDCard
+import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,7 +103,7 @@ fun GradingScreen(
                 title = { Text("AI Grading Assistant") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -123,6 +128,7 @@ fun GradingScreen(
                 ) {
                     // Image Preview
                     state.capturedImage?.let { bitmap ->
+                        val imageBitmap = remember(bitmap) { bitmap.asImageBitmap() }
                         Card(
                             modifier = Modifier
                                 .padding(16.dp)
@@ -131,7 +137,7 @@ fun GradingScreen(
                             elevation = CardDefaults.cardElevation(8.dp)
                         ) {
                             Image(
-                                bitmap = bitmap.asImageBitmap(),
+                                bitmap = imageBitmap,
                                 contentDescription = "Captured Card",
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Fit
@@ -194,16 +200,30 @@ fun GradingScreen(
             } else {
                 // The "Digital Slab" Results View
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    ThreeDCard(
+//                    ThreeDCard(
+//                        modifier = Modifier
+//                            .fillMaxWidth()
+//                            .aspectRatio(0.718f)
+//                            .padding(horizontal = 8.dp)
+//                    ) { _, _ ->
+//                        DigitalGradeSlab(
+//                            grade = state.gradeResult,
+//                            image = state.capturedImage
+//                        )
+//                    }
+                    Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 32.dp)
-                    ) { rx, ry ->
+                            .fillMaxWidth()
+                            .aspectRatio(0.718f)
+                            .padding(horizontal = 16.dp)
+                    ) {
                         DigitalGradeSlab(
                             grade = state.gradeResult,
                             image = state.capturedImage
@@ -349,17 +369,21 @@ fun DigitalGradeSlab(
     grade: CardGradeEntity,
     image: Bitmap?
 ) {
+    val slabGradient = remember {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF2C2C2C),
+                Color(0xFF1A1A1A)
+            )
+        )
+    }
+    val imageBitmap = remember(image) { image?.asImageBitmap() }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF2C2C2C),
-                        Color(0xFF1A1A1A)
-                    )
-                )
-            )
+            .aspectRatio(0.718f)
+            .background(brush = slabGradient, shape = RoundedCornerShape(16.dp))
             .border(2.dp, Color(0xFF444444), RoundedCornerShape(16.dp))
             .padding(8.dp)
     ) {
@@ -382,6 +406,15 @@ fun DigitalGradeSlab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val gradeId = remember(grade.id) { grade.id.toString().takeLast(6) }
+                    val overallScoreStr = remember(grade.overallScore) {
+                        String.format(
+                            Locale.US,
+                            "%.1f",
+                            grade.overallScore
+                        )
+                    }
+                    
                     Column {
                         Text(
                             "VAULTIO AI",
@@ -395,7 +428,7 @@ fun DigitalGradeSlab(
                             color = Color.Gray
                         )
                         Text(
-                            "ID: #${grade.id.toString().takeLast(6)}",
+                            "ID: #$gradeId",
                             style = MaterialTheme.typography.labelSmall,
                             fontFamily = FontFamily.Monospace,
                             color = Color.LightGray
@@ -403,7 +436,7 @@ fun DigitalGradeSlab(
                     }
 
                     Text(
-                        text = String.format("%.1f", grade.overallScore),
+                        text = overallScoreStr,
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.primary,
@@ -424,9 +457,9 @@ fun DigitalGradeSlab(
                     .background(Color.Black),
                 contentAlignment = Alignment.Center
             ) {
-                image?.let {
+                imageBitmap?.let {
                     Image(
-                        bitmap = it.asImageBitmap(),
+                        bitmap = it,
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize(),
@@ -441,16 +474,12 @@ fun DigitalGradeSlab(
 @Composable
 fun GradeDetailedBreakdown(grade: CardGradeEntity) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(280.dp),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
         tonalElevation = 8.dp
     ) {
         Column(
-            modifier = Modifier
-                .padding(24.dp)
-                .verticalScroll(rememberScrollState())
+            modifier = Modifier.padding(24.dp)
         ) {
             Text(
                 "Technical Analysis",
@@ -489,8 +518,10 @@ fun GradeDetailedBreakdown(grade: CardGradeEntity) {
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
+
+                    val annotatedReasoning = rememberMarkdownText(grade.reasoning)
                     Text(
-                        text = grade.reasoning,
+                        text = annotatedReasoning,
                         style = MaterialTheme.typography.bodyMedium,
                         lineHeight = 20.sp
                     )
@@ -502,6 +533,9 @@ fun GradeDetailedBreakdown(grade: CardGradeEntity) {
 
 @Composable
 fun GradeSubScore(label: String, score: Double) {
+    val formattedScore = remember(score) { String.format(Locale.US, "%.1f", score) }
+    val scoreColor = remember(score) { if (score >= 9.0) Color(0xFF4CAF50) else Color.Unspecified }
+
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
         Text(
             label,
@@ -509,11 +543,33 @@ fun GradeSubScore(label: String, score: Double) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            String.format("%.1f", score),
+            formattedScore,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = if (score >= 9.0) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurface
+            color = if (scoreColor != Color.Unspecified) scoreColor else MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@Composable
+fun rememberMarkdownText(text: String): AnnotatedString {
+    return remember(text) {
+        buildAnnotatedString {
+            val boldRegex = Regex("""\*\*(.*?)\*\*""")
+            var lastIndex = 0
+
+            boldRegex.findAll(text).forEach { matchResult ->
+                append(text.substring(lastIndex, matchResult.range.first))
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                    append(matchResult.groupValues[1])
+                }
+                lastIndex = matchResult.range.last + 1
+            }
+
+            if (lastIndex < text.length) {
+                append(text.substring(lastIndex))
+            }
+        }
     }
 }
 
@@ -553,6 +609,91 @@ private fun GradingScreenPreview() {
 @Composable
 private fun GradeSubScorePreview() {
     GradeSubScore("Centering", 8.5)
+}
+
+@Preview
+@Composable
+private fun MarkdownTextPreview() {
+    VaultioTheme {
+        Surface {
+            val text = "This is **bold** text and this is regular text with **more bold**."
+            val annotated = rememberMarkdownText(text)
+            Text(
+                text = annotated,
+                modifier = Modifier.padding(16.dp),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun GradedCardScreenPreview() {
+    val longReasoning = """
+        The card shows **excellent centering** on both the front and back (estimated 50/50). 
+        The corners are **exceptionally sharp**, though a microscopic speck of whitening is visible 
+        on the bottom-right corner under 10x magnification. 
+        
+        The surface is **immaculate**, with no visible scratches, print lines, or dimples detected. 
+        The edges are **consistently smooth** with no silvering or nicks along the perimeter. 
+        
+        Overall, this card represents a **high-end Mint condition** specimen, likely to achieve 
+        a top-tier grade from professional services. The technical sub-grades support the 
+        strong overall evaluation of 9.2.
+    """.trimIndent()
+
+    VaultioTheme {
+        GradingScreen(
+            state = GradingViewState(
+                gradeResult = CardGradeEntity(
+                    id = 1,
+                    userCardId = 123,
+                    overallScore = 9.2,
+                    centeringScore = 9.5,
+                    cornersScore = 9.0,
+                    edgesScore = 9.0,
+                    surfaceScore = 9.5,
+                    reasoning = longReasoning,
+                    timestamp = System.currentTimeMillis()
+                ),
+                capturedImage = null,
+                modelStatus = GeminiNanoClient.ModelStatus.Ready
+            ),
+            userCardId = 123,
+            onEvent = {},
+            sideEffects = flowOf(),
+            onNavigateBack = {}
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun ModelStatusIndicatorPreview() {
+    VaultioTheme {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ModelStatusIndicator(
+                status = GeminiNanoClient.ModelStatus.Ready,
+                onDownloadClick = {}
+            )
+            ModelStatusIndicator(
+                status = GeminiNanoClient.ModelStatus.Downloading(0.5f),
+                onDownloadClick = {}
+            )
+            ModelStatusIndicator(
+                status = GeminiNanoClient.ModelStatus.Unavailable,
+                onDownloadClick = {}
+            )
+            ModelStatusIndicator(
+                status = GeminiNanoClient.ModelStatus.Error("Connection failed"),
+                onDownloadClick = {}
+            )
+        }
+    }
 }
 
 @Preview
