@@ -1224,15 +1224,20 @@ fun CameraPreview(
                         )
 
                         val cropped = try {
-                            Bitmap.createBitmap(
+                            val sub = Bitmap.createBitmap(
                                 rotatedBitmap,
                                 cropRect.left,
                                 cropRect.top,
                                 cropRect.width(),
                                 cropRect.height()
                             )
+                            // Create a deep copy to ensure independence from CameraX buffers
+                            sub.copy(sub.config ?: Bitmap.Config.ARGB_8888, false)
                         } catch (e: Exception) {
-                            rotatedBitmap // fallback if bounds exceed
+                            rotatedBitmap.copy(
+                                rotatedBitmap.config ?: Bitmap.Config.ARGB_8888,
+                                false
+                            )
                         }
 
                         showFlash = false
@@ -1383,22 +1388,23 @@ fun CameraPreview(
                                 )
                                 
                                 val cropped = try {
-                                    Bitmap.createBitmap(
+                                    val sub = Bitmap.createBitmap(
                                         rotatedBitmap,
                                         cropRect.left,
                                         cropRect.top,
                                         cropRect.width(),
                                         cropRect.height()
                                     )
+                                    // Deep copy for UI safety
+                                    sub.copy(sub.config ?: Bitmap.Config.ARGB_8888, false)
                                 } catch (e: Exception) {
-                                    rotatedBitmap
+                                    rotatedBitmap.copy(
+                                        rotatedBitmap.config ?: Bitmap.Config.ARGB_8888, false
+                                    )
                                 }
                                 
                                 onPhotoCaptured(cropped)
                                 image.close()
-                                
-                                if (bitmap != cropped) bitmap.recycle()
-                                if (rotatedBitmap != bitmap && rotatedBitmap != cropped) rotatedBitmap.recycle()
                             }
                         })
                     },

@@ -21,6 +21,12 @@ class GradingViewModel(
                 updateState { copy(folders = folders) }
             }
         }
+
+        viewModelScope.launch {
+            gradingRepository.geminiNanoClient.getModelStatus().collect { status ->
+                updateState { copy(modelStatus = status) }
+            }
+        }
     }
 
     override fun onEvent(event: GradingEvent) {
@@ -34,9 +40,12 @@ class GradingViewModel(
                 )
             }
 
-            GradingEvent.DownloadModel -> {
-                // Placeholder for model download logic in Phase 2
-                updateState { copy(showModelDownloadPrompt = false) }
+            is GradingEvent.DownloadModel -> {
+                viewModelScope.launch {
+                    gradingRepository.geminiNanoClient.downloadModel().collect { status ->
+                        updateState { copy(modelStatus = status) }
+                    }
+                }
             }
 
             is GradingEvent.SaveGrade -> saveGrade(event.userCardId)
@@ -67,6 +76,7 @@ class GradingViewModel(
                     gradingRepository.insertGrade(entityToSave)
 
                     gradingRepository.pendingCardToGrade = null
+                    gradingRepository.activeGradingImage = null
                     emitEffect(GradingEffect.ShowToast("Grade saved successfully!"))
                     emitEffect(GradingEffect.Navigation.GoBack)
                 } else {
@@ -133,6 +143,7 @@ class GradingViewModel(
                     }
 
                     gradingRepository.pendingCardToGrade = null
+                    gradingRepository.activeGradingImage = null
                     emitEffect(GradingEffect.ShowToast("Grade saved successfully!"))
                     emitEffect(GradingEffect.Navigation.GoBack)
                 } else {

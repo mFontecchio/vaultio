@@ -8,6 +8,7 @@ import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.VaultioDatabase
 import com.mrhayami.vaultio.data.remote.JustTcgApi
 import com.mrhayami.vaultio.data.remote.TcgDexApi
+import com.mrhayami.vaultio.data.repository.GeminiNanoClientImpl
 import com.mrhayami.vaultio.data.repository.GradingRepository
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.data.workers.CollectionSnapshotWorker
@@ -78,7 +79,8 @@ class VaultioApplication : Application() {
 
         gradingRepository = GradingRepository(
             context = this,
-            cardGradeDao = database.cardGradeDao()
+            cardGradeDao = database.cardGradeDao(),
+            geminiNanoClient = GeminiNanoClientImpl()
         )
 
         scheduleDailySnapshot()

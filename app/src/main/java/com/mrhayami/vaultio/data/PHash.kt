@@ -38,10 +38,8 @@ object PHash {
                 }
             }
         }
-        
-        resized.recycle()
-        if (grayscale != resized) grayscale.recycle()
-        
+
+        // Bitmaps will be garbage collected
         return hash
     }
 

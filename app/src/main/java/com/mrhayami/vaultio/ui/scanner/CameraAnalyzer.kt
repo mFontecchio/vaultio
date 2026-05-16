@@ -1,6 +1,8 @@
 package com.mrhayami.vaultio.ui.scanner
 
-import android.graphics.*
+import android.graphics.Bitmap
+import android.graphics.Matrix
+import android.graphics.Rect
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
@@ -91,10 +93,6 @@ class CameraAnalyzer(
             }
             .addOnFailureListener { e -> e.printStackTrace() }
             .addOnCompleteListener {
-                if (rotated != bitmap) rotated.recycle()
-                if (cropped != rotated && cropped != enhanced) cropped.recycle()
-                if (enhanced != cropped) enhanced.recycle()
-                bitmap.recycle()
                 imageProxy.close()
             }
     }

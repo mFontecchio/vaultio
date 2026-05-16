@@ -2,16 +2,18 @@ package com.mrhayami.vaultio.data.repository
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Build
+import android.util.Log
 import com.mrhayami.vaultio.data.local.CardGradeDao
 import com.mrhayami.vaultio.data.local.CardGradeEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 
 class GradingRepository(
     private val context: Context,
-    private val cardGradeDao: CardGradeDao
+    private val cardGradeDao: CardGradeDao,
+    val geminiNanoClient: GeminiNanoClient
 ) {
     /**
      * Get the latest grade for a specific user card.
@@ -26,177 +28,217 @@ class GradingRepository(
 
     /**
      * Performs AI analysis on a card image.
-     * In Phase 1: Implements Centering math and mocks other sub-grades.
+     * Uses Gemini Nano on supported devices, falls back to Heuristics on Emulators/Old devices.
      */
     suspend fun analyzeCardCondition(
         image: Bitmap,
         userCardId: Long
     ): Result<CardGradeEntity> = withContext(Dispatchers.Default) {
         try {
-            // 1. Centering Analysis (Geometric)
-            val centeringScore = calculateCenteringScore(image)
+            Log.d("VaultioGrading", "Starting analysis. userCardId=$userCardId")
 
-            // 2. Visual Analysis (Condition - Gemini Nano)
-            val visualAnalysis = analyzeVisualConditionWithGemini(image)
+            if (isEmulator()) {
+                Log.d("VaultioGrading", "Emulator detected. Falling back to heuristics.")
+                analyzeWithHeuristics(image, userCardId, "Emulator detected")
+            } else {
+                Log.d("VaultioGrading", "Physical device. Attempting Gemini analysis...")
+                val geminiResult = analyzeWithGemini(image, userCardId)
+                if (geminiResult.isFailure) {
+                    val error = geminiResult.exceptionOrNull()?.message ?: "Unknown AI error"
+                    Log.d(
+                        "VaultioGrading",
+                        "Gemini analysis failed: $error. Falling back to heuristics."
+                    )
+                    // Fallback to heuristics if AI fails (e.g. model not ready/unsupported)
+                    analyzeWithHeuristics(image, userCardId, error)
+                } else {
+                    Log.d("VaultioGrading", "Gemini analysis successful!")
+                    geminiResult
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("VaultioGrading", "Analysis crashed", e)
+            Result.failure(e)
+        }
+    }
 
-            // 3. Overall Weighted Score
-            val overallScore = (centeringScore * 0.4) +
-                    (visualAnalysis.cornersScore * 0.2) +
-                    (visualAnalysis.edgesScore * 0.2) +
-                    (visualAnalysis.surfaceScore * 0.2)
+    private suspend fun analyzeWithGemini(
+        image: Bitmap,
+        userCardId: Long
+    ): Result<CardGradeEntity> {
+        val prompt = """
+            Analyze this Trading Card image for condition. 
+            Provide scores from 1.0 to 10.0 (increments of 0.5) for: 
+            - Centering
+            - Corners
+            - Edges
+            - Surface
+            
+            Also provide a concise reasoning for each score.
+            Format your response as a simple list.
+        """.trimIndent()
+
+        val aiResult = geminiNanoClient.generateFromImage(image, prompt)
+
+        return aiResult.map { text ->
+            val analysis = parseAiResponse(text)
+
+            val overallScore = calculateOverall(analysis)
 
             val grade = CardGradeEntity(
                 userCardId = userCardId,
-                overallScore = Math.round(overallScore * 2) / 2.0, // Round to nearest 0.5
-                centeringScore = centeringScore,
-                cornersScore = visualAnalysis.cornersScore,
-                edgesScore = visualAnalysis.edgesScore,
-                surfaceScore = visualAnalysis.surfaceScore,
-                reasoning = visualAnalysis.reasoning
+                overallScore = Math.round(overallScore * 2) / 2.0,
+                centeringScore = analysis.centeringScore,
+                cornersScore = analysis.cornersScore,
+                edgesScore = analysis.edgesScore,
+                surfaceScore = analysis.surfaceScore,
+                reasoning = analysis.reasoning
             )
 
             if (userCardId > 0L) {
                 cardGradeDao.insertGrade(grade)
             }
-            Result.success(grade)
-        } catch (e: Exception) {
-            Result.failure(e)
+            grade
         }
     }
 
-    // Cache for passing image between Scanner and Grading without huge Intent size
+    private fun analyzeWithHeuristics(
+        image: Bitmap,
+        userCardId: Long,
+        reason: String? = null
+    ): Result<CardGradeEntity> {
+        val centering = calculateCenteringScore(image)
+        val visual = runLegacyHeuristics(image)
+
+        val overallScore =
+            (centering * 0.4) + (visual.cornersScore * 0.2) + (visual.edgesScore * 0.2) + (visual.surfaceScore * 0.2)
+
+        val fallbackReason =
+            if (reason != null) "[Heuristic Fallback: $reason]" else "[Heuristic Fallback]"
+
+        val grade = CardGradeEntity(
+            userCardId = userCardId,
+            overallScore = Math.round(overallScore * 2) / 2.0,
+            centeringScore = centering,
+            cornersScore = visual.cornersScore,
+            edgesScore = visual.edgesScore,
+            surfaceScore = visual.surfaceScore,
+            reasoning = "$fallbackReason ${visual.reasoning}"
+        )
+
+        return Result.success(grade)
+    }
+
+    private fun isEmulator(): Boolean {
+        val model = Build.MODEL
+        val product = Build.PRODUCT
+        val hardware = Build.HARDWARE
+        val brand = Build.BRAND
+
+        // Stricter emulator check to avoid false positives on real devices
+        return (brand.startsWith("generic") && Build.DEVICE.startsWith("generic"))
+                || Build.FINGERPRINT.startsWith("generic")
+                || hardware.contains("goldfish")
+                || hardware.contains("ranchu")
+                || model.contains("google_sdk")
+                || model.contains("Emulator")
+                || model.contains("Android SDK built for x86")
+                || product.contains("sdk_google")
+                || product.contains("google_sdk")
+                || product.contains("sdk_x86")
+                || product.contains("vbox86p")
+                || product.contains("emulator")
+    }
+
+    private fun calculateOverall(analysis: VisualAnalysis): Double {
+        return (analysis.centeringScore * 0.4) +
+                (analysis.cornersScore * 0.2) +
+                (analysis.edgesScore * 0.2) +
+                (analysis.surfaceScore * 0.2)
+    }
+
+    // Cache for passing image between Scanner and Grading
     var activeGradingImage: Bitmap? = null
     var pendingCardToGrade: com.mrhayami.vaultio.data.remote.TcgDexCard? = null
 
-    // Local On-Device AI / Heuristic Analysis (No API Key Required)
-    private suspend fun analyzeVisualConditionWithGemini(image: Bitmap): VisualAnalysis =
-        withContext(Dispatchers.Default) {
-            val width = image.width
-            val height = image.height
-            val pixels = IntArray(width * height)
-            image.getPixels(pixels, 0, width, 0, 0, width, height)
+    private fun parseAiResponse(text: String): VisualAnalysis {
+        val centering = extractScore(text, "Centering") ?: 9.0
+        val corners = extractScore(text, "Corners") ?: 9.0
+        val edges = extractScore(text, "Edges") ?: 9.0
+        val surface = extractScore(text, "Surface") ?: 9.0
 
-            var edgeWearPixels = 0
-            var cornerWearPixels = 0
-            var surfaceNoise = 0
+        return VisualAnalysis(
+            centeringScore = centering,
+            cornersScore = corners,
+            edgesScore = edges,
+            surfaceScore = surface,
+            reasoning = text.take(500)
+        )
+    }
 
-            // Edge thickness to check (approx 2% of width)
-            val edgeThreshold = (width * 0.02).toInt()
-            val cornerThreshold = (width * 0.05).toInt()
+    private fun extractScore(text: String, key: String): Double? {
+        val regex = Regex("$key.*?(\\d+(\\.\\d+)?)", RegexOption.IGNORE_CASE)
+        return regex.find(text)?.groupValues?.get(1)?.toDoubleOrNull()
+    }
 
-            // Extremely simplified heuristic for demonstration:
-            // Whitening (high RGB variance near edges) indicates wear.
-            for (y in 0 until height) {
-                for (x in 0 until width) {
-                    val pixel = pixels[y * width + x]
-                    val r = (pixel shr 16) and 0xff
-                    val g = (pixel shr 8) and 0xff
-                    val b = pixel and 0xff
-                    val brightness = (r + g + b) / 3
+    private fun calculateCenteringScore(image: Bitmap): Double {
+        val width = image.width
+        val height = image.height
+        val expectedRatio = 2.5f / 3.5f
+        val actualRatio = width.toFloat() / height.toFloat()
+        val ratioDiff = Math.abs(expectedRatio - actualRatio)
+        val score = 10.0 - (ratioDiff * 10).coerceAtMost(2.0f)
+        return Math.round(score * 2) / 2.0
+    }
 
-                    val isLeftEdge = x < edgeThreshold
-                    val isRightEdge = x > width - edgeThreshold
-                    val isTopEdge = y < edgeThreshold
-                    val isBottomEdge = y > height - edgeThreshold
+    private fun runLegacyHeuristics(image: Bitmap): VisualAnalysis {
+        val width = image.width
+        val height = image.height
+        val pixels = IntArray(width * height)
+        image.getPixels(pixels, 0, width, 0, 0, width, height)
 
-                    val isEdge = isLeftEdge || isRightEdge || isTopEdge || isBottomEdge
-                    val isCorner = (isLeftEdge || isRightEdge) && (isTopEdge || isBottomEdge)
+        var edgeWear = 0
+        var cornerWear = 0
+        val edgeThreshold = (width * 0.02).toInt()
 
-                    // Detect "whitening" / silvering typical of card damage
-                    if (brightness > 200) {
-                        if (isCorner) cornerWearPixels++
-                        else if (isEdge) edgeWearPixels++
-                    } else if (!isEdge) {
-                        // Surface imperfection (just dummy math for variation)
-                        if (abs(r - g) > 50) surfaceNoise++
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val pixel = pixels[y * width + x]
+                val brightness =
+                    (((pixel shr 16) and 0xff) + ((pixel shr 8) and 0xff) + (pixel and 0xff)) / 3
+                if (brightness > 210) {
+                    if (x < edgeThreshold || x > width - edgeThreshold || y < edgeThreshold || y > height - edgeThreshold) {
+                        edgeWear++
+                        if ((x < edgeThreshold || x > width - edgeThreshold) && (y < edgeThreshold || y > height - edgeThreshold)) {
+                            cornerWear++
+                        }
                     }
                 }
             }
-
-            // Calculate scores out of 10.0 based on wear ratios
-            val edgeArea = (width * edgeThreshold * 2) + (height * edgeThreshold * 2)
-            val cornerArea = cornerThreshold * cornerThreshold * 4
-            val centerArea = width * height - edgeArea
-
-            val edgeDamageRatio = edgeWearPixels.toDouble() / edgeArea
-            val cornerDamageRatio = cornerWearPixels.toDouble() / cornerArea
-            val surfaceDamageRatio = surfaceNoise.toDouble() / centerArea
-
-            // Mapping to 1.0 - 10.0 scale (10 means pristine, 0 wear)
-            val cornersScore = (10.0 - (cornerDamageRatio * 50)).coerceIn(1.0, 10.0)
-            val edgesScore = (10.0 - (edgeDamageRatio * 40)).coerceIn(1.0, 10.0)
-            val surfaceScore = (10.0 - (surfaceDamageRatio * 20)).coerceIn(1.0, 10.0)
-
-            // Generate reasoning text based on the math
-            val strengths = mutableListOf<String>()
-            val weaknesses = mutableListOf<String>()
-
-            if (cornersScore >= 9.0) strengths.add("sharp corners") else weaknesses.add("corner whitening")
-            if (edgesScore >= 9.0) strengths.add("clean edges") else weaknesses.add("edge wear/silvering")
-            if (surfaceScore >= 9.0) strengths.add("clean surface") else weaknesses.add("surface scratching")
-
-            val reasoning = buildString {
-                if (strengths.isNotEmpty()) append("Features ${strengths.joinToString(", ")}. ")
-                if (weaknesses.isNotEmpty()) append("Detected ${weaknesses.joinToString(", ")}.")
-                if (isEmpty()) append("Card in average condition.")
-            }
-
-            VisualAnalysis(
-                cornersScore = Math.round(cornersScore * 2) / 2.0,
-                edgesScore = Math.round(edgesScore * 2) / 2.0,
-                surfaceScore = Math.round(surfaceScore * 2) / 2.0,
-                reasoning = reasoning.trim()
-            )
         }
 
+        val cornersScore =
+            (10.0 - (cornerWear.toDouble() / (edgeThreshold * edgeThreshold * 4) * 50)).coerceIn(
+                1.0,
+                10.0
+            )
+        val edgesScore =
+            (10.0 - (edgeWear.toDouble() / (width * height * 0.08) * 40)).coerceIn(1.0, 10.0)
+
+        return VisualAnalysis(
+            centeringScore = 0.0, // Calculated separately
+            cornersScore = Math.round(cornersScore * 2) / 2.0,
+            edgesScore = Math.round(edgesScore * 2) / 2.0,
+            surfaceScore = 9.0, // Heuristic can't easily detect scratches
+            reasoning = "Heuristic detection based on edge whitening."
+        )
+    }
+
     private data class VisualAnalysis(
+        val centeringScore: Double,
         val cornersScore: Double,
         val edgesScore: Double,
         val surfaceScore: Double,
         val reasoning: String
     )
-
-    /**
-     * Performs a heuristic-based centering logic.
-     * Detects the card boundaries to calculate 4-way centering.
-     */
-    private fun calculateCenteringScore(image: Bitmap): Double {
-        return try {
-            // Simplified fallback for centering computation without external ML dependencies
-            // which avoids 16 KB page-alignment issues on Android 15.
-            val width = image.width
-            val height = image.height
-            val expectedRatio = 2.5f / 3.5f
-            val actualRatio = width.toFloat() / height.toFloat()
-
-            val ratioDiff = Math.abs(expectedRatio - actualRatio)
-            val score = 10.0 - (ratioDiff * 10).coerceAtMost(2.0f)
-
-            Math.round(score * 2) / 2.0
-        } catch (e: Throwable) {
-            9.0 // Fallback
-        }
-    }
-
-    private fun generateReasoning(
-        centering: Double,
-        corners: Double,
-        edges: Double,
-        surface: Double
-    ): String {
-        val strengths = mutableListOf<String>()
-        val weaknesses = mutableListOf<String>()
-
-        if (centering >= 9.0) strengths.add("excellent centering") else weaknesses.add("centering issues")
-        if (corners >= 9.0) strengths.add("sharp corners") else weaknesses.add("corner wear")
-        if (edges >= 9.0) strengths.add("clean edges") else weaknesses.add("edge chipping")
-        if (surface >= 9.0) strengths.add("flawless surface") else weaknesses.add("surface scratches")
-
-        val strengthText =
-            if (strengths.isNotEmpty()) "Features ${strengths.joinToString(", ")}." else ""
-        val weaknessText =
-            if (weaknesses.isNotEmpty()) "Noted ${weaknesses.joinToString(", ")}." else ""
-
-        return "$strengthText $weaknessText".trim()
-    }
 }

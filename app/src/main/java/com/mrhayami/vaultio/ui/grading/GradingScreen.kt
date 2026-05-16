@@ -31,6 +31,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.local.CardGradeEntity
+import com.mrhayami.vaultio.data.repository.GeminiNanoClient
 import com.mrhayami.vaultio.ui.components.MetadataModal
 import com.mrhayami.vaultio.ui.components.ThreeDCard
 import kotlinx.coroutines.flow.Flow
@@ -150,6 +152,14 @@ fun GradingScreen(
                         modifier = Modifier.padding(16.dp)
                     )
 
+                    // Model Status Info
+                    ModelStatusIndicator(
+                        status = state.modelStatus,
+                        onDownloadClick = { onEvent(GradingEvent.DownloadModel) }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     Button(
                         onClick = {
                             val bmp = state.capturedImage
@@ -166,7 +176,7 @@ fun GradingScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
-                        enabled = !state.isAnalyzing && state.capturedImage != null
+                        enabled = !state.isAnalyzing && state.capturedImage != null && state.modelStatus is GeminiNanoClient.ModelStatus.Ready
                     ) {
                         if (state.isAnalyzing) {
                             CircularProgressIndicator(
@@ -247,6 +257,88 @@ fun GradingScreen(
                     },
                     onBack = { showMetadataModal = false }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun ModelStatusIndicator(
+    status: GeminiNanoClient.ModelStatus,
+    onDownloadClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Rounded.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = when (status) {
+                        is GeminiNanoClient.ModelStatus.Ready -> Color(0xFF4CAF50)
+                        is GeminiNanoClient.ModelStatus.Downloading -> MaterialTheme.colorScheme.primary
+                        is GeminiNanoClient.ModelStatus.Unavailable -> MaterialTheme.colorScheme.error
+                        is GeminiNanoClient.ModelStatus.Error -> MaterialTheme.colorScheme.error
+                    }
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = when (status) {
+                        is GeminiNanoClient.ModelStatus.Ready -> "AI Model Ready"
+                        is GeminiNanoClient.ModelStatus.Downloading -> "Downloading AI Model..."
+                        is GeminiNanoClient.ModelStatus.Unavailable -> "AI Model Unavailable"
+                        is GeminiNanoClient.ModelStatus.Error -> "AI Error: ${status.message}"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            when (status) {
+                is GeminiNanoClient.ModelStatus.Downloading -> {
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { status.progress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "${(status.progress * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.align(Alignment.End)
+                    )
+                }
+
+                is GeminiNanoClient.ModelStatus.Unavailable -> {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Tap to check for updates or download model (requires ~1GB).",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Button(
+                        onClick = onDownloadClick,
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Text("Check / Download Model")
+                    }
+                }
+
+                is GeminiNanoClient.ModelStatus.Error -> {
+                    Button(
+                        onClick = onDownloadClick,
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Text("Retry")
+                    }
+                }
+
+                else -> {}
             }
         }
     }

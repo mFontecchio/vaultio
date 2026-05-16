@@ -2,6 +2,7 @@ package com.mrhayami.vaultio.ui.grading
 
 import android.graphics.Bitmap
 import com.mrhayami.vaultio.data.local.CardGradeEntity
+import com.mrhayami.vaultio.data.repository.GeminiNanoClient
 
 /** UI State for the Grading Screen/Mode */
 data class GradingViewState(
@@ -12,6 +13,7 @@ data class GradingViewState(
     val capturedImage: Bitmap? = null,
     val errorMessage: String? = null,
     val showModelDownloadPrompt: Boolean = false,
+    val modelStatus: GeminiNanoClient.ModelStatus = GeminiNanoClient.ModelStatus.Unavailable,
     val pendingCard: com.mrhayami.vaultio.data.remote.TcgDexCard? = null,
     val folders: List<com.mrhayami.vaultio.data.local.FolderEntity> = emptyList()
 )
