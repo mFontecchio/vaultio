@@ -82,6 +82,9 @@ interface CardDao {
     @Query("DELETE FROM cards WHERE setId = :setId AND id NOT IN (SELECT cardId FROM user_cards)")
     suspend fun deleteCardsBySet(setId: String): Int
 
+    @Query("UPDATE cards SET pHash = :pHash WHERE id = :cardId")
+    suspend fun updateCardPHash(cardId: String, pHash: Long)
+
     @Query("DELETE FROM cards WHERE id NOT IN (SELECT cardId FROM user_cards)")
     suspend fun deleteAllUnusedCards(): Int
     

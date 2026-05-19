@@ -1,5 +1,7 @@
 package com.mrhayami.vaultio.data.repository
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.sqlite.db.SimpleSQLiteQuery
 import com.mrhayami.vaultio.data.PokemonUtils
@@ -49,6 +51,8 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapMerge
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -262,6 +266,26 @@ class VaultioRepository(
 
     suspend fun searchLocalCardsWithTotal(localId: String, total: Int): List<CardEntity> = 
         cardDao.getCardsByLocalIdAndSetTotal(localId, total)
+
+    private val okHttpClient = OkHttpClient.Builder().build()
+
+    suspend fun updateCardPHash(cardId: String, pHash: Long) = withContext(ioDispatcher) {
+        cardDao.updateCardPHash(cardId, pHash)
+    }
+
+    suspend fun fetchBitmapFromUrl(url: String): Bitmap? = withContext(ioDispatcher) {
+        try {
+            val request = Request.Builder().url(url).build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                val body = response.body ?: return@withContext null
+                BitmapFactory.decodeStream(body.byteStream())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching bitmap from $url", e)
+            null
+        }
+    }
 
     suspend fun searchTcgDex(query: String): List<TcgDexCard> {
         if (query.isBlank()) return emptyList()

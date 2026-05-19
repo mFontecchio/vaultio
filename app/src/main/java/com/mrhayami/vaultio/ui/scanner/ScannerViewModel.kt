@@ -158,8 +158,15 @@ class ScannerViewModel(
     // Ring buffer storing the last 5 frame detections for multi-frame consensus.
     private val detectionHistory = ArrayDeque<FrameDetection>()
 
-    // Pokemon Card Layout Analysis: Regex to capture "Number/Total" format
-    private val numberRegex = Regex("""([A-Z0-9]{1,5})\s*/\s*([A-Z0-9]{1,5})""")
+    // Pokemon Card Layout Analysis: Regex to capture varied collector number formats:
+    // 1. "Number / Total" (e.g. 123 / 191) - Primary format
+    private val numberTotalRegex = Regex("""([A-Z0-9]{1,5})\s*/\s*([A-Z0-9]{1,5})""")
+
+    // 2. Set Prefix + Number (e.g. SWSH123 or XY 123) - Secondary format
+    private val setNumberRegex = Regex("""([A-Z]{1,4})\s*(\d{1,4})""")
+
+    // 3. Fallback: Standalone number (3-5 digits) - Tertiary format
+    private val standaloneNumberRegex = Regex("""(\d{3,5})""")
     
     private val noiseWords = setOf(
         "HP", "STAGE", "BASIC", "LEVEL", "WEAKNESS", "RESISTANCE", "RETREAT", 
@@ -318,12 +325,14 @@ class ScannerViewModel(
         if (_uiState.value.activeMode == ScannerMode.IDLE || _uiState.value.isPaused || _uiState.value.isSearching) return
 
         viewModelScope.launch(defaultDispatcher) {
-            val topLines = lines
-                .filter { (it.boundingBox?.top?.toFloat() ?: Float.MAX_VALUE) / it.imageHeight < 0.25f }
+            val nameCandidates = lines
+                .filter {
+                    (it.boundingBox?.top?.toFloat() ?: Float.MAX_VALUE) / it.imageHeight < 0.30f
+                }
                 .sortedBy { it.boundingBox?.top ?: Int.MAX_VALUE }
                 .take(3)
             var bestName: String? = null
-            for (line in topLines) {
+            for (line in nameCandidates) {
                 val cleaned = cleanCardName(line.text)
                 if (cleaned.length >= 3) {
                     bestName = cleaned
@@ -334,16 +343,32 @@ class ScannerViewModel(
             var bestLocalId: String? = null
             var bestTotal: String? = null
             val numberCandidates = lines.filter {
-                (it.boundingBox?.centerY()?.toFloat() ?: 0f) / it.imageHeight > 0.75f
+                (it.boundingBox?.centerY()?.toFloat() ?: 0f) / it.imageHeight > 0.70f
             }
             
             val combinedBottomText = numberCandidates.joinToString(" ") { it.text }
             val normalizedBottom = normalizeOcrTextForNumbers(combinedBottomText)
-            val numMatch = numberRegex.find(normalizedBottom)
-            
-            if (numMatch != null) {
-                bestLocalId = numMatch.groupValues[1]
-                bestTotal = numMatch.groupValues[2]
+
+            // Prioritized matching: Number/Total > Set Prefix + Number > Standalone Number
+            val totalMatch = numberTotalRegex.find(normalizedBottom)
+            if (totalMatch != null) {
+                bestLocalId = totalMatch.groupValues[1]
+                bestTotal = totalMatch.groupValues[2]
+            } else {
+                val setMatch = setNumberRegex.find(normalizedBottom)
+                if (setMatch != null) {
+                    bestLocalId = "${setMatch.groupValues[1]}${setMatch.groupValues[2]}"
+                } else {
+                    val standaloneMatch = standaloneNumberRegex.find(normalizedBottom)
+                    if (standaloneMatch != null) {
+                        bestLocalId = standaloneMatch.groupValues[1]
+                    }
+                }
+            }
+
+            // Validation: Ensure bestLocalId doesn't match known noise words
+            if (bestLocalId != null && noiseWords.contains(bestLocalId.uppercase())) {
+                bestLocalId = null
             }
 
             synchronized(detectionHistory) {
@@ -355,7 +380,10 @@ class ScannerViewModel(
             
             val (consensusTotal, consensusName) = synchronized(detectionHistory) {
                 val count = detectionHistory.count { it.number == bestLocalId }
-                if (count < 3) {
+
+                // Restore stability: Require 3 frames for a solid lock.
+                val requiredFrames = 3
+                if (count < requiredFrames) {
                     return@launch
                 }
 
@@ -388,7 +416,7 @@ class ScannerViewModel(
 
             searchJob?.cancel()
             searchJob = launch {
-                delay(100)
+                delay(120) // Slightly longer debounce for stability
                 searchCard(bestLocalId, consensusTotal, consensusName, pHash)
             }
         }
@@ -408,19 +436,32 @@ class ScannerViewModel(
                     localResults = repository.searchLocalCards(numberNorm)
                 }
 
-                if (pHash != null && localResults.size > 1) {
+                // If we have local candidates but multiple, try to disambiguate with pHash
+                if (localResults.size > 1) {
                     val hashed = localResults.filter { it.pHash != null }
-                    if (hashed.isNotEmpty()) {
+                    if (hashed.isNotEmpty() && pHash != null) {
                         val bestMatch = hashed.minByOrNull { PHash.hammingDistance(it.pHash!!, pHash) }
                         if (bestMatch != null && PHash.hammingDistance(bestMatch.pHash!!, pHash) < 12) {
                             localResults = listOf(bestMatch)
+                        }
+                    } else if (pHash != null) {
+                        // None have pHash locally, try to fetch and update on-the-fly for the top 2
+                        localResults.take(2).forEach { card ->
+                            if (card.image != null) {
+                                val bitmap = repository.fetchBitmapFromUrl(card.image)
+                                if (bitmap != null) {
+                                    val computed = PHash.computeHash(bitmap)
+                                    repository.updateCardPHash(card.id, computed)
+                                    // If this is a match, we can use it immediately for the next frame
+                                }
+                            }
                         }
                     }
                 }
 
                 if (name != null && localResults.size > 1) {
                     val filtered = localResults.filter { card ->
-                        calculateSimilarity(card.name, name) > 0.6f
+                        calculateSimilarity(card.name, name) > 0.65f
                     }
                     if (filtered.isNotEmpty()) localResults = filtered
                 }
@@ -445,7 +486,24 @@ class ScannerViewModel(
                         }
                         if (filtered.isEmpty()) filtered = all 
                     }
-                    
+
+                    // On-the-fly pHash for remote candidates if still ambiguous
+                    if (filtered.size > 1 && pHash != null) {
+                        for (card in filtered.take(3)) {
+                            if (card.image != null) {
+                                val bitmap = repository.fetchBitmapFromUrl(card.image)
+                                if (bitmap != null) {
+                                    val computed = PHash.computeHash(bitmap)
+                                    if (PHash.hammingDistance(computed, pHash) < 12) {
+                                        filtered = listOf(card)
+                                        repository.updateCardPHash(card.id, computed)
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if (name != null && filtered.size > 1) {
                         filtered = filtered.sortedByDescending { calculateSimilarity(it.name, name) }
                     }
@@ -537,9 +595,27 @@ class ScannerViewModel(
             }
 
             val ocr = cell.ocrResult ?: ""
-            val numMatch = numberRegex.find(normalizeOcrTextForNumbers(ocr))
-            val localId = numMatch?.groupValues?.get(1)
-            val totalCount = numMatch?.groupValues?.get(2)
+            val normalizedOcr = normalizeOcrTextForNumbers(ocr)
+
+            var localId: String? = null
+            var totalCount: String? = null
+
+            val totalMatch = numberTotalRegex.find(normalizedOcr)
+            if (totalMatch != null) {
+                localId = totalMatch.groupValues[1]
+                totalCount = totalMatch.groupValues[2]
+            } else {
+                val setMatch = setNumberRegex.find(normalizedOcr)
+                if (setMatch != null) {
+                    localId = "${setMatch.groupValues[1]}${setMatch.groupValues[2]}"
+                } else {
+                    val standaloneMatch = standaloneNumberRegex.find(normalizedOcr)
+                    if (standaloneMatch != null) {
+                        localId = standaloneMatch.groupValues[1]
+                    }
+                }
+            }
+
             val name = cleanCardName(ocr).takeIf { it.isNotEmpty() }
 
             if (localId == null) {
