@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Api
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ExpandLess
@@ -93,6 +94,7 @@ import com.mrhayami.vaultio.ui.theme.VaultioTheme
 fun SettingsScreen(
     repository: VaultioRepository,
     userPreferencesRepository: UserPreferencesRepository,
+    onNavigateToDownloads: () -> Unit,
     viewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModelFactory(repository, userPreferencesRepository)
     )
@@ -119,6 +121,7 @@ fun SettingsScreen(
         SettingsScreenContent(
             uiState = uiState,
             onEvent = viewModel::onEvent,
+            onNavigateToDownloads = onNavigateToDownloads,
             modifier = Modifier.padding(padding)
         )
     }
@@ -129,6 +132,7 @@ fun SettingsScreen(
 fun SettingsScreenContent(
     uiState: SettingsUiState,
     onEvent: (SettingsEvent) -> Unit,
+    onNavigateToDownloads: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showThemeBrandDialog by remember { mutableStateOf(false) }
@@ -343,7 +347,10 @@ fun SettingsScreenContent(
 
         ListItem(
             headlineContent = { Text("${uiState.offlineSetsCount} sets downloaded") },
-            leadingContent = { Icon(Icons.Rounded.Download, contentDescription = null) }
+            supportingContent = { Text("Manage offline data and high-res images") },
+            leadingContent = { Icon(Icons.Rounded.Download, contentDescription = null) },
+            trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+            modifier = Modifier.clickable { onNavigateToDownloads() }
         )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -519,7 +526,11 @@ fun ThemeBrandOption(label: String, selected: Boolean, color: Color?, onClick: (
                     .size(24.dp)
                     .clip(CircleShape)
                     .background(color)
-                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), CircleShape)
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                        CircleShape
+                    )
             )
             Spacer(modifier = Modifier.width(12.dp))
         } else {
@@ -577,7 +588,8 @@ fun SettingsScreenPreview() {
                     offlineSetsCount = 5,
                     isRefreshing = false
                 ),
-                onEvent = {}
+                onEvent = {},
+                onNavigateToDownloads = {}
             )
         }
     }

@@ -85,7 +85,9 @@ data class CollectionUiState(
     val availableTypes: List<String> = emptyList(),
     val totalValue: Double = 0.0,
     val totalCount: Int = 0,
-    val totalQuantity: Int = 0
+    val totalQuantity: Int = 0,
+    val newSetsToDownload: List<SetEntity> = emptyList(),
+    val isDownloadingNewSets: Boolean = false
 )
 
 sealed interface CollectionEvent {
@@ -134,6 +136,10 @@ sealed interface CollectionEvent {
     ) : CollectionEvent
     
     data object OnConsumeSaveSuccess : CollectionEvent
+
+    // Auto-check for new sets
+    data object OnDownloadNewSets : CollectionEvent
+    data object OnDismissNewSetsPrompt : CollectionEvent
     
     // Import/Export
     data class OnExportCollection(val folderIds: List<Long>? = null) : CollectionEvent

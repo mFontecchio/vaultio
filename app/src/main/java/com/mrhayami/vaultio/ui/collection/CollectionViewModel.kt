@@ -1,5 +1,6 @@
 package com.mrhayami.vaultio.ui.collection
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -18,6 +19,7 @@ import com.mrhayami.vaultio.ui.common.MviViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
@@ -42,6 +44,8 @@ class CollectionViewModel(
     private val _showSaveSuccess = MutableStateFlow(false)
     private val _remoteSearchResults = MutableStateFlow<List<TcgDexCard>>(emptyList())
     private val _isRemoteSearching = MutableStateFlow(false)
+    private val _newSetsToDownload = MutableStateFlow<List<SetEntity>>(emptyList())
+    private val _isDownloadingNewSets = MutableStateFlow(false)
 
     // Base Data Flows
     private val _allCards = repository.allUserCards
@@ -142,7 +146,9 @@ class CollectionViewModel(
                 _showSaveSuccess,
                 _selectionState,
                 _remoteSearchResults,
-                _isRemoteSearching
+                _isRemoteSearching,
+                _newSetsToDownload,
+                _isDownloadingNewSets
             )
         ) { flows ->
             val viewMode = flows[0] as ViewMode
@@ -166,6 +172,8 @@ class CollectionViewModel(
             val selectedIds = flows[18] as Set<Long>
             val remoteResults = flows[19] as List<TcgDexCard>
             val isRemoteSearching = flows[20] as Boolean
+            val newSets = flows[21] as List<SetEntity>
+            val isDownloading = flows[22] as Boolean
 
             // Available filters logic (still computed here but could be optimized if needed)
             val availableFilters = computeAvailableFilters(allCards)
@@ -199,10 +207,28 @@ class CollectionViewModel(
                     totalCount = stats.second,
                     totalQuantity = stats.third,
                     searchResults = remoteResults,
-                    isSearching = isRemoteSearching
+                    isSearching = isRemoteSearching,
+                    newSetsToDownload = newSets,
+                    isDownloadingNewSets = isDownloading
                 )
             }
         }.launchIn(viewModelScope)
+
+        checkForNewSets()
+    }
+
+    private fun checkForNewSets() {
+        viewModelScope.launch {
+            val lastCheck = userPreferencesRepository.lastSetCheck.first()
+            val now = System.currentTimeMillis()
+            if (now - lastCheck > 24 * 60 * 60 * 1000) {
+                userPreferencesRepository.setLastSetCheck(now)
+                val newSets = repository.getNewSets()
+                if (newSets.isNotEmpty()) {
+                    _newSetsToDownload.value = newSets
+                }
+            }
+        }
     }
 
     override fun onEvent(event: CollectionEvent) {
@@ -233,9 +259,38 @@ class CollectionViewModel(
             is CollectionEvent.OnSearchRemoteCards -> searchRemoteCards(event.query)
             is CollectionEvent.OnAddUserCard -> addUserCard(event.card, event.quantity, event.condition, event.printing, event.finish, event.folderIds)
             CollectionEvent.OnConsumeSaveSuccess -> consumeSaveSuccess()
+            CollectionEvent.OnDownloadNewSets -> downloadNewSets()
+            CollectionEvent.OnDismissNewSetsPrompt -> dismissNewSetsPrompt()
             is CollectionEvent.OnExportCollection -> exportCollection(event.folderIds)
             is CollectionEvent.OnImportCollection -> importCollection(event.json)
         }
+    }
+
+    private fun downloadNewSets() {
+        viewModelScope.launch {
+            val setsToDownload = _newSetsToDownload.value
+            if (setsToDownload.isEmpty()) return@launch
+
+            _isDownloadingNewSets.value = true
+            _newSetsToDownload.value = emptyList()
+
+            var successCount = 0
+            setsToDownload.forEach { set ->
+                try {
+                    repository.downloadSet(set.id)
+                    successCount++
+                } catch (e: Exception) {
+                    Log.e("CollectionViewModel", "Failed to download set ${set.id}", e)
+                }
+            }
+
+            _isDownloadingNewSets.value = false
+            emitEffect(CollectionEffect.ShowToast("Downloaded $successCount new sets successfully!"))
+        }
+    }
+
+    private fun dismissNewSetsPrompt() {
+        _newSetsToDownload.value = emptyList()
     }
 
     private fun exportCollection(folderIds: List<Long>?) {

@@ -203,6 +203,26 @@ class VaultioRepository(
         }
     }
 
+    suspend fun getNewSets(): List<SetEntity> {
+        return try {
+            val remoteSets = tcgDexApi.getSets()
+            val localSets = setDao.getSetsSync()
+            val localIds = localSets.map { it.id }.toSet()
+
+            val newSets = remoteSets.filter { it.id !in localIds }
+            if (newSets.isNotEmpty()) {
+                val newEntities = newSets.map { it.toEntity(false) }
+                setDao.insertSets(newEntities)
+                newEntities
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking for new sets", e)
+            emptyList()
+        }
+    }
+
     private fun TcgDexSet.toEntity(isDownloaded: Boolean) = SetEntity(
         id = id,
         name = name,

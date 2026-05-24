@@ -20,7 +20,6 @@ fun VaultioNavigationBar(
     val items = listOf(
         Screen.Collection,
         Screen.Stats,
-        Screen.SetDownloads,
         Screen.Settings
     )
 

@@ -72,7 +72,6 @@ class MainActivity : ComponentActivity() {
                 val showBottomBar = listOf(
                     Screen.Collection,
                     Screen.Stats,
-                    Screen.SetDownloads,
                     Screen.Settings
                 ).any { it.route == currentRoute }
 
@@ -168,9 +167,18 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 )
-                                SetDownloadsScreen(viewModel) 
+                                SetDownloadsScreen(
+                                    viewModel = viewModel,
+                                    onNavigateBack = { navController.popBackStack() }
+                                ) 
                             }
-                            composable(Screen.Settings.route) { SettingsScreen(repository, userPreferencesRepository) }
+                            composable(Screen.Settings.route) {
+                                SettingsScreen(
+                                    repository = repository,
+                                    userPreferencesRepository = userPreferencesRepository,
+                                    onNavigateToDownloads = { navController.navigate(Screen.SetDownloads.route) }
+                                )
+                            }
                             composable(
                                 route = "scanner?userCardId={userCardId}",
                                 arguments = listOf(navArgument("userCardId") {

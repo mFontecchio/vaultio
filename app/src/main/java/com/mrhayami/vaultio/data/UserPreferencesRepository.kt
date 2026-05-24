@@ -54,6 +54,7 @@ class UserPreferencesRepository(context: Context) {
         val PREFER_SET_LOGO = booleanPreferencesKey("prefer_set_logo")
         
         val SHOULD_SHOW_WALKTHROUGH = booleanPreferencesKey("should_show_walkthrough")
+        val LAST_SET_CHECK = stringPreferencesKey("last_set_check")
 
         val BULK_SCAN_CONDITION = stringPreferencesKey("bulk_scan_condition")
         val BULK_SCAN_PRINTING = stringPreferencesKey("bulk_scan_printing")
@@ -196,6 +197,16 @@ class UserPreferencesRepository(context: Context) {
     suspend fun setShouldShowWalkthrough(show: Boolean) {
         dataStore.edit {
             it[PreferencesKeys.SHOULD_SHOW_WALKTHROUGH] = show
+        }
+    }
+
+    val lastSetCheck: Flow<Long> = dataStore.data.map {
+        it[PreferencesKeys.LAST_SET_CHECK]?.toLongOrNull() ?: 0L
+    }
+
+    suspend fun setLastSetCheck(timestamp: Long) {
+        dataStore.edit {
+            it[PreferencesKeys.LAST_SET_CHECK] = timestamp.toString()
         }
     }
 

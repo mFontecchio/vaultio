@@ -102,6 +102,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -531,6 +532,15 @@ fun CollectionContent(
                 .padding(padding)
                 .consumeWindowInsets(padding)
         ) {
+            AnimatedVisibility(visible = uiState.isDownloadingNewSets) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
             StickyControls(
                 uiState = uiState,
                 onEvent = onEvent,
@@ -802,6 +812,26 @@ fun CollectionContent(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+
+    if (uiState.newSetsToDownload.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { onEvent(CollectionEvent.OnDismissNewSetsPrompt) },
+            title = { Text("New Sets Available") },
+            text = {
+                Text("${uiState.newSetsToDownload.size} new TCG sets have been released. Would you like to download them for offline use now?")
+            },
+            confirmButton = {
+                TextButton(onClick = { onEvent(CollectionEvent.OnDownloadNewSets) }) {
+                    Text("Download Now")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onEvent(CollectionEvent.OnDismissNewSetsPrompt) }) {
+                    Text("Later")
+                }
+            }
+        )
     }
 }
 
