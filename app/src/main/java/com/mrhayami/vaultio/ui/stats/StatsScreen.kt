@@ -1,9 +1,7 @@
 package com.mrhayami.vaultio.ui.stats
 
 import android.content.res.Configuration
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,19 +17,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.TrendingUp
-import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -43,22 +38,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Fill
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.CollectionSnapshotEntity
@@ -74,11 +57,7 @@ import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLa
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import java.text.NumberFormat
 import java.util.Locale
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,7 +65,7 @@ fun StatsScreen(
     state: StatsViewState,
     onEvent: (StatsEvent) -> Unit,
     sideEffects: Flow<StatsEffect>,
-    onNavigation: (StatsEffect.Navigation) -> Unit
+    onNavigation: (StatsEffect.Navigation) -> Unit,
 ) {
     LaunchedEffect(Unit) {
         onEvent(StatsEvent.OnScreenOpened)
@@ -111,163 +90,91 @@ fun StatsScreen(
             )
         }
     ) { padding ->
-        if (state.isLoading && state.cardCount == 0) {
-            Box(Modifier
-                .fillMaxSize()
-                .padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+        StatsContent(
+            state = state,
+            onNavigation = onNavigation,
+            modifier = Modifier.padding(padding)
+        )
+    }
+}
+
+@Composable
+private fun StatsContent(
+    state: StatsViewState,
+    onNavigation: (StatsEffect.Navigation) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if ((state.isLoading && state.cardCount == 0)) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+    } else if (state.cardCount == 0) {
+        EmptyStatsContent(modifier = modifier)
+    } else {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            summarySection(state.totalValue, state.cardCount)
+
+            if (state.snapshots.isNotEmpty()) {
+                valueHistorySection(state.snapshots)
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item {
-                    SummaryCards(state.totalValue, state.cardCount)
-                }
 
-                if (state.snapshots.isNotEmpty()) {
-                    item {
-                        SectionTitle("Value History")
-                        ValueHistoryChart(state.snapshots)
-                    }
-                }
+            if (state.distributionByRarity.isNotEmpty()) {
+                rarityDistributionSection(state.distributionByRarity)
+            }
 
-                if (state.distributionByRarity.isNotEmpty()) {
-                    item {
-                        SectionTitle("Rarity Distribution")
-                        RarityDistributionChart(state.distributionByRarity)
-                    }
-                }
+            if (state.distributionByType.isNotEmpty()) {
+                typeDistributionSection(state.distributionByType)
+            }
 
-                if (state.distributionByType.isNotEmpty()) {
-                    item {
-                        SectionTitle("Type Distribution")
-                        TypeDistributionChart(state.distributionByType)
-                    }
-                }
+            if (state.mostValuableCards.isNotEmpty()) {
+                mostValuableCardsSection(state.mostValuableCards, onNavigation)
+            }
 
-                if (state.mostValuableCards.isNotEmpty()) {
-                    item { SectionTitle("Top 5 Most Valuable Cards") }
-                    items(
-                        state.mostValuableCards,
-                        key = { it.details.userCard.id }) { cardWithValue ->
-                        MostValuableCardItem(
-                            cardWithValue = cardWithValue,
-                            onClick = {
-                                onNavigation(
-                                    StatsEffect.Navigation.GoToCardDetail(
-                                        cardWithValue.details.userCard.id
-                                    )
-                                )
-                            }
-                        )
-                    }
-                }
-
-                if (state.setCompletion.isNotEmpty()) {
-                    item { SectionTitle("Set Completion") }
-                    items(state.setCompletion) { info ->
-                        SetCompletionItem(info)
-                    }
-                }
+            if (state.setCompletion.isNotEmpty()) {
+                setCompletionSection(state.setCompletion)
             }
         }
     }
 }
 
 @Composable
-fun SummaryCards(totalValue: Double, cardCount: Int) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        ),
-        shape = RoundedCornerShape(20.dp)
+private fun EmptyStatsContent(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Total Value Section
-            Column(
-                modifier = Modifier.weight(1.1f),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.TrendingUp,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "Total Value",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
-                }
-                Text(
-                    text = formatCurrency(totalValue),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // Subtle Vertical Divider
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(32.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "No cards in collection",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
-            // Total Cards Section
-            Column(
-                modifier = Modifier.weight(0.9f),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Collections,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "Total Cards",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
-                }
-                Text(
-                    text = cardCount.toString(),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Text(
+                "Scan some cards to see statistics!",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+    }
+}
+
+private fun LazyListScope.summarySection(totalValue: Double, cardCount: Int) {
+    item {
+        SummaryCards(totalValue, cardCount)
+    }
+}
+
+private fun LazyListScope.valueHistorySection(snapshots: List<CollectionSnapshotEntity>) {
+    item {
+        SectionTitle("Value History")
+        ValueHistoryChart(snapshots)
     }
 }
 
@@ -321,9 +228,16 @@ fun ValueHistoryChart(snapshots: List<CollectionSnapshotEntity>) {
     }
 }
 
+private fun LazyListScope.rarityDistributionSection(distribution: Map<String, Int>) {
+    item {
+        SectionTitle("Rarity Distribution")
+        RarityDistributionSection(distribution)
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun RarityDistributionChart(distribution: Map<String, Int>) {
+private fun RarityDistributionSection(distribution: Map<String, Int>) {
     val sortedData = remember(distribution) {
         distribution.toList().sortedByDescending { it.second }.take(6)
     }
@@ -369,7 +283,6 @@ fun RarityDistributionChart(distribution: Map<String, Int>) {
 
             Spacer(Modifier.height(16.dp))
 
-            // Legend
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
@@ -399,39 +312,16 @@ fun RarityDistributionChart(distribution: Map<String, Int>) {
     }
 }
 
-@Composable
-fun DonutChart(
-    data: List<Pair<String, Int>>,
-    colors: List<Color>,
-    modifier: Modifier = Modifier,
-    thickness: androidx.compose.ui.unit.Dp = 30.dp
-) {
-    if (data.isEmpty()) return
-
-    val total = data.sumOf { it.second }.toFloat()
-    val density = LocalDensity.current
-    val thicknessPx = with(density) { thickness.toPx() }
-
-    Canvas(modifier = modifier) {
-        var startAngle = -90f
-        data.forEachIndexed { index, pair ->
-            val sweepAngle = (pair.second / total) * 360f
-            drawArc(
-                color = colors[index % colors.size],
-                startAngle = startAngle,
-                sweepAngle = sweepAngle,
-                useCenter = false,
-                style = Stroke(width = thicknessPx)
-            )
-            startAngle += sweepAngle
-        }
+private fun LazyListScope.typeDistributionSection(distribution: Map<String, Int>) {
+    item {
+        SectionTitle("Type Distribution")
+        TypeDistributionSection(distribution)
     }
 }
 
 @Composable
-fun TypeDistributionChart(distribution: Map<String, Int>) {
+private fun TypeDistributionSection(distribution: Map<String, Int>) {
     val sortedData = remember(distribution) {
-        // Take top 7 types to keep the radar chart readable
         distribution.toList().sortedByDescending { it.second }.take(7)
     }
 
@@ -452,222 +342,29 @@ fun TypeDistributionChart(distribution: Map<String, Int>) {
     }
 }
 
-@Composable
-fun RadarChart(
-    data: List<Pair<String, Int>>,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary,
-    gridColor: Color = MaterialTheme.colorScheme.outlineVariant,
-    labelStyle: TextStyle = MaterialTheme.typography.labelSmall.copy(
-        fontSize = 10.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+private fun LazyListScope.mostValuableCardsSection(
+    cards: List<CardWithValue>,
+    onNavigation: (StatsEffect.Navigation) -> Unit,
 ) {
-    if (data.isEmpty()) return
-
-    val textMeasurer = rememberTextMeasurer()
-    val maxVal = remember(data) { data.maxOf { it.second }.toFloat().coerceAtLeast(1f) }
-    val numLines = 4 // background grid circles
-
-    Canvas(modifier = modifier) {
-        val centerX = size.width / 2
-        val centerY = size.height / 2
-        val radius = size.width.coerceAtMost(size.height) / 2
-        val angleStep = (2 * PI / data.size).toFloat()
-
-        // Draw background grid
-        for (i in 1..numLines) {
-            val currentRadius = radius * (i.toFloat() / numLines)
-            val path = Path()
-            for (j in data.indices) {
-                val angle = j * angleStep - PI.toFloat() / 2
-                val x = centerX + currentRadius * cos(angle)
-                val y = centerY + currentRadius * sin(angle)
-                if (j == 0) path.moveTo(x, y) else path.lineTo(x, y)
-            }
-            path.close()
-            drawPath(path, gridColor, style = Stroke(width = 1.dp.toPx()))
-        }
-
-        // Draw axes and labels
-        data.forEachIndexed { index, pair ->
-            val angle = index * angleStep - PI.toFloat() / 2
-            val x = centerX + radius * cos(angle)
-            val y = centerY + radius * sin(angle)
-
-            // Axis line
-            drawLine(gridColor, Offset(centerX, centerY), Offset(x, y), strokeWidth = 1.dp.toPx())
-
-            // Label
-            val label = pair.first
-            val textLayoutResult = textMeasurer.measure(label, style = labelStyle)
-            val textWidth = textLayoutResult.size.width
-            val textHeight = textLayoutResult.size.height
-
-            // Position label outside the radius
-            val labelPadding = 12.dp.toPx()
-            val labelX = centerX + (radius + labelPadding) * cos(angle) - textWidth / 2
-            val labelY = centerY + (radius + labelPadding) * sin(angle) - textHeight / 2
-
-            drawText(textLayoutResult, topLeft = Offset(labelX, labelY))
-        }
-
-        // Draw data polygon
-        val dataPath = Path()
-        data.forEachIndexed { index, pair ->
-            val angle = index * angleStep - PI.toFloat() / 2
-            val valueRadius = radius * (pair.second / maxVal)
-            val x = centerX + valueRadius * cos(angle)
-            val y = centerY + valueRadius * sin(angle)
-            if (index == 0) dataPath.moveTo(x, y) else dataPath.lineTo(x, y)
-        }
-        dataPath.close()
-
-        drawPath(dataPath, color.copy(alpha = 0.3f), style = Fill)
-        drawPath(dataPath, color, style = Stroke(width = 2.dp.toPx()))
-
-        // Draw points
-        data.forEachIndexed { index, pair ->
-            val angle = index * angleStep - PI.toFloat() / 2
-            val valueRadius = radius * (pair.second / maxVal)
-            val x = centerX + valueRadius * cos(angle)
-            val y = centerY + valueRadius * sin(angle)
-            drawCircle(color, radius = 4.dp.toPx(), center = Offset(x, y))
-        }
-    }
-}
-
-@Composable
-fun MostValuableCardItem(cardWithValue: CardWithValue, onClick: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val imageUrl = remember(cardWithValue.details.card.image) {
-        "${cardWithValue.details.card.image}/low.webp"
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+    item { SectionTitle("Top 5 Most Valuable Cards") }
+    items(cards, key = { it.details.userCard.id }) { cardWithValue ->
+        MostValuableCardItem(
+            cardWithValue = cardWithValue
         ) {
-            Box(contentAlignment = Alignment.TopEnd) {
-                AsyncImage(
-                    model = coil.request.ImageRequest.Builder(context)
-                        .data(imageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(MaterialTheme.colorScheme.surface),
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.TopCenter
+            onNavigation(
+                StatsEffect.Navigation.GoToCardDetail(
+                    cardWithValue.details.userCard.id
                 )
-                if (cardWithValue.details.userCard.quantity > 1) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiary,
-                        contentColor = MaterialTheme.colorScheme.onTertiary,
-                        shape = RoundedCornerShape(bottomStart = 4.dp, topEnd = 4.dp),
-                        modifier = Modifier.clip(RoundedCornerShape(topEnd = 4.dp))
-                    ) {
-                        Text(
-                            text = "x${cardWithValue.details.userCard.quantity}",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = cardWithValue.details.card.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "${cardWithValue.details.card.rarity ?: "Unknown Rarity"} • ${cardWithValue.details.set.name}",
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = formatCurrency(cardWithValue.value * cardWithValue.details.userCard.quantity),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                if (cardWithValue.details.userCard.quantity > 1) {
-                    Text(
-                        text = "${formatCurrency(cardWithValue.value)} ea.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SetCompletionItem(info: SetCompletionInfo) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-
-            AsyncImage(
-                    model = info.logo,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    info.setName,
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    "${info.collectedCount}/${info.totalCount}",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { info.completionPercentage / 100f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp)),
             )
         }
     }
 }
 
-@Composable
-fun SectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(vertical = 8.dp)
-    )
-}
-
-fun formatCurrency(amount: Double): String {
-    val format = NumberFormat.getCurrencyInstance(Locale.US)
-    return format.format(amount)
+private fun LazyListScope.setCompletionSection(completion: List<SetCompletionInfo>) {
+    item { SectionTitle("Set Completion") }
+    items(completion) { info ->
+        SetCompletionItem(info)
+    }
 }
 
 @Preview(showBackground = true, name = "Light Mode")
@@ -783,106 +480,6 @@ private fun StatsScreenPreview() {
                 sideEffects = emptyFlow(),
                 onNavigation = {}
             )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun SummaryCardsPreview() {
-    VaultioTheme {
-        Surface(Modifier.padding(16.dp)) {
-            SummaryCards(totalValue = 1234.56, cardCount = 789)
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun TypeDistributionChartPreview() {
-    val mockDistribution = mapOf(
-        "Fire" to 25,
-        "Water" to 20,
-        "Grass" to 30,
-        "Lightning" to 15,
-        "Psychic" to 10,
-        "Fighting" to 8,
-        "Darkness" to 12,
-        "Metal" to 5,
-        "Colorless" to 18,
-        "Dragon" to 4
-    )
-    VaultioTheme {
-        Surface(Modifier.padding(16.dp)) {
-            TypeDistributionChart(distribution = mockDistribution)
-        }
-    }
-}
-
-@Preview(showBackground = true, name = "Most Valuable Card Item")
-@Composable
-private fun MostValuableCardItemPreview() {
-    val mockCard = CardEntity(
-        id = "swsh4-1",
-        localId = "1",
-        name = "Charizard VMAX",
-        image = null,
-        setId = "swsh4",
-        rarity = "Rare Holo VMAX",
-        category = "Pokémon",
-        types = "Fire",
-        dexId = "6"
-    )
-
-    val mockSet = SetEntity(
-        id = "swsh4",
-        name = "Vivid Voltage",
-        series = "Sword & Shield",
-        logo = null,
-        symbol = null,
-        totalCards = 185,
-        officialCards = 185,
-        releaseDate = "2020/11/13"
-    )
-
-    val mockUserCard = UserCardEntity(
-        id = 1,
-        cardId = "swsh4-1",
-        quantity = 1
-    )
-
-    val mockCardWithDetails = CardWithDetails(
-        userCard = mockUserCard,
-        card = mockCard,
-        set = mockSet
-    )
-
-    val mockCardWithValue = CardWithValue(mockCardWithDetails, 150.50)
-
-    VaultioTheme {
-        Surface(Modifier.padding(16.dp)) {
-            MostValuableCardItem(
-                cardWithValue = mockCardWithValue,
-                onClick = {}
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun SetCompletionItemPreview() {
-    val mockInfo = SetCompletionInfo(
-        setId = "swsh4",
-        setName = "Vivid Voltage",
-        logo = null,
-        collectedCount = 45,
-        totalCount = 185,
-        completionPercentage = 24.3f
-    )
-    VaultioTheme {
-        Surface(Modifier.padding(16.dp)) {
-            SetCompletionItem(info = mockInfo)
         }
     }
 }

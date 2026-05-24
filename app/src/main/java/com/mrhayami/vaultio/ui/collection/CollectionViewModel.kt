@@ -46,6 +46,7 @@ class CollectionViewModel(
     private val _isRemoteSearching = MutableStateFlow(false)
     private val _newSetsToDownload = MutableStateFlow<List<SetEntity>>(emptyList())
     private val _isDownloadingNewSets = MutableStateFlow(false)
+    private val _selectedDexId = MutableStateFlow<Int?>(null)
 
     // Base Data Flows
     private val _allCards = repository.allUserCards
@@ -122,6 +123,33 @@ class CollectionViewModel(
         entries
     }.flowOn(Dispatchers.Default)
 
+    private val _collectedCardsForDex = combine(
+        _allCards,
+        _selectedDexId,
+        _priceMap,
+        _vintagePriceMap
+    ) { allCards, dexId, priceMap, vintagePriceMap ->
+        if (dexId == null) return@combine emptyList<CardUiModel>()
+
+        allCards.filter { cardWithDetails ->
+            val dexIds =
+                PokemonUtils.parseDexIds(cardWithDetails.card.dexIds, cardWithDetails.card.dexId)
+            dexIds.contains(dexId)
+        }.map { details ->
+            val price = details.userCard.manualPrice ?: run {
+                val cardId = details.card.id
+                val finish = details.userCard.finish
+                val condition = details.userCard.condition
+                val printing = details.userCard.printing
+
+                priceMap["${cardId}_${finish}_${condition}"]?.marketPrice
+                    ?: vintagePriceMap["${cardId}_${finish}_${condition}_${printing}"]?.marketPrice
+                    ?: 0.0
+            }
+            CardUiModel(details, price)
+        }
+    }.flowOn(Dispatchers.Default)
+
     init {
         // Observe all data and update state
         combine(
@@ -148,7 +176,9 @@ class CollectionViewModel(
                 _remoteSearchResults,
                 _isRemoteSearching,
                 _newSetsToDownload,
-                _isDownloadingNewSets
+                _isDownloadingNewSets,
+                _selectedDexId,
+                _collectedCardsForDex
             )
         ) { flows ->
             val viewMode = flows[0] as ViewMode
@@ -174,6 +204,8 @@ class CollectionViewModel(
             val isRemoteSearching = flows[20] as Boolean
             val newSets = flows[21] as List<SetEntity>
             val isDownloading = flows[22] as Boolean
+            val selectedDexId = flows[23] as Int?
+            val collectedCardsForDex = flows[24] as List<CardUiModel>
 
             // Available filters logic (still computed here but could be optimized if needed)
             val availableFilters = computeAvailableFilters(allCards)
@@ -194,6 +226,8 @@ class CollectionViewModel(
                     isLoading = false,
                     selectedIds = selectedIds,
                     isSelectionMode = selectedIds.isNotEmpty(),
+                    selectedDexId = selectedDexId,
+                    collectedCardsForDex = collectedCardsForDex,
                     listSettings = listSettings,
                     gridSettings = gridSettings,
                     pokedexSettings = pokedexSettings,
@@ -263,7 +297,13 @@ class CollectionViewModel(
             CollectionEvent.OnDismissNewSetsPrompt -> dismissNewSetsPrompt()
             is CollectionEvent.OnExportCollection -> exportCollection(event.folderIds)
             is CollectionEvent.OnImportCollection -> importCollection(event.json)
+            is CollectionEvent.OnDexClick -> selectDex(event.dexId)
+            CollectionEvent.OnDismissDexDetail -> selectDex(null)
         }
+    }
+
+    private fun selectDex(dexId: Int?) {
+        _selectedDexId.value = dexId
     }
 
     private fun downloadNewSets() {

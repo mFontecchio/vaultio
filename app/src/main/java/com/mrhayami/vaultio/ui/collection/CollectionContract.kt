@@ -73,6 +73,8 @@ data class CollectionUiState(
     val isSearching: Boolean = false,
     val selectedIds: Set<Long> = emptySet(),
     val isSelectionMode: Boolean = false,
+    val selectedDexId: Int? = null,
+    val collectedCardsForDex: List<CardUiModel> = emptyList(),
     val listSettings: ListSettings = ListSettings(),
     val gridSettings: GridSettings = GridSettings(),
     val pokedexSettings: PokedexSettings = PokedexSettings(),
@@ -144,6 +146,10 @@ sealed interface CollectionEvent {
     // Import/Export
     data class OnExportCollection(val folderIds: List<Long>? = null) : CollectionEvent
     data class OnImportCollection(val json: String) : CollectionEvent
+
+    // Pokedex Detail
+    data class OnDexClick(val dexId: Int) : CollectionEvent
+    data object OnDismissDexDetail : CollectionEvent
 }
 
 sealed interface CollectionEffect {

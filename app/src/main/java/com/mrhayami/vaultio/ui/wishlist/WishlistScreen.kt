@@ -54,10 +54,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.local.WishlistCardWithDetails
+import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
-import com.mrhayami.vaultio.ui.collection.AddCardModal
 import com.mrhayami.vaultio.ui.collection.CollectionEvent
-import com.mrhayami.vaultio.ui.collection.CollectionUiState
+import com.mrhayami.vaultio.ui.collection.components.AddCardModal
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -157,12 +157,11 @@ fun WishlistScreen(
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
             ) {
                 AddCardModal(
-                    uiState = CollectionUiState(
-                        searchResults = uiState.searchResults,
-                        isSearching = uiState.isSearching,
-                        folders = emptyList() // Wishlist doesn't use folders for now
-                    ),
-                    onEvent = { event ->
+                    searchResults = uiState.searchResults,
+                    isSearching = uiState.isSearching,
+                    folders = emptyList(), // Wishlist doesn't use folders for now
+                    setsMap = emptyMap(), // Can be improved by passing sets if needed
+                    onEvent = { event: CollectionEvent ->
                         when (event) {
                             is CollectionEvent.OnSearchRemoteCards -> viewModel.onEvent(
                                 WishlistEvent.SearchRemoteCards(event.query)
@@ -184,7 +183,7 @@ fun WishlistScreen(
                             else -> {}
                         }
                     },
-                    onWishlistConfirm = { card, q, c, p, f ->
+                    onWishlistConfirm = { card: TcgDexCard, q: Int, c: String, p: String, f: String ->
                         viewModel.onEvent(
                             WishlistEvent.AddCardToWishlist(
                                 card, q, c, p, f

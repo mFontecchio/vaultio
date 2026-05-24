@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -96,8 +97,8 @@ fun SettingsScreen(
     userPreferencesRepository: UserPreferencesRepository,
     onNavigateToDownloads: () -> Unit,
     viewModel: SettingsViewModel = viewModel(
-        factory = SettingsViewModelFactory(repository, userPreferencesRepository)
-    )
+        factory = SettingsViewModelFactory(repository, userPreferencesRepository),
+    ),
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -127,7 +128,6 @@ fun SettingsScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreenContent(
     uiState: SettingsUiState,
@@ -135,19 +135,94 @@ fun SettingsScreenContent(
     onNavigateToDownloads: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showThemeBrandDialog by remember { mutableStateOf(false) }
-    var showDarkConfigDialog by remember { mutableStateOf(false) }
-    var showApiKeyDialog by remember { mutableStateOf(false) }
-    var animationsExpanded by remember { mutableStateOf(false) }
+    var showThemeBrandDialog by remember { mutableStateOf(value = false) }
+    var showDarkConfigDialog by remember { mutableStateOf(value = false) }
+    var showApiKeyDialog by remember { mutableStateOf(value = false) }
 
     Column(
         modifier = modifier
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
+        AppearanceSection(
+            uiState = uiState,
+            onEvent = onEvent,
+            onShowThemeDialog = { showThemeBrandDialog = true }
+        ) { showDarkConfigDialog = true }
 
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        MarketDataSection(
+            uiState = uiState,
+            onEvent = onEvent
+        ) { showApiKeyDialog = true }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        StorageSection(
+            offlineSetsCount = uiState.offlineSetsCount,
+            onClearCache = { onEvent(SettingsEvent.ClearImageCache) },
+            onNavigateToDownloads = onNavigateToDownloads
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        DeveloperSection(
+            onResetSettings = { onEvent(SettingsEvent.ResetSettings) }
+        )
+    }
+
+    if (showThemeBrandDialog) {
+        ThemeBrandDialog(
+            currentBrand = uiState.themeBrand,
+            onBrandSelected = { onEvent(SettingsEvent.SetThemeBrand(it)) },
+            onDismiss = { showThemeBrandDialog = false }
+        )
+    }
+
+    if (showDarkConfigDialog) {
+        DarkThemeConfigDialog(
+            currentConfig = uiState.darkThemeConfig,
+            onConfigSelected = { onEvent(SettingsEvent.SetDarkThemeConfig(it)) },
+            onDismiss = { showDarkConfigDialog = false }
+        )
+    }
+
+    if (showApiKeyDialog) {
+        ApiKeyDialog(
+            currentKey = uiState.justTcgApiKey,
+            onSaveKey = { onEvent(SettingsEvent.SetJustTcgApiKey(it)) },
+            onDismiss = { showApiKeyDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        content()
+    }
+}
+
+@Composable
+private fun AppearanceSection(
+    uiState: SettingsUiState,
+    onEvent: (SettingsEvent) -> Unit,
+    onShowThemeDialog: () -> Unit,
+    onShowDarkConfigDialog: () -> Unit
+) {
+    var animationsExpanded by remember { mutableStateOf(value = false) }
+
+    SettingsSection(title = "Appearance") {
         ListItem(
             headlineContent = { Text("Theme Color") },
             supportingContent = {
@@ -168,7 +243,7 @@ fun SettingsScreenContent(
                 )
             },
             leadingContent = { Icon(Icons.Rounded.Palette, contentDescription = null) },
-            modifier = Modifier.clickable { showThemeBrandDialog = true }
+            modifier = Modifier.clickable(onClick = onShowThemeDialog)
         )
 
         ListItem(
@@ -188,7 +263,7 @@ fun SettingsScreenContent(
                     contentDescription = null
                 )
             },
-            modifier = Modifier.clickable { showDarkConfigDialog = true }
+            modifier = Modifier.clickable(onClick = onShowDarkConfigDialog)
         )
 
         ListItem(
@@ -242,19 +317,23 @@ fun SettingsScreenContent(
                 modifier = Modifier.padding(start = 32.dp)
             )
         }
+    }
+}
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        Text("Market Data", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-
+@Composable
+private fun MarketDataSection(
+    uiState: SettingsUiState,
+    onEvent: (SettingsEvent) -> Unit,
+    onShowApiKeyDialog: () -> Unit
+) {
+    SettingsSection(title = "Market Data") {
         ListItem(
             headlineContent = { Text("JustTCG API Key") },
             supportingContent = {
                 Text(if (uiState.justTcgApiKey.isEmpty()) "Not set (required for some pricing)" else "••••••••••••••••")
             },
             leadingContent = { Icon(Icons.Rounded.VpnKey, contentDescription = null) },
-            modifier = Modifier.clickable { showApiKeyDialog = true }
+            modifier = Modifier.clickable(onClick = onShowApiKeyDialog)
         )
 
         ListItem(
@@ -332,32 +411,38 @@ fun SettingsScreenContent(
                 }
             }
         )
+    }
+}
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        Text("Storage", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-
+@Composable
+private fun StorageSection(
+    offlineSetsCount: Int,
+    onClearCache: () -> Unit,
+    onNavigateToDownloads: () -> Unit
+) {
+    SettingsSection(title = "Storage") {
         ListItem(
             headlineContent = { Text("Clear Image Cache") },
             supportingContent = { Text("Free up space on your device") },
             leadingContent = { Icon(Icons.Rounded.Storage, contentDescription = null) },
-            modifier = Modifier.clickable { onEvent(SettingsEvent.ClearImageCache) }
+            modifier = Modifier.clickable(onClick = onClearCache)
         )
 
         ListItem(
-            headlineContent = { Text("${uiState.offlineSetsCount} sets downloaded") },
+            headlineContent = { Text("$offlineSetsCount sets downloaded") },
             supportingContent = { Text("Manage offline data and high-res images") },
             leadingContent = { Icon(Icons.Rounded.Download, contentDescription = null) },
             trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
-            modifier = Modifier.clickable { onNavigateToDownloads() }
+            modifier = Modifier.clickable(onClick = onNavigateToDownloads)
         )
+    }
+}
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        Text("Developer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-
+@Composable
+private fun DeveloperSection(
+    onResetSettings: () -> Unit
+) {
+    SettingsSection(title = "Developer") {
         ListItem(
             headlineContent = { Text("App Version") },
             supportingContent = { Text("${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})") },
@@ -365,148 +450,179 @@ fun SettingsScreenContent(
         )
 
         TextButton(
-            onClick = { onEvent(SettingsEvent.ResetSettings) },
+            onClick = onResetSettings,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
         ) {
             Text("Reset All Settings")
         }
     }
+}
 
-    if (showThemeBrandDialog) {
-        AlertDialog(
-            onDismissRequest = { showThemeBrandDialog = false },
-            title = { Text("Select Color Theme") },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text("Standard", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 8.dp))
-                    ThemeBrandOption("Default (Material You)", uiState.themeBrand == ThemeBrand.DEFAULT, null) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.DEFAULT))
-                        showThemeBrandDialog = false
-                    }
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    Text("Energy Themes", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 8.dp))
-
-                    ThemeBrandOption("Grass", uiState.themeBrand == ThemeBrand.GRASS, EnergyGrass) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.GRASS))
-                        showThemeBrandDialog = false
-                    }
-                    ThemeBrandOption("Fire", uiState.themeBrand == ThemeBrand.FIRE, EnergyFire) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.FIRE))
-                        showThemeBrandDialog = false
-                    }
-                    ThemeBrandOption("Water", uiState.themeBrand == ThemeBrand.WATER, EnergyWater) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.WATER))
-                        showThemeBrandDialog = false
-                    }
-                    ThemeBrandOption("Lightning", uiState.themeBrand == ThemeBrand.ELECTRIC, EnergyLightning) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.ELECTRIC))
-                        showThemeBrandDialog = false
-                    }
-                    ThemeBrandOption("Psychic", uiState.themeBrand == ThemeBrand.PSYCHIC, EnergyPsychic) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.PSYCHIC))
-                        showThemeBrandDialog = false
-                    }
-                    ThemeBrandOption("Fighting", uiState.themeBrand == ThemeBrand.FIGHTING, EnergyFighting) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.FIGHTING))
-                        showThemeBrandDialog = false
-                    }
-                    ThemeBrandOption("Darkness", uiState.themeBrand == ThemeBrand.DARKNESS, EnergyDarkness) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.DARKNESS))
-                        showThemeBrandDialog = false
-                    }
-                    ThemeBrandOption("Metal", uiState.themeBrand == ThemeBrand.STEEL, EnergyMetal) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.STEEL))
-                        showThemeBrandDialog = false
-                    }
-                    ThemeBrandOption("Fairy", uiState.themeBrand == ThemeBrand.FAIRY, EnergyFairy) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.FAIRY))
-                        showThemeBrandDialog = false
-                    }
-                    ThemeBrandOption("Dragon", uiState.themeBrand == ThemeBrand.DRAGON, EnergyDragon) {
-                        onEvent(SettingsEvent.SetThemeBrand(ThemeBrand.DRAGON))
-                        showThemeBrandDialog = false
-                    }
+@Composable
+private fun ThemeBrandDialog(
+    currentBrand: ThemeBrand,
+    onBrandSelected: (ThemeBrand) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Color Theme") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    "Standard",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+                ThemeBrandOption(
+                    "Default (Material You)",
+                    currentBrand == ThemeBrand.DEFAULT,
+                    null
+                ) {
+                    onBrandSelected(ThemeBrand.DEFAULT)
+                    onDismiss()
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showThemeBrandDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
 
-    if (showDarkConfigDialog) {
-        AlertDialog(
-            onDismissRequest = { showDarkConfigDialog = false },
-            title = { Text("Dark Mode Settings") },
-            text = {
-                Column {
-                    DarkConfigOption("Follow System", uiState.darkThemeConfig == DarkThemeConfig.FOLLOW_SYSTEM) {
-                        onEvent(SettingsEvent.SetDarkThemeConfig(DarkThemeConfig.FOLLOW_SYSTEM))
-                        showDarkConfigDialog = false
-                    }
-                    DarkConfigOption("Light Mode", uiState.darkThemeConfig == DarkThemeConfig.LIGHT) {
-                        onEvent(SettingsEvent.SetDarkThemeConfig(DarkThemeConfig.LIGHT))
-                        showDarkConfigDialog = false
-                    }
-                    DarkConfigOption("Dark Mode", uiState.darkThemeConfig == DarkThemeConfig.DARK) {
-                        onEvent(SettingsEvent.SetDarkThemeConfig(DarkThemeConfig.DARK))
-                        showDarkConfigDialog = false
-                    }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text(
+                    "Energy Themes",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+
+                ThemeBrandOption("Grass", currentBrand == ThemeBrand.GRASS, EnergyGrass) {
+                    onBrandSelected(ThemeBrand.GRASS)
+                    onDismiss()
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showDarkConfigDialog = false }) { Text("Cancel") }
+                ThemeBrandOption("Fire", currentBrand == ThemeBrand.FIRE, EnergyFire) {
+                    onBrandSelected(ThemeBrand.FIRE)
+                    onDismiss()
+                }
+                ThemeBrandOption("Water", currentBrand == ThemeBrand.WATER, EnergyWater) {
+                    onBrandSelected(ThemeBrand.WATER)
+                    onDismiss()
+                }
+                ThemeBrandOption(
+                    "Lightning",
+                    currentBrand == ThemeBrand.ELECTRIC,
+                    EnergyLightning
+                ) {
+                    onBrandSelected(ThemeBrand.ELECTRIC)
+                    onDismiss()
+                }
+                ThemeBrandOption("Psychic", currentBrand == ThemeBrand.PSYCHIC, EnergyPsychic) {
+                    onBrandSelected(ThemeBrand.PSYCHIC)
+                    onDismiss()
+                }
+                ThemeBrandOption("Fighting", currentBrand == ThemeBrand.FIGHTING, EnergyFighting) {
+                    onBrandSelected(ThemeBrand.FIGHTING)
+                    onDismiss()
+                }
+                ThemeBrandOption("Darkness", currentBrand == ThemeBrand.DARKNESS, EnergyDarkness) {
+                    onBrandSelected(ThemeBrand.DARKNESS)
+                    onDismiss()
+                }
+                ThemeBrandOption("Metal", currentBrand == ThemeBrand.STEEL, EnergyMetal) {
+                    onBrandSelected(ThemeBrand.STEEL)
+                    onDismiss()
+                }
+                ThemeBrandOption("Fairy", currentBrand == ThemeBrand.FAIRY, EnergyFairy) {
+                    onBrandSelected(ThemeBrand.FAIRY)
+                    onDismiss()
+                }
+                ThemeBrandOption("Dragon", currentBrand == ThemeBrand.DRAGON, EnergyDragon) {
+                    onBrandSelected(ThemeBrand.DRAGON)
+                    onDismiss()
+                }
             }
-        )
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
 
-    if (showApiKeyDialog) {
-        var tempKey by remember { mutableStateOf(uiState.justTcgApiKey) }
-        var passwordVisible by remember { mutableStateOf(false) }
+@Composable
+private fun DarkThemeConfigDialog(
+    currentConfig: DarkThemeConfig,
+    onConfigSelected: (DarkThemeConfig) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Dark Mode Settings") },
+        text = {
+            Column {
+                DarkConfigOption("Follow System", currentConfig == DarkThemeConfig.FOLLOW_SYSTEM) {
+                    onConfigSelected(DarkThemeConfig.FOLLOW_SYSTEM)
+                    onDismiss()
+                }
+                DarkConfigOption("Light Mode", currentConfig == DarkThemeConfig.LIGHT) {
+                    onConfigSelected(DarkThemeConfig.LIGHT)
+                    onDismiss()
+                }
+                DarkConfigOption("Dark Mode", currentConfig == DarkThemeConfig.DARK) {
+                    onConfigSelected(DarkThemeConfig.DARK)
+                    onDismiss()
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
 
-        AlertDialog(
-            onDismissRequest = { showApiKeyDialog = false },
-            title = { Text("JustTCG API Key") },
-            text = {
-                Column {
-                    Text(
-                        "Enter your JustTCG API key to enable vintage pricing and fallback market data.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedTextField(
-                        value = tempKey,
-                        onValueChange = { tempKey = it },
-                        label = { Text("API Key") },
-                        modifier = Modifier.fillMaxWidth(),
-                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Icon(
-                                    imageVector = if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                    contentDescription = null
-                                )
-                            }
+@Composable
+private fun ApiKeyDialog(
+    currentKey: String,
+    onSaveKey: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var tempKey by remember { mutableStateOf(currentKey) }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("JustTCG API Key") },
+        text = {
+            Column {
+                Text(
+                    "Enter your JustTCG API key to enable vintage pricing and fallback market data.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = tempKey,
+                    onValueChange = { tempKey = it },
+                    label = { Text("API Key") },
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                contentDescription = null
+                            )
                         }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    onEvent(SettingsEvent.SetJustTcgApiKey(tempKey))
-                    showApiKeyDialog = false
-                }) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showApiKeyDialog = false }) { Text("Cancel") }
+                    }
+                )
             }
-        )
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSaveKey(tempKey)
+                onDismiss()
+            }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable
