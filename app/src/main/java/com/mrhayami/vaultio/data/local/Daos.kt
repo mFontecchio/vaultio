@@ -27,6 +27,15 @@ data class CardWithDetails(
     val grade: CardGradeEntity? = null
 )
 
+data class WishlistCardWithDetails(
+    @Embedded
+    val wishlistCard: WishlistCardEntity,
+    @Embedded(prefix = "card_")
+    val card: CardEntity,
+    @Embedded(prefix = "set_")
+    val set: SetEntity
+)
+
 @Dao
 interface SetDao {
     @Query("SELECT * FROM sets ORDER BY releaseDate DESC")
@@ -284,4 +293,33 @@ interface CardGradeDao {
 
     @Query("DELETE FROM card_grades WHERE userCardId = :userCardId")
     suspend fun deleteGradeForUserCard(userCardId: Long): Int
+}
+
+@Dao
+interface WishlistDao {
+    @Transaction
+    @Query(
+        """
+        SELECT
+            wishlist_cards.*,
+            c.id as card_id, c.localId as card_localId, c.name as card_name, c.image as card_image, c.setId as card_setId, c.rarity as card_rarity, c.category as card_category, c.types as card_types, c.dexId as card_dexId, c.dexIds as card_dexIds, c.pokemonName as card_pokemonName, c.tcgPlayerId as card_tcgPlayerId, c.pHash as card_pHash, c.lastUpdated as card_lastUpdated,
+            s.id as set_id, s.name as set_name, s.series as set_series, s.logo as set_logo, s.symbol as set_symbol, s.totalCards as set_totalCards, s.officialCards as set_officialCards, s.releaseDate as set_releaseDate, s.isDownloaded as set_isDownloaded, s.lastUpdated as set_lastUpdated
+        FROM wishlist_cards
+        INNER JOIN cards c ON wishlist_cards.cardId = c.id
+        INNER JOIN sets s ON c.setId = s.id
+        """
+    )
+    fun getAllWishlistCards(): Flow<List<WishlistCardWithDetails>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWishlistCard(wishlistCard: WishlistCardEntity): Long
+
+    @Update
+    suspend fun updateWishlistCard(wishlistCard: WishlistCardEntity): Int
+
+    @Query("DELETE FROM wishlist_cards WHERE id = :wishlistId")
+    suspend fun deleteWishlistCard(wishlistId: Long): Int
+
+    @Query("SELECT * FROM wishlist_cards WHERE id = :wishlistId")
+    suspend fun getWishlistCardByIdSync(wishlistId: Long): WishlistCardEntity?
 }

@@ -30,6 +30,9 @@ import com.mrhayami.vaultio.data.local.UserCardDao
 import com.mrhayami.vaultio.data.local.UserCardDto
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
+import com.mrhayami.vaultio.data.local.WishlistCardEntity
+import com.mrhayami.vaultio.data.local.WishlistCardWithDetails
+import com.mrhayami.vaultio.data.local.WishlistDao
 import com.mrhayami.vaultio.data.remote.JustTcgApi
 import com.mrhayami.vaultio.data.remote.JustTcgMetadata
 import com.mrhayami.vaultio.data.remote.JustTcgVariant
@@ -67,6 +70,7 @@ class VaultioRepository(
     private val apiUsageDao: ApiUsageDao,
     private val telemetryDao: TelemetryDao,
     private val collectionSnapshotDao: CollectionSnapshotDao,
+    private val wishlistDao: WishlistDao,
     private val tcgDexApi: TcgDexApi,
     val justTcgApi: JustTcgApi,
     val userPreferencesRepository: UserPreferencesRepository,
@@ -82,6 +86,7 @@ class VaultioRepository(
     val allFolderCardCrossRefs: Flow<List<FolderCardCrossRef>> = userCardDao.getAllFolderCardCrossRefs()
     val allPrices: Flow<List<PriceEntity>> = priceDao.getAllPrices()
     val allVintagePrices: Flow<List<VintagePriceEntity>> = priceDao.getAllVintagePrices()
+    val allWishlistCards: Flow<List<WishlistCardWithDetails>> = wishlistDao.getAllWishlistCards()
 
     fun getUserCardById(userCardId: Long): Flow<CardWithDetails?> = userCardDao.getUserCardById(userCardId)
 
@@ -860,4 +865,62 @@ class VaultioRepository(
 
     fun getAllSnapshots(): Flow<List<CollectionSnapshotEntity>> =
         collectionSnapshotDao.getAllSnapshots()
+
+    suspend fun addCardToWishlist(
+        card: TcgDexCard,
+        wishlistCardEntity: WishlistCardEntity
+    ): Long {
+        val setId = card.id.substringBefore("-")
+        ensureSetIsSynced(setId)
+
+        if (cardDao.getCardById(card.id) == null) {
+            val fullCard = fetchFullCardDetails(card)
+            val (dexIdString, dexIdsJson) = resolveDexIds(fullCard)
+
+            val cardEntity = CardEntity(
+                id = fullCard.id,
+                localId = fullCard.localId,
+                name = fullCard.name,
+                image = fullCard.image,
+                setId = setId,
+                rarity = fullCard.rarity,
+                category = fullCard.category,
+                types = fullCard.types?.joinToString(","),
+                dexId = dexIdString,
+                dexIds = dexIdsJson,
+                pokemonName = PokemonUtils.extractPokemonName(fullCard.name),
+                tcgPlayerId = extractTcgPlayerId(fullCard.pricing?.tcgplayer?.url)
+            )
+            cardDao.insertCards(listOf(cardEntity))
+        }
+
+        val id = wishlistDao.insertWishlistCard(wishlistCardEntity.copy(cardId = card.id))
+        updateCardPrice(card.id)
+        return id
+    }
+
+    suspend fun removeCardFromWishlist(wishlistId: Long) {
+        wishlistDao.deleteWishlistCard(wishlistId)
+    }
+
+    suspend fun moveWishlistCardToCollection(wishlistId: Long): Long? {
+        return withContext(ioDispatcher) {
+            val wishlistCard =
+                wishlistDao.getWishlistCardByIdSync(wishlistId) ?: return@withContext null
+
+            val userCardId = addUserCard(
+                card = getCardDetail(wishlistCard.cardId) ?: return@withContext null,
+                userCardEntity = UserCardEntity(
+                    cardId = wishlistCard.cardId,
+                    quantity = wishlistCard.quantity,
+                    condition = wishlistCard.condition,
+                    printing = wishlistCard.printing,
+                    finish = wishlistCard.finish
+                )
+            )
+
+            wishlistDao.deleteWishlistCard(wishlistId)
+            userCardId
+        }
+    }
 }

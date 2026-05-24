@@ -70,6 +70,7 @@ fun MetadataModal(
     folders: List<FolderEntity> = emptyList(),
     initialCondition: String = PricingUtils.CONDITION_NM,
     onConfirm: (Int, String, String, String, List<Long>) -> Unit,
+    onWishlistConfirm: ((Int, String, String, String) -> Unit)? = null,
     onBack: () -> Unit
 ) {
     var quantity by remember { mutableIntStateOf(1) }
@@ -253,29 +254,55 @@ fun MetadataModal(
             visible = isVisible,
             enter = fadeIn(tween(500, 350)) + slideInVertically(tween(500, 350)) { 20 }
         ) {
-            Button(
-                onClick = {
-                    onConfirm(
-                        quantity,
-                        condition,
-                        printing,
-                        finish,
-                        selectedFolderIds.toList()
+            Column {
+                Button(
+                    onClick = {
+                        onConfirm(
+                            quantity,
+                            condition,
+                            printing,
+                            finish,
+                            selectedFolderIds.toList()
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
                     )
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Text(
-                    "Add to Collection",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                ) {
+                    Text(
+                        "Add to Collection",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                if (onWishlistConfirm != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            onWishlistConfirm(
+                                quantity,
+                                condition,
+                                printing,
+                                finish
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = CircleShape
+                    ) {
+                        Text(
+                            "Add to Wishlist",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
         Spacer(modifier = Modifier.height(32.dp))

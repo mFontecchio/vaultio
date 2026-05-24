@@ -42,6 +42,7 @@ import com.mrhayami.vaultio.ui.stats.StatsScreen
 import com.mrhayami.vaultio.ui.stats.StatsViewModel
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import com.mrhayami.vaultio.ui.walkthrough.WalkthroughScreen
+import com.mrhayami.vaultio.ui.wishlist.WishlistScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,6 +71,7 @@ class MainActivity : ComponentActivity() {
                 val currentRoute = navBackStackEntry?.destination?.route
                 val showBottomBar = listOf(
                     Screen.Collection,
+                    Screen.Wishlist,
                     Screen.Stats,
                     Screen.SetDownloads,
                     Screen.Settings
@@ -123,6 +125,9 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToScanner = { navController.navigate(Screen.Scanner.route) },
                                     onNavigateToCardDetail = { id -> navController.navigate("card_detail/$id") }
                                 ) 
+                            }
+                            composable(Screen.Wishlist.route) {
+                                WishlistScreen(repository = repository)
                             }
                             composable(Screen.Stats.route) {
                                 val viewModel: StatsViewModel = viewModel(

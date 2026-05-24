@@ -18,9 +18,10 @@ import androidx.room.RoomDatabase
         ApiUsageEntity::class,
         TelemetryLogEntity::class,
         CollectionSnapshotEntity::class,
-        CardGradeEntity::class
+        CardGradeEntity::class,
+        WishlistCardEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class VaultioDatabase : RoomDatabase() {
@@ -33,6 +34,7 @@ abstract class VaultioDatabase : RoomDatabase() {
     abstract fun telemetryDao(): TelemetryDao
     abstract fun collectionSnapshotDao(): CollectionSnapshotDao
     abstract fun cardGradeDao(): CardGradeDao
+    abstract fun wishlistDao(): WishlistDao
 
     companion object {
         @Volatile

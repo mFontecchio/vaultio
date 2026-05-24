@@ -2,74 +2,48 @@
 
 ## Start here
 
-- This repo has **no existing agent-specific docs or README** from the standard search patterns; use
-  this file plus `context-map.md` for orientation.
-- `context-map.md` is high-signal but slightly stale: verify against code before editing. Current
-  code has `ui/stats/`, `CollectionSnapshotWorker`, Room DB `version = 12`, and app
-  `versionName = "1.0.6r11"`.
+- This repo uses `context-map.md` as the primary architectural reference. It is kept current (last
+  update: 2026-05-19).
+- Current version: `1.1.1` (versionCode 3).
+- Room DB: `version = 14`.
 
 ## Architecture that matters
 
-- `Vaultio` is a **single-module Android app** (`:app`) with conceptual boundaries only. Main
-  packages live under `app/src/main/java/com/mrhayami/vaultio/`:
-    - `data/` = Room, Retrofit APIs, DataStore prefs, workers, shared utilities
-    - `ui/collection`, `ui/scanner`, `ui/settings`, `ui/stats`, `ui/card_detail` = feature packages
-    - `ui/common/MviViewModel.kt` = shared MVI base class
-- `data/repository/VaultioRepository.kt` is the main service boundary. It owns set sync/download,
-  collection CRUD, import/export, pricing, telemetry, and snapshots. Prefer extending it instead of
-  bypassing it from UI code.
-- There is **no DI framework**. `VaultioApplication.kt` manually creates Room, Retrofit,
-  `UserPreferencesRepository`, and `VaultioRepository`; screens/ViewModels use manual
-  `ViewModelProvider.Factory` creation.
-- Navigation is centralized in `MainActivity.kt`. Important gotcha: `card_detail/{userCardId}` is
-  declared inline there, not in `ui/navigation/Screen.kt`.
+- `Vaultio` is a **single-module Android app** (`:app`). Main packages under
+  `app/src/main/java/com/mrhayami/vaultio/`:
+    - `data/` = Room, Retrofit APIs, DataStore prefs, WorkManager workers, shared utilities.
+    - `ui/` = Feature packages (collection, scanner, settings, stats, card_detail, grading).
+    - `ui/common/MviViewModel.kt` = Shared MVI base class.
+- `data/repository/VaultioRepository.kt` is the main integration hub. It handles set sync,
+  collection CRUD, pricing, telemetry, and collection snapshots.
+- **No DI framework**: Dependencies are manually created in `VaultioApplication.kt`.
+- **Navigation**: Centralized in `MainActivity.kt`. Note that `card_detail/{userCardId}` is declared
+  inline.
 
 ## Core data flows
 
-- Offline catalog data (`sets`, `cards`) is foundational. `SetDownloadsViewModel`
-  refreshes/downloads TCGDex data; scanner and collection features assume local catalog entries
-  exist.
-- Scanner flow (`ui/scanner/`): CameraX frame -> ROI crop in `CameraAnalyzer.kt` -> OCR + pHash ->
-  local DB match by `localId`/set total -> remote TCGDex fallback -> save via
-  `VaultioRepository.addUserCard()`.
-- Scanner has **three modes in code**: normal scan, bulk scan, and page scan (
-  `PageScanProcessor.kt`, `PageScanModels.kt`). Keep new scanner work compatible with all three.
-- Pricing flow: TCGDex is primary, JustTCG is fallback for modern cards and primary for vintage
-  routing (`VintageSets.kt`, `PricingUtils.kt`). Runtime API quota is stored in Room and surfaced in
-  settings.
-- Stats depend on daily collection snapshots: `VaultioApplication.kt` schedules
-  `CollectionSnapshotWorker`; `ui/stats/` renders value history and distributions with Vico charts.
+- **Scanner Flow** (`ui/scanner/`): CameraX -> ROI crop -> Prioritized OCR matching (
+  `number/total` > `prefix+number` > standalone) -> pHash computation.
+- **Disambiguation**: If OCR yields multiple candidates, the system fetches remote images
+  on-the-fly, computes pHashes, and compares Hamming distance (< 12) for an auto-lock.
+- **Consensus**: Requires 3 stable frames for a lock to prevent noise from attack/ability text.
+- **Scanner Modes**: Normal, Bulk (auto-save), and Page (3x3 grid digitization).
+- **Pricing**: TCGDex is primary; JustTCG is fallback/vintage. Quota is tracked in Room.
+- **Stats**: Daily snapshots are stored in `CollectionSnapshotEntity` and visualized with Vico.
+- **AI Grading**: Uses on-device Gemini Nano via `GradingRepository` and `GeminiNanoClient`.
 
 ## Project-specific conventions
 
-- Prefer the repo’s **MVI shape** for stateful screens: `UiState` + sealed `Event`/`Effect` + single
-  `onEvent(...)` entry point. See `CollectionViewModel.kt`, `SettingsViewModel.kt`,
-  `StatsViewModel.kt`.
-- State is usually derived with large `combine(...)` pipelines from Room/DataStore flows; avoid
-  pushing business logic into composables.
-- Room changes usually touch **three files together**: `data/local/Entities.kt`,
-  `data/local/Daos.kt`, and `data/local/VaultioDatabase.kt`. The DB uses
-  `fallbackToDestructiveMigration()`, so schema bumps wipe local data.
-- `PriceMetaEntity` exists in `Entities.kt` but currently has **no DAO or repository usage**; treat
-  it as dormant until fully wired.
-- `UserPreferencesRepository.kt` is more than UI prefs: it controls walkthrough gating, theme,
-  layout, animation toggles, and scanner bulk defaults.
-- `app/build.gradle.kts` reads `JUST_TCG_API_KEY` from `local.properties` into `BuildConfig`, but
-  the pricing code actually reads the API key from DataStore/settings at runtime.
-- `VaultioApplication.kt` enables `HttpLoggingInterceptor.Level.BODY` globally, so avoid adding code
-  that logs secrets or assumes silent networking.
+- **MVI Pattern**: `UiState` + `Event` + `Effect`. See `ScannerViewModel.kt` or
+  `CollectionViewModel.kt`.
+- **Room Changes**: Update `Entities.kt`, `Daos.kt`, and `VaultioDatabase.kt`. Version bumps wipe
+  data due to `fallbackToDestructiveMigration()`.
+- **User Preferences**: Managed via `UserPreferencesRepository.kt` using DataStore.
+- **Logging**: Global `HttpLoggingInterceptor.Level.BODY` is enabled.
 
 ## Useful workflows
 
-- Verified locally on Windows: `./gradlew.bat testDebugUnitTest --console=plain` succeeds.
-- Common commands:
-    - `./gradlew.bat assembleDebug --console=plain`
-    - `./gradlew.bat testDebugUnitTest --console=plain`
-    - `./gradlew.bat connectedDebugAndroidTest --console=plain`
-    - `./gradlew.bat lintDebug --console=plain`
-- Current automated test coverage is minimal: only `ExampleUnitTest.kt` and
-  `ExampleInstrumentedTest.kt` exist. For risky changes, rely on targeted manual verification in
-  addition to Gradle tasks.
-- No `.github/workflows/` CI configuration was found, so local Gradle verification is the source of
-  truth.
+- **Testing**: `./gradlew.bat testDebugUnitTest --console=plain`
+- **Building**: `./gradlew.bat assembleDebug --console=plain`
+- **Unit Tests**: Scanner matching logic is verified in `ScannerMatchingTest.kt`.
 

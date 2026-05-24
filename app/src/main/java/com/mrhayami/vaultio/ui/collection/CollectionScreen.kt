@@ -1479,6 +1479,7 @@ fun StickyControls(
 fun AddCardModal(
     uiState: CollectionUiState,
     onEvent: (CollectionEvent) -> Unit,
+    onWishlistConfirm: ((TcgDexCard, Int, String, String, String) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -1604,6 +1605,11 @@ fun AddCardModal(
             onConfirm = { q, c, p, f, folderIds ->
                 onEvent(CollectionEvent.OnAddUserCard(selectedCard!!, q, c, p, f, folderIds))
                 onDismiss()
+            },
+            onWishlistConfirm = onWishlistConfirm?.let { callback ->
+                { q, c, p, f ->
+                    callback(selectedCard!!, q, c, p, f)
+                }
             },
             onBack = { selectedCard = null }
         )

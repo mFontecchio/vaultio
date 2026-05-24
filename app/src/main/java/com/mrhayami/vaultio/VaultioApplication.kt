@@ -72,6 +72,7 @@ class VaultioApplication : Application() {
             apiUsageDao = database.apiUsageDao(),
             telemetryDao = database.telemetryDao(),
             collectionSnapshotDao = database.collectionSnapshotDao(),
+            wishlistDao = database.wishlistDao(),
             tcgDexApi = tcgDexApi,
             justTcgApi = justTcgApi,
             userPreferencesRepository = userPreferencesRepository

@@ -3,8 +3,12 @@
 ## Purpose
 Single-source-of-truth reference for AI agents working on `Vaultio`. Describes every bounded context, file, entity, relationship, and in-progress plan so agents can orient quickly without reading every source file.
 
-> **Last updated:** 2026-04-12 (rev 3)
-> **Changes in this revision:** added Bulk Scan Mode (fully implemented — `BulkScanModels.kt`, `BulkScanDefaults`/`BulkScanStatus`/`BulkScanEntry`, bulk preference keys in `UserPreferencesRepository`, `deleteLastUserCardInstance` in repository); removed three stale plan references (`plan-dexIdFallbackResolution`, `plan-cardScanningOptimization`, `plan-manaBoxStyleScannerPipeline`); added Theme Infrastructure context (`ui/theme/` package); noted `card_detail/{userCardId}` inline nav route in `MainActivity`; updated plan table to reflect only `plan-bulkScanningMode.prompt.md` on disk; updated app version to `1.0.6r3` (versionCode 3); scanner pipeline marked fully implemented (ROI crop, 120ms throttle, pHash live, multi-frame consensus, dual-zone OCR); confirmed `PriceMetaEntity` still has no dedicated DAO; DB remains at version 11.
+> **Last updated:** 2026-05-19 (rev 4)
+> **Changes in this revision:** Improved scanner accuracy and versatility (prioritized OCR regex,
+> tightened ROI, 3-frame consensus stability); implemented on-the-fly image-based disambiguation using
+> perceptual hashing (pHash) and remote image fetching; added `updateCardPHash` and
+`fetchBitmapFromUrl` to repository; updated app version to `1.1.1` (versionCode 3); DB at version
+14.
 
 ---
 
@@ -16,16 +20,18 @@ app/src/main/java/com/mrhayami/vaultio/
 ├── VaultioApplication.kt                   # DI root: creates DB, Retrofit clients, Repository
 ├── data/
 │   ├── local/
-│   │   ├── Entities.kt                     # Room entities: Set, Card, UserCard, Folder, FolderCardCrossRef, Price, VintagePrice, PriceMeta, ApiUsage, TelemetryLog
-│   │   ├── Daos.kt                         # Room DAOs: SetDao, CardDao, UserCardDao, FolderDao, PriceDao, ApiUsageDao, TelemetryDao + CardWithDetails data class
-│   │   └── VaultioDatabase.kt              # Room DB singleton (version 11, destructive migration)
+│   │   ├── Entities.kt                     # Room entities: Set, Card, UserCard, Folder, FolderCardCrossRef, Price, VintagePrice, PriceMeta, ApiUsage, TelemetryLog, CollectionSnapshot, CardGrade
+│   │   ├── Daos.kt                         # Room DAOs: SetDao, CardDao, UserCardDao, FolderDao, PriceDao, ApiUsageDao, TelemetryDao, CollectionSnapshotDao, CardGradeDao
+│   │   └── VaultioDatabase.kt              # Room DB singleton (version 14, destructive migration)
 │   ├── remote/
 │   │   ├── TcgDexApi.kt                    # Retrofit interface + response models for TCGDex
 │   │   └── JustTcgApi.kt                   # Retrofit interface + response models for JustTCG
 │   ├── repository/
-│   │   └── VaultioRepository.kt            # Central integration hub (catalog, collection, pricing, telemetry)
+│   │   ├── VaultioRepository.kt            # Central integration hub (catalog, collection, pricing, telemetry, image fetch)
+│   │   ├── GradingRepository.kt            # Grading logic using Gemini Nano
+│   │   └── GeminiNanoClient.kt             # Interface for on-device AI operations
 │   ├── workers/
-│   │   └── PriceUpdateWorker.kt            # WorkManager CoroutineWorker for background price refresh
+│   │   └── CollectionSnapshotWorker.kt     # WorkManager worker for daily snapshots
 │   ├── UserPreferencesRepository.kt        # DataStore preferences (theme, sort, view, animations, API key, walkthrough, bulk-scan defaults)
 │   ├── PHash.kt                            # dHash perceptual hashing (64-bit, Hamming distance)
 │   ├── PokemonUtils.kt                     # Static Gen 1–9 dex map (1025 species) + name extraction/normalization
@@ -39,6 +45,8 @@ app/src/main/java/com/mrhayami/vaultio/
     ├── collection/
     │   ├── CollectionScreen.kt             # Compose screen: list/grid/pokédex views, search, filter, multi-select, add card
     │   └── CollectionViewModel.kt          # ViewModel: combines 19 flows into CollectionUiState; defines ViewMode, SortMode, SortDirection, ListSettings, GridSettings, PokedexSettings, FilterSettings, PokedexEntry
+    ├── grading/
+    │   └── GradingViewModel.kt             # ViewModel for card grading flow
     ├── components/
     │   ├── ThreeDCard.kt                   # ThreeDCardContainer: gyro-driven 3D tilt + touch pan/zoom
     │   ├── VisualEffects.kt                # Modifier.holoEffect and finish-specific shader extensions
@@ -47,16 +55,21 @@ app/src/main/java/com/mrhayami/vaultio/
     │   └── Screen.kt                       # Sealed class: Collection, SetDownloads, Settings, Scanner, Walkthrough
     ├── scanner/
     │   ├── BulkScanModels.kt               # BulkScanDefaults, BulkScanStatus enum, BulkScanEntry data class
+    │   ├── PageScanModels.kt               # Page scan (binder) modes and cell models
+    │   ├── PageScanProcessor.kt            # Logic for grid detection and cell cropping
     │   ├── CameraAnalyzer.kt               # ImageAnalysis.Analyzer: ROI crop → pHash → contrast enhance → ML Kit OCR → DetectedLine list
     │   ├── ScannerScreen.kt                # Compose screen: camera preview, ROI overlay, candidate list, bulk-mode HUD
-    │   └── ScannerViewModel.kt             # MVI: ScannerUiState / ScannerEvent; consensus buffer, search pipeline, bulk save logic
+    │   └── ScannerViewModel.kt             # MVI: ScannerUiState / ScannerEvent; consensus buffer, search pipeline, prioritized regex, on-the-fly pHash
     ├── screens/
-    │   ├── CollectionScreen.kt             # ⚠ Scaffold stub — NOT used; real impl is ui/collection/CollectionScreen.kt
-    │   ├── SetDownloadsScreen.kt           # Set catalog browser: download/delete sets
-    │   └── SettingsScreen.kt               # ⚠ Scaffold stub — NOT used; real impl is ui/settings/SettingsScreen.kt
+    │   ├── SetDownloadsViewModel.kt        # ViewModel for set catalog management
+    │   ├── SetDownloadsContract.kt         # Contract for set download screen
+    │   └── SetDownloadsScreen.kt           # Set catalog browser: download/delete sets
     ├── settings/
     │   ├── SettingsScreen.kt               # Compose screen: theme, animations, API key, quota, reset
     │   └── SettingsViewModel.kt            # ViewModel: auto-refreshes quota on open; SettingsUiState
+    ├── stats/
+    │   ├── StatsScreen.kt                  # Collection value history and distribution charts
+    │   └── StatsViewModel.kt               # ViewModel for analytics and charts
     ├── theme/
     │   ├── Color.kt                        # Color palette: Material defaults + 10 Pokémon energy seed colors
     │   ├── Theme.kt                        # VaultioTheme composable: dynamic color, 10 energy themes, status bar sync
@@ -68,12 +81,18 @@ app/src/main/java/com/mrhayami/vaultio/
 ---
 
 ## System Scope
-`Vaultio` is a single-module Android app (Kotlin, Jetpack Compose, Room, Retrofit, CameraX, ML Kit) for managing a Pokémon TCG collection. It supports:
+
+`Vaultio` is a single-module Android app (Kotlin, Jetpack Compose, Room, Retrofit, CameraX, ML Kit,
+Gemini Nano) for managing a Pokémon TCG collection. It supports:
 - maintaining a personal card collection with folders, conditions, finishes, printings
 - downloading and caching set/card catalog data for offline use
-- scanning cards with ROI-cropped OCR, multi-frame consensus, and pHash disambiguation
+- scanning cards with refined prioritized OCR, 3-frame consensus, and on-the-fly pHash
+  disambiguation
 - **bulk scanning mode** for rapid high-confidence card capture with auto-save
+- **page scanning mode** for digitizing full binder pages (3x3 grid)
+- **card grading** using on-device AI (Gemini Nano) for condition assessment
 - fetching market pricing from TCGDex (primary) and JustTCG (fallback + vintage)
+- tracking collection value history with daily snapshots and Vico charts
 - storing user preferences, onboarding state, and API credentials
 - rendering advanced card visuals (3D gyro tilt, animated holofoil shaders)
 - 10 Pokémon energy-type themes + dynamic color + light/dark modes
@@ -90,6 +109,7 @@ flowchart LR
     U --> CAT[Catalog & Offline Set Cache]
     U --> PRC[Pricing & Market Data]
     U --> SET[Settings & Personalization]
+    U --> STA[Stats & Analytics]
 
     ONB --> SET
     ONB --> CAT
@@ -99,6 +119,7 @@ flowchart LR
     SCN --> TCG[TCGDex API]
     SCN --> OCR[ML Kit OCR + CameraX]
     SCN --> VIS[Visual Components]
+    SCN --> GRD[AI Grading]
 
     COL --> CAT
     COL --> PRC
@@ -110,13 +131,16 @@ flowchart LR
 
     CAT --> TCG
 
+    STA --> DB[(Room DB)]
+    STA --> PRC
+
     SET --> DS[DataStore Preferences]
-    COL --> DB[(Room DB)]
+    COL --> DB
     CAT --> DB
     PRC --> DB
     SCN --> DB
 
-    WRK[WorkManager Price Update Worker] --> PRC
+    WRK[WorkManager Snapshot/Price Workers] --> STA
     PRC --> TEL[Telemetry & API Usage]
     TEL --> DB
 

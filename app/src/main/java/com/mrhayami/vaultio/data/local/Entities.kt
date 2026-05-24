@@ -190,3 +190,21 @@ data class CardGradeEntity(
     val reasoning: String,
     val timestamp: Long = System.currentTimeMillis()
 )
+
+@Entity(
+    tableName = "wishlist_cards",
+    indices = [
+        Index(value = ["cardId"]),
+        Index(value = ["dateAdded"])
+    ]
+)
+data class WishlistCardEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val cardId: String,
+    val quantity: Int = 1,
+    val condition: String = PricingUtils.CONDITION_NM,
+    val printing: String = PricingUtils.PRINTING_UNLIMITED,
+    val finish: String = PricingUtils.FINISH_NORMAL,
+    val priority: Int = 1, // 1 = Low, 2 = Medium, 3 = High
+    val dateAdded: Long = System.currentTimeMillis()
+)
