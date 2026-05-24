@@ -76,6 +76,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Deselect
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Folder
@@ -175,6 +176,7 @@ fun CollectionScreen(
     userPreferencesRepository: UserPreferencesRepository,
     onNavigateToScanner: () -> Unit,
     onNavigateToCardDetail: (Long) -> Unit,
+    onNavigateToWishlist: () -> Unit,
     viewModel: CollectionViewModel = viewModel(
         factory = CollectionViewModelFactory(repository, userPreferencesRepository)
     )
@@ -248,6 +250,7 @@ fun CollectionScreen(
         onEvent = viewModel::onEvent,
         onNavigateToScanner = onNavigateToScanner,
         onNavigateToCardDetail = onNavigateToCardDetail,
+        onNavigateToWishlist = onNavigateToWishlist,
         importLauncher = importLauncher
     )
 }
@@ -260,6 +263,7 @@ fun CollectionContent(
     onEvent: (CollectionEvent) -> Unit,
     onNavigateToScanner: () -> Unit,
     onNavigateToCardDetail: (Long) -> Unit,
+    onNavigateToWishlist: () -> Unit,
     importLauncher: ActivityResultLauncher<Array<String>>,
     modifier: Modifier = Modifier
 ) {
@@ -373,6 +377,10 @@ fun CollectionContent(
                         if (!uiState.isSearchBarVisible) {
                             IconButton(onClick = { onEvent(CollectionEvent.OnToggleSearchBar) }) {
                                 Icon(Icons.Rounded.Search, contentDescription = "Search")
+                            }
+
+                            IconButton(onClick = onNavigateToWishlist) {
+                                Icon(Icons.Rounded.FavoriteBorder, contentDescription = "Wishlist")
                             }
                             
                             var showMenu by remember { mutableStateOf(false) }
@@ -1300,6 +1308,7 @@ private fun CollectionContentPreview() {
             onEvent = {},
             onNavigateToScanner = {},
             onNavigateToCardDetail = {},
+            onNavigateToWishlist = {},
             importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {}
         )
     }
@@ -1319,6 +1328,7 @@ private fun CollectionContentEmptyPreview() {
             allVintagePrices = emptyList(),
             onNavigateToScanner = {},
             onNavigateToCardDetail = {},
+            onNavigateToWishlist = {},
             importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {},
             onEvent = {},
             modifier = Modifier

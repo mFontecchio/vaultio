@@ -71,7 +71,6 @@ class MainActivity : ComponentActivity() {
                 val currentRoute = navBackStackEntry?.destination?.route
                 val showBottomBar = listOf(
                     Screen.Collection,
-                    Screen.Wishlist,
                     Screen.Stats,
                     Screen.SetDownloads,
                     Screen.Settings
@@ -123,11 +122,15 @@ class MainActivity : ComponentActivity() {
                                     repository = repository,
                                     userPreferencesRepository = userPreferencesRepository,
                                     onNavigateToScanner = { navController.navigate(Screen.Scanner.route) },
-                                    onNavigateToCardDetail = { id -> navController.navigate("card_detail/$id") }
+                                    onNavigateToCardDetail = { id -> navController.navigate("card_detail/$id") },
+                                    onNavigateToWishlist = { navController.navigate(Screen.Wishlist.route) }
                                 ) 
                             }
                             composable(Screen.Wishlist.route) {
-                                WishlistScreen(repository = repository)
+                                WishlistScreen(
+                                    repository = repository,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
                             }
                             composable(Screen.Stats.route) {
                                 val viewModel: StatsViewModel = viewModel(

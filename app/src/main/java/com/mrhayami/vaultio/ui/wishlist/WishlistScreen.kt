@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.ShoppingCart
@@ -63,6 +64,7 @@ import java.util.Locale
 @Composable
 fun WishlistScreen(
     repository: VaultioRepository,
+    onNavigateBack: () -> Unit,
     viewModel: WishlistViewModel = viewModel(factory = WishlistViewModelFactory(repository))
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
@@ -97,6 +99,14 @@ fun WishlistScreen(
                             } Est. Value",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = "Back"
                         )
                     }
                 }
