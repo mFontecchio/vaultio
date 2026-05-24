@@ -16,14 +16,11 @@ import com.mrhayami.vaultio.ui.common.MviViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
@@ -41,7 +38,7 @@ class SettingsViewModel(
             val apiKey = userPreferencesRepository.justTcgApiKey.firstOrNull()
             if (!apiKey.isNullOrEmpty()) {
                 val lastSync = repository.getApiUsageDetails()?.lastSyncedAt ?: 0L
-                if (System.currentTimeMillis() - lastSync > 5 * 60_000L) {
+                if (System.currentTimeMillis() - lastSync > 24 * 60 * 60_000L) {
                     _isRefreshing.value = true
                     repository.refreshApiUsageFromApi()
                     _isRefreshing.value = false

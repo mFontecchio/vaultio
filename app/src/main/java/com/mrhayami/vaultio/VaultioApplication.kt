@@ -12,6 +12,7 @@ import com.mrhayami.vaultio.data.repository.GeminiNanoClientImpl
 import com.mrhayami.vaultio.data.repository.GradingRepository
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.data.workers.CollectionSnapshotWorker
+import com.mrhayami.vaultio.data.workers.PriceUpdateWorker
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
@@ -85,6 +86,7 @@ class VaultioApplication : Application() {
         )
 
         scheduleDailySnapshot()
+        scheduleDailyPriceUpdate()
     }
 
     private fun scheduleDailySnapshot() {
@@ -94,6 +96,18 @@ class VaultioApplication : Application() {
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "daily_collection_snapshot",
+            ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
+    }
+
+    private fun scheduleDailyPriceUpdate() {
+        val workRequest = PeriodicWorkRequestBuilder<PriceUpdateWorker>(24, TimeUnit.HOURS)
+            .addTag("price_update")
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "daily_price_update",
             ExistingPeriodicWorkPolicy.KEEP,
             workRequest
         )
