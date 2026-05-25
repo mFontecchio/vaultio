@@ -1,9 +1,13 @@
 package com.mrhayami.vaultio.data.repository
 
+import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
 import android.util.Log
 import androidx.sqlite.db.SimpleSQLiteQuery
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.mrhayami.vaultio.data.PokemonUtils
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.UserPreferencesRepository
@@ -34,6 +38,7 @@ import com.mrhayami.vaultio.data.local.WishlistCardEntity
 import com.mrhayami.vaultio.data.local.WishlistCardWithDetails
 import com.mrhayami.vaultio.data.local.WishlistDao
 import com.mrhayami.vaultio.data.remote.JustTcgApi
+import com.mrhayami.vaultio.data.remote.JustTcgBatchRequestItem
 import com.mrhayami.vaultio.data.remote.JustTcgMetadata
 import com.mrhayami.vaultio.data.remote.JustTcgVariant
 import com.mrhayami.vaultio.data.remote.TcgDexApi
@@ -48,20 +53,19 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.flatMapMerge
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 private const val TAG = "VaultioRepository"
 
+/**
+ * Main integration hub for the app. Handles data orchestration between Room, Retrofit,
+ * DataStore, and external APIs.
+ */
 class VaultioRepository(
+    private val context: Context,
     private val setDao: SetDao,
     private val cardDao: CardDao,
     private val userCardDao: UserCardDao,
@@ -74,12 +78,16 @@ class VaultioRepository(
     private val tcgDexApi: TcgDexApi,
     val justTcgApi: JustTcgApi,
     val userPreferencesRepository: UserPreferencesRepository,
+    private val imageLoader: ImageLoader,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     private val moshi = Moshi.Builder().build()
-    private val listIntAdapter = moshi.adapter<List<Int>>(Types.newParameterizedType(List::class.java, Int::class.javaObjectType))
+    private val listIntAdapter = moshi.adapter<List<Int>>(
+        Types.newParameterizedType(List::class.java, Int::class.javaObjectType)
+    )
     private val collectionExportAdapter = moshi.adapter(CollectionExportDto::class.java)
 
+    // region Catalog Observables
     val allSets: Flow<List<SetEntity>> = setDao.getAllSets()
     val allUserCards: Flow<List<CardWithDetails>> = userCardDao.getAllUserCardsWithDetails()
     val allFolders: Flow<List<FolderEntity>> = folderDao.getAllFolders()
@@ -87,7 +95,9 @@ class VaultioRepository(
     val allPrices: Flow<List<PriceEntity>> = priceDao.getAllPrices()
     val allVintagePrices: Flow<List<VintagePriceEntity>> = priceDao.getAllVintagePrices()
     val allWishlistCards: Flow<List<WishlistCardWithDetails>> = wishlistDao.getAllWishlistCards()
+    // endregion
 
+    // region User Card Retrieval
     fun getUserCardById(userCardId: Long): Flow<CardWithDetails?> = userCardDao.getUserCardById(userCardId)
 
     suspend fun getUserCardByIdSync(userCardId: Long): CardWithDetails? = userCardDao.getUserCardByIdSync(userCardId)
@@ -158,7 +168,6 @@ class VaultioRepository(
         }
 
         if (filterSettings.types.isNotEmpty()) {
-            // Types are comma-separated in DB
             queryBuilder.append(" AND (")
             filterSettings.types.forEachIndexed { index, type ->
                 if (index > 0) queryBuilder.append(" OR ")
@@ -171,7 +180,7 @@ class VaultioRepository(
         val orderBy = when (sortMode) {
             SortMode.NAME -> "c.name"
             SortMode.SET -> "s.releaseDate ${if (sortDirection == SortDirection.DESCENDING) "DESC" else "ASC"}, c.localId"
-            SortMode.VALUE -> "COALESCE(uc.manualPrice, 0.0)" // Note: Market prices are in a different table, so this only sorts by manual price or 0
+            SortMode.VALUE -> "COALESCE(uc.manualPrice, 0.0)"
             SortMode.DATE_ADDED -> "uc.dateAdded"
             SortMode.RARITY -> "c.rarity"
             SortMode.QUANTITY -> "uc.quantity"
@@ -180,8 +189,6 @@ class VaultioRepository(
 
         val direction = if (sortDirection == SortDirection.DESCENDING) "DESC" else "ASC"
 
-        // Custom handling for VALUE sorting if it's not manual price requires a more complex join
-        // For now, we'll keep the ViewModel-side sorting for VALUE since it depends on the priceMap
         if (sortMode != SortMode.VALUE) {
             queryBuilder.append(" ORDER BY $orderBy $direction")
         }
@@ -189,7 +196,9 @@ class VaultioRepository(
         val query = SimpleSQLiteQuery(queryBuilder.toString(), args.toTypedArray())
         return userCardDao.getFilteredUserCards(query)
     }
+    // endregion
 
+    // region Set Management
     suspend fun refreshSets() {
         runCatching {
             val currentSets = setDao.getSetsSync()
@@ -248,7 +257,6 @@ class VaultioRepository(
             cardDao.insertCards(cardEntities)
             setDao.updateDownloadStatus(setId, true)
             
-            // Ensure set entity has icons
             val currentSet = setDao.getSetById(setId)
             if (currentSet?.logo?.contains("http") == false) {
                 refreshSets() 
@@ -258,6 +266,13 @@ class VaultioRepository(
         }
     }
 
+    suspend fun deleteDownloadedSet(setId: String) {
+        setDao.updateDownloadStatus(setId, false)
+        cardDao.deleteCardsBySet(setId)
+    }
+    // endregion
+
+    // region Card & Scanner Helpers
     private fun TcgDexCard.toEntity(setId: String): CardEntity {
         val apiDexIds = dexId?.takeIf { it.isNotEmpty() }
         val resolvedDexIds = apiDexIds ?: if (category?.isPokemonCategory() == true) {
@@ -282,30 +297,28 @@ class VaultioRepository(
 
     private fun String.isPokemonCategory() = this == "Pokemon" || this == "Pokémon"
 
-    suspend fun deleteDownloadedSet(setId: String) {
-        setDao.updateDownloadStatus(setId, false)
-        cardDao.deleteCardsBySet(setId)
-    }
-
     suspend fun searchLocalCards(localId: String): List<CardEntity> = cardDao.getCardsByLocalId(localId)
 
     suspend fun searchLocalCardsWithTotal(localId: String, total: Int): List<CardEntity> = 
         cardDao.getCardsByLocalIdAndSetTotal(localId, total)
 
-    private val okHttpClient = OkHttpClient.Builder().build()
-
     suspend fun updateCardPHash(cardId: String, pHash: Long) = withContext(ioDispatcher) {
         cardDao.updateCardPHash(cardId, pHash)
     }
 
+    /**
+     * Fetches a bitmap from a URL using Coil's ImageLoader for caching and performance.
+     */
     suspend fun fetchBitmapFromUrl(url: String): Bitmap? = withContext(ioDispatcher) {
         try {
-            val request = Request.Builder().url(url).build()
-            okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext null
-                val body = response.body ?: return@withContext null
-                BitmapFactory.decodeStream(body.byteStream())
-            }
+            val request = ImageRequest.Builder(context)
+                .data(url)
+                .allowHardware(false)
+                .build()
+            val result = imageLoader.execute(request)
+            if (result is SuccessResult) {
+                (result.drawable as? BitmapDrawable)?.bitmap
+            } else null
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching bitmap from $url", e)
             null
@@ -335,7 +348,9 @@ class VaultioRepository(
         Log.e(TAG, "Error fetching card detail for $cardId", e)
         null
     }
+    // endregion
 
+    // region Collection Operations
     suspend fun addUserCard(
         card: TcgDexCard,
         userCardEntity: UserCardEntity,
@@ -415,8 +430,6 @@ class VaultioRepository(
 
         if (dexIdString == null && fullCard.category?.isPokemonCategory() == true) {
             val normalizedName = PokemonUtils.extractPokemonName(fullCard.name)
-            
-            // Try local recovery
             val localMatch = cardDao.getCardsByPokemonName(normalizedName).firstOrNull()
                 ?: cardDao.searchCardsByName(normalizedName).find { it.dexId != null }
 
@@ -424,13 +437,11 @@ class VaultioRepository(
                 dexIdString = localMatch.dexId
                 dexIdsJson = localMatch.dexIds
             } else {
-                // Try network recovery
                 val networkDex = attemptNetworkDexRecovery(normalizedName)
                 if (networkDex != null) {
                     dexIdString = networkDex.first
                     dexIdsJson = networkDex.second
                 } else {
-                    // Static fallback
                     val staticIds = PokemonUtils.lookupDexIds(fullCard.name)
                     if (staticIds.isNotEmpty()) {
                         dexIdString = staticIds.first().toString()
@@ -473,10 +484,8 @@ class VaultioRepository(
             
             if (original.quantity <= 1) return@withContext null
 
-            // 1. Decrease quantity of original
             userCardDao.updateUserCard(original.copy(quantity = original.quantity - 1))
 
-            // 2. Check if a card with the new attributes already exists
             val existing = userCardDao.findExistingUserCard(
                 cardId = original.cardId,
                 condition = newCondition,
@@ -485,11 +494,9 @@ class VaultioRepository(
             )
 
             val newId = if (existing != null) {
-                // Add to existing
                 userCardDao.updateUserCard(existing.copy(quantity = existing.quantity + 1))
                 existing.id
             } else {
-                // Create new entry
                 val newEntry = UserCardEntity(
                     cardId = original.cardId,
                     quantity = 1,
@@ -499,8 +506,6 @@ class VaultioRepository(
                     dateAdded = System.currentTimeMillis()
                 )
                 val insertedId = userCardDao.insertUserCard(newEntry)
-                
-                // Copy folder associations from the original card
                 val originalFolders = userCardDao.getFolderIdsForUserCardSync(userCardId)
                 if (originalFolders.isNotEmpty()) {
                     userCardDao.insertFolderCardCrossRefs(originalFolders.map { 
@@ -509,10 +514,7 @@ class VaultioRepository(
                 }
                 insertedId
             }
-            
-            // 3. Ensure price is updated for the new finish if needed
             updateCardPrice(original.cardId)
-            
             newId
         }
     }
@@ -539,7 +541,9 @@ class VaultioRepository(
             }
         }
     }
+    // endregion
 
+    // region Folder Management
     suspend fun addFolder(name: String, icon: String?, color: String?) {
         folderDao.insertFolder(FolderEntity(name = name, icon = icon, color = color))
     }
@@ -564,7 +568,9 @@ class VaultioRepository(
     suspend fun removeCardFromFolder(userCardId: Long, folderId: Long) {
         userCardDao.removeCardFromFolder(userCardId, folderId)
     }
+    // endregion
 
+    // region Pricing Operations
     suspend fun updateCardPrice(cardId: String) {
         val card = cardDao.getCardById(cardId) ?: return
         
@@ -682,30 +688,60 @@ class VaultioRepository(
         return (usage?.dailyRemaining ?: 100) > 0
     }
 
+    /**
+     * Updates prices for a batch of cards efficiently using JustTCG's batch API
+     * where possible. Fallbacks to individual TCGdex calls if necessary.
+     */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     suspend fun updatePricesBatch(cards: List<CardEntity>) = withContext(ioDispatcher) {
+        val apiKey = getJustTcgApiKey()
+        val canUseJustTcg = canUseJustTcg() && apiKey != null
+        
         val (vintage, modern) = cards.partition { VintageSets.isVintageSet(it.setId) }
 
-        // Use a Flow with flatMapMerge to limit concurrency and avoid overloading the network/API
-        val concurrency = 4
+        // 1. Process Modern Cards
+        if (canUseJustTcg) {
+            val (batchable, individual) = modern.partition { it.tcgPlayerId != null }
 
-        (modern.map { it.id } + vintage.map { it.id }).asFlow()
-            .flatMapMerge(concurrency = concurrency) { cardId ->
-                flow {
-                    val card = cards.find { it.id == cardId }
-                    if (card != null) {
-                        if (VintageSets.isVintageSet(card.setId)) {
-                            updateVintageCardPrice(card)
-                        } else {
-                            updateCardPrice(card.id)
+            batchable.chunked(50).forEach { chunk ->
+                runCatching {
+                    val startTime = System.currentTimeMillis()
+                    val items =
+                        chunk.map { JustTcgBatchRequestItem(tcgplayerId = it.tcgPlayerId!!) }
+                    val response = justTcgApi.getCardsBatch(apiKey!!, items)
+                    logTelemetry(
+                        "justtcg",
+                        "cards/batch",
+                        200,
+                        System.currentTimeMillis() - startTime
+                    )
+                    syncApiUsage(response.metadata)
+
+                    response.data.forEach { jCard ->
+                        val matchingLocalCards =
+                            chunk.filter { it.tcgPlayerId == jCard.tcgplayerId }
+                        matchingLocalCards.forEach { localCard ->
+                            val prices = jCard.variants.mapNotNull {
+                                PricingUtils.mapJustTcgVariantToPrice(localCard.id, it)
+                            }
+                            if (prices.isNotEmpty()) priceDao.insertPrices(prices)
                         }
                     }
-                    emit(Unit)
+                }.onFailure { e ->
+                    Log.e(TAG, "JustTCG batch update failed", e)
                 }
             }
-            .collect()
-    }
+            individual.forEach { updateCardPrice(it.id) }
+        } else {
+            modern.forEach { updateCardPrice(it.id) }
+        }
 
+        // 2. Process Vintage Cards
+        vintage.forEach { updateVintageCardPrice(it) }
+    }
+    // endregion
+
+    // region API Usage & Telemetry
     fun getApiUsageFlow(): Flow<ApiUsageEntity?> {
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
         return apiUsageDao.getUsageFlow(today)
@@ -749,7 +785,9 @@ class VaultioRepository(
     suspend fun logTelemetry(api: String, endpoint: String, status: Int, latency: Long) {
         telemetryDao.insertLog(TelemetryLogEntity(api = api, endpoint = endpoint, status = status, latency = latency))
     }
+    // endregion
 
+    // region Import/Export & Snapshots
     suspend fun exportCollectionJson(folderIds: List<Long>? = null): String = withContext(ioDispatcher) {
         val folders = if (folderIds == null) {
             folderDao.getAllFolders().firstOrNull() ?: emptyList()
@@ -763,7 +801,6 @@ class VaultioRepository(
         val userCards = if (folderIds == null) {
             allUserCards
         } else {
-            // Filter user cards that are in the selected folders
             val userCardIdsInFolders = allCrossRefs
                 .filter { folderIds.contains(it.folderId) }
                 .map { it.userCardId }
@@ -797,8 +834,6 @@ class VaultioRepository(
     suspend fun importCollectionFromJson(json: String): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             val export = collectionExportAdapter.fromJson(json) ?: throw Exception("Invalid JSON")
-            
-            // Map old folder IDs to new folder IDs
             val folderIdMap = mutableMapOf<Long, Long>()
             export.folders.forEach { folderDto ->
                 val newId = folderDao.insertFolder(FolderEntity(
@@ -809,13 +844,10 @@ class VaultioRepository(
                 folderIdMap[folderDto.id] = newId
             }
 
-            // Import user cards and their folder associations
             export.userCards.forEach { cardDto ->
-                // Ensure the card entity exists (or at least the set is synced)
                 val setId = cardDto.cardId.substringBefore("-")
                 ensureSetIsSynced(setId)
                 
-                // We don't necessarily need to download the whole set, but the card detail is nice
                 if (cardDao.getCardById(cardDto.cardId) == null) {
                     val remoteCard = getCardDetail(cardDto.cardId)
                     if (remoteCard != null) {
@@ -834,7 +866,6 @@ class VaultioRepository(
                     dateAdded = cardDto.dateAdded
                 ))
 
-                // Restore folder associations
                 val newFolderIds = cardDto.folderIds.mapNotNull { folderIdMap[it] }
                 if (newFolderIds.isNotEmpty()) {
                     val crossRefs = newFolderIds.map { FolderCardCrossRef(folderId = it, userCardId = userCardId) }
@@ -859,7 +890,6 @@ class VaultioRepository(
         userCards.forEach { details ->
             val userCard = details.userCard
             val card = details.card
-
             totalQuantity += userCard.quantity
 
             val price = if (userCard.manualPrice != null) {
@@ -885,7 +915,9 @@ class VaultioRepository(
 
     fun getAllSnapshots(): Flow<List<CollectionSnapshotEntity>> =
         collectionSnapshotDao.getAllSnapshots()
+    // endregion
 
+    // region Wishlist Operations
     suspend fun addCardToWishlist(
         card: TcgDexCard,
         wishlistCardEntity: WishlistCardEntity
@@ -927,7 +959,6 @@ class VaultioRepository(
         return withContext(ioDispatcher) {
             val wishlistCard =
                 wishlistDao.getWishlistCardByIdSync(wishlistId) ?: return@withContext null
-
             val userCardId = addUserCard(
                 card = getCardDetail(wishlistCard.cardId) ?: return@withContext null,
                 userCardEntity = UserCardEntity(
@@ -938,9 +969,9 @@ class VaultioRepository(
                     finish = wishlistCard.finish
                 )
             )
-
             wishlistDao.deleteWishlistCard(wishlistId)
             userCardId
         }
     }
+    // endregion
 }

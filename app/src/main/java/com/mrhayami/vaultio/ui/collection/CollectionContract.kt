@@ -5,6 +5,12 @@ import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.persistentSetOf
 
 enum class ViewMode { LIST, GRID, POKEDEX }
 enum class SortMode { NAME, SET, VALUE, DATE_ADDED, RARITY, QUANTITY, NUMBER }
@@ -31,11 +37,11 @@ data class PokedexSettings(
 
 @Immutable
 data class FilterSettings(
-    val rarities: Set<String> = emptySet(),
-    val categories: Set<String> = emptySet(),
-    val types: Set<String> = emptySet(),
-    val conditions: Set<String> = emptySet(),
-    val finishes: Set<String> = emptySet()
+    val rarities: ImmutableSet<String> = persistentSetOf(),
+    val categories: ImmutableSet<String> = persistentSetOf(),
+    val types: ImmutableSet<String> = persistentSetOf(),
+    val conditions: ImmutableSet<String> = persistentSetOf(),
+    val finishes: ImmutableSet<String> = persistentSetOf()
 )
 
 @Immutable
@@ -61,34 +67,34 @@ data class CollectionUiState(
     val sortMode: SortMode = SortMode.DATE_ADDED,
     val sortDirection: SortDirection = SortDirection.DESCENDING,
     val filterSettings: FilterSettings = FilterSettings(),
-    val userCards: List<CardWithDetails> = emptyList(),
-    val filteredUserCards: List<CardUiModel> = emptyList(),
-    val pokedexEntries: List<PokedexEntry> = emptyList(),
-    val folders: List<FolderEntity> = emptyList(),
+    val userCards: ImmutableList<CardWithDetails> = persistentListOf(),
+    val filteredUserCards: ImmutableList<CardUiModel> = persistentListOf(),
+    val pokedexEntries: ImmutableList<PokedexEntry> = persistentListOf(),
+    val folders: ImmutableList<FolderEntity> = persistentListOf(),
     val selectedFolderId: Long? = null,
     val searchQuery: String = "",
     val isSearchBarVisible: Boolean = false,
     val isLoading: Boolean = true,
-    val searchResults: List<TcgDexCard> = emptyList(),
+    val searchResults: ImmutableList<TcgDexCard> = persistentListOf(),
     val isSearching: Boolean = false,
-    val selectedIds: Set<Long> = emptySet(),
+    val selectedIds: ImmutableSet<Long> = persistentSetOf(),
     val isSelectionMode: Boolean = false,
     val selectedDexId: Int? = null,
-    val collectedCardsForDex: List<CardUiModel> = emptyList(),
+    val collectedCardsForDex: ImmutableList<CardUiModel> = persistentListOf(),
     val listSettings: ListSettings = ListSettings(),
     val gridSettings: GridSettings = GridSettings(),
     val pokedexSettings: PokedexSettings = PokedexSettings(),
     val preferSetLogo: Boolean = true,
-    val sets: Map<String, SetEntity> = emptyMap(),
+    val sets: ImmutableMap<String, SetEntity> = persistentMapOf(),
     val showSaveSuccess: Boolean = false,
     // Available filter options based on current collection
-    val availableRarities: List<String> = emptyList(),
-    val availableCategories: List<String> = emptyList(),
-    val availableTypes: List<String> = emptyList(),
+    val availableRarities: ImmutableList<String> = persistentListOf(),
+    val availableCategories: ImmutableList<String> = persistentListOf(),
+    val availableTypes: ImmutableList<String> = persistentListOf(),
     val totalValue: Double = 0.0,
     val totalCount: Int = 0,
     val totalQuantity: Int = 0,
-    val newSetsToDownload: List<SetEntity> = emptyList(),
+    val newSetsToDownload: ImmutableList<SetEntity> = persistentListOf(),
     val isDownloadingNewSets: Boolean = false
 )
 

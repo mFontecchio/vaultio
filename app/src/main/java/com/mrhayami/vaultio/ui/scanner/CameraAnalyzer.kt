@@ -24,7 +24,10 @@ class CameraAnalyzer(
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private var lastScanTime = 0L
-    private val scanIntervalMs = 120L 
+    private val scanIntervalMs = 120L
+
+    private var reusableCropped: Bitmap? = null
+    private var reusableEnhanced: Bitmap? = null
 
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     override fun analyze(imageProxy: ImageProxy) {
@@ -42,28 +45,52 @@ class CameraAnalyzer(
         }
 
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+
+        // Calculate crop rect in the ORIGINAL image coordinates (pre-rotation)
+        // Wait, ScannerGeometry.getCropRect expects rotated dimensions.
+        // Let's stick to the current logic but optimize the allocations.
+        
         val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
         val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-        
-        // Viewport Alignment: Calculate visible area of the bitmap based on screen aspect ratio
+
+        // bitmap is no longer needed after rotation if we created a new one
+        if (rotated != bitmap) bitmap.recycle()
+
         val cropRect = ScannerGeometry.getCropRect(
             bitmapWidth = rotated.width,
             bitmapHeight = rotated.height,
             viewportWidth = viewportAspectRatio,
-            viewportHeight = 1f, // viewportAspectRatio is already width/height, so we can pass 1f as height
-            isPageScanMode = false // CameraAnalyzer is currently only used for single-card/bulk mode
+            viewportHeight = 1f,
+            isPageScanMode = false
         )
-        
-        val cropped = try {
-            Bitmap.createBitmap(
+
+        val cropped = if (reusableCropped != null &&
+            reusableCropped!!.width == cropRect.width() &&
+            reusableCropped!!.height == cropRect.height()
+        ) {
+            val canvas = android.graphics.Canvas(reusableCropped!!)
+            canvas.drawBitmap(
                 rotated,
-                cropRect.left,
-                cropRect.top,
-                cropRect.width(),
-                cropRect.height()
+                cropRect,
+                Rect(0, 0, cropRect.width(), cropRect.height()),
+                null
             )
-        } catch (e: Exception) {
-            rotated
+            reusableCropped!!
+        } else {
+            reusableCropped?.recycle()
+            val newCropped = try {
+                Bitmap.createBitmap(
+                    rotated,
+                    cropRect.left,
+                    cropRect.top,
+                    cropRect.width(),
+                    cropRect.height()
+                )
+            } catch (e: Exception) {
+                rotated
+            }
+            reusableCropped = if (newCropped != rotated) newCropped else null
+            newCropped
         }
 
         // Compute perceptual hash for disambiguation
@@ -73,7 +100,9 @@ class CameraAnalyzer(
             null
         }
 
-        val enhanced = ScannerUtils.enhanceImage(cropped)
+        val enhanced = ScannerUtils.enhanceImage(cropped, reusableEnhanced)
+        reusableEnhanced = enhanced
+        
         val image = InputImage.fromBitmap(enhanced, 0)
 
         recognizer.process(image)
@@ -93,6 +122,8 @@ class CameraAnalyzer(
             }
             .addOnFailureListener { e -> e.printStackTrace() }
             .addOnCompleteListener {
+                // If rotated was a separate bitmap, we should probably recycle it here or manage it
+                if (rotated != cropped && !rotated.isRecycled) rotated.recycle()
                 imageProxy.close()
             }
     }

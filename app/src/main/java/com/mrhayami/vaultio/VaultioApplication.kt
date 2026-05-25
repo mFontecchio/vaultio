@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import coil.imageLoader
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.VaultioDatabase
 import com.mrhayami.vaultio.data.remote.JustTcgApi
@@ -65,6 +66,7 @@ class VaultioApplication : Application() {
         val justTcgApi = justTcgRetrofit.create(JustTcgApi::class.java)
 
         repository = VaultioRepository(
+            context = this,
             setDao = database.setDao(),
             cardDao = database.cardDao(),
             userCardDao = database.userCardDao(),
@@ -76,7 +78,8 @@ class VaultioApplication : Application() {
             wishlistDao = database.wishlistDao(),
             tcgDexApi = tcgDexApi,
             justTcgApi = justTcgApi,
-            userPreferencesRepository = userPreferencesRepository
+            userPreferencesRepository = userPreferencesRepository,
+            imageLoader = this.imageLoader
         )
 
         gradingRepository = GradingRepository(

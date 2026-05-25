@@ -18,4 +18,5 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object Scanner : Screen("scanner", "Scanner", Icons.Rounded.Scanner)
     object Walkthrough : Screen("walkthrough", "Welcome")
     object Grading : Screen("grading/{userCardId}", "AI Grading")
+    object CardDetail : Screen("card_detail/{userCardId}", "Card Detail")
 }

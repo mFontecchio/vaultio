@@ -35,6 +35,7 @@ abstract class VaultioDatabase : RoomDatabase() {
     abstract fun collectionSnapshotDao(): CollectionSnapshotDao
     abstract fun cardGradeDao(): CardGradeDao
     abstract fun wishlistDao(): WishlistDao
+    abstract fun priceMetaDao(): PriceMetaDao
 
     companion object {
         @Volatile

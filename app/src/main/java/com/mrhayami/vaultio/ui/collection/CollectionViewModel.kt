@@ -16,6 +16,9 @@ import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.common.MviViewModel
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -151,98 +154,125 @@ class CollectionViewModel(
     }.flowOn(Dispatchers.Default)
 
     init {
-        // Observe all data and update state
+        // 1. UI State Changes
         combine(
-            listOf(
-                userPreferencesRepository.viewMode,
-                userPreferencesRepository.sortMode,
-                _sortDirection,
-                _filterSettings,
-                _searchQuery,
-                _selectedFolderId,
-                _isSearchBarVisible,
-                _allCards,
-                _allFolders,
-                _filteredCards,
-                _pokedexEntries,
-                _stats,
-                userPreferencesRepository.listSettings,
-                userPreferencesRepository.gridSettings,
-                userPreferencesRepository.pokedexSettings,
-                userPreferencesRepository.preferSetLogo,
-                _allSets,
-                _showSaveSuccess,
-                _selectionState,
-                _remoteSearchResults,
-                _isRemoteSearching,
-                _newSetsToDownload,
-                _isDownloadingNewSets,
-                _selectedDexId,
-                _collectedCardsForDex
-            )
+            userPreferencesRepository.viewMode,
+            _searchQuery,
+            _selectedFolderId,
+            _isSearchBarVisible,
+            _selectionState,
+            _showSaveSuccess,
+            _selectedDexId
         ) { flows ->
             val viewMode = flows[0] as ViewMode
-            val sortMode = flows[1] as SortMode
-            val sortDirection = flows[2] as SortDirection
-            val filterSettings = flows[3] as FilterSettings
-            val searchQuery = flows[4] as String
-            val selectedFolderId = flows[5] as Long?
-            val isSearchBarVisible = flows[6] as Boolean
-            val allCards = flows[7] as List<CardWithDetails>
-            val folders = flows[8] as List<FolderEntity>
-            val filteredCards = flows[9] as List<CardUiModel>
-            val pokedexEntries = flows[10] as List<PokedexEntry>
-            val stats = flows[11] as Triple<Double, Int, Int>
-            val listSettings = flows[12] as ListSettings
-            val gridSettings = flows[13] as GridSettings
-            val pokedexSettings = flows[14] as PokedexSettings
-            val preferSetLogo = flows[15] as Boolean
-            val setsMap = flows[16] as Map<String, SetEntity>
-            val showSaveSuccess = flows[17] as Boolean
-            val selectedIds = flows[18] as Set<Long>
-            val remoteResults = flows[19] as List<TcgDexCard>
-            val isRemoteSearching = flows[20] as Boolean
-            val newSets = flows[21] as List<SetEntity>
-            val isDownloading = flows[22] as Boolean
-            val selectedDexId = flows[23] as Int?
-            val collectedCardsForDex = flows[24] as List<CardUiModel>
-
-            // Available filters logic (still computed here but could be optimized if needed)
-            val availableFilters = computeAvailableFilters(allCards)
+            val searchQuery = flows[1] as String
+            val selectedFolderId = flows[2] as Long?
+            val isSearchBarVisible = flows[3] as Boolean
+            val selectedIds = flows[4] as Set<Long>
+            val showSaveSuccess = flows[5] as Boolean
+            val selectedDexId = flows[6] as Int?
 
             updateState {
                 copy(
                     viewMode = viewMode,
+                    searchQuery = searchQuery,
+                    selectedFolderId = selectedFolderId,
+                    isSearchBarVisible = isSearchBarVisible,
+                    selectedIds = selectedIds.toImmutableSet(),
+                    isSelectionMode = selectedIds.isNotEmpty(),
+                    showSaveSuccess = showSaveSuccess,
+                    selectedDexId = selectedDexId
+                )
+            }
+        }.launchIn(viewModelScope)
+
+        // 2. Settings Changes
+        combine(
+            userPreferencesRepository.sortMode,
+            _sortDirection,
+            _filterSettings,
+            userPreferencesRepository.listSettings,
+            userPreferencesRepository.gridSettings,
+            userPreferencesRepository.pokedexSettings,
+            userPreferencesRepository.preferSetLogo
+        ) { flows ->
+            val sortMode = flows[0] as SortMode
+            val sortDirection = flows[1] as SortDirection
+            val filterSettings = flows[2] as FilterSettings
+            val listSettings = flows[3] as ListSettings
+            val gridSettings = flows[4] as GridSettings
+            val pokedexSettings = flows[5] as PokedexSettings
+            val preferSetLogo = flows[6] as Boolean
+
+            updateState {
+                copy(
                     sortMode = sortMode,
                     sortDirection = sortDirection,
                     filterSettings = filterSettings,
-                    userCards = allCards,
-                    filteredUserCards = filteredCards,
-                    pokedexEntries = pokedexEntries,
-                    folders = folders,
-                    selectedFolderId = selectedFolderId,
-                    searchQuery = searchQuery,
-                    isSearchBarVisible = isSearchBarVisible,
-                    isLoading = false,
-                    selectedIds = selectedIds,
-                    isSelectionMode = selectedIds.isNotEmpty(),
-                    selectedDexId = selectedDexId,
-                    collectedCardsForDex = collectedCardsForDex,
                     listSettings = listSettings,
                     gridSettings = gridSettings,
                     pokedexSettings = pokedexSettings,
-                    preferSetLogo = preferSetLogo,
-                    sets = setsMap,
-                    showSaveSuccess = showSaveSuccess,
-                    availableRarities = availableFilters.first,
-                    availableCategories = availableFilters.second,
-                    availableTypes = availableFilters.third,
+                    preferSetLogo = preferSetLogo
+                )
+            }
+        }.launchIn(viewModelScope)
+
+        // 3. Data Changes
+        combine(
+            _allCards,
+            _allFolders,
+            _filteredCards,
+            _pokedexEntries,
+            _stats,
+            _allSets,
+            _collectedCardsForDex
+        ) { flows ->
+            val allCards = flows[0] as List<CardWithDetails>
+            val folders = flows[1] as List<FolderEntity>
+            val filteredCards = flows[2] as List<CardUiModel>
+            val pokedexEntries = flows[3] as List<PokedexEntry>
+            val stats = flows[4] as Triple<Double, Int, Int>
+            val setsMap = flows[5] as Map<String, SetEntity>
+            val collectedCardsForDex = flows[6] as List<CardUiModel>
+
+            val availableFilters = computeAvailableFilters(allCards)
+
+            updateState {
+                copy(
+                    userCards = allCards.toImmutableList(),
+                    folders = folders.toImmutableList(),
+                    filteredUserCards = filteredCards.toImmutableList(),
+                    pokedexEntries = pokedexEntries.toImmutableList(),
                     totalValue = stats.first,
                     totalCount = stats.second,
                     totalQuantity = stats.third,
-                    searchResults = remoteResults,
+                    sets = setsMap.toImmutableMap(),
+                    collectedCardsForDex = collectedCardsForDex.toImmutableList(),
+                    availableRarities = availableFilters.first.toImmutableList(),
+                    availableCategories = availableFilters.second.toImmutableList(),
+                    availableTypes = availableFilters.third.toImmutableList(),
+                    isLoading = false
+                )
+            }
+        }.launchIn(viewModelScope)
+
+        // 4. Remote Search & Download Changes
+        combine(
+            _remoteSearchResults,
+            _isRemoteSearching,
+            _newSetsToDownload,
+            _isDownloadingNewSets
+        ) { flows ->
+            val remoteResults = flows[0] as List<TcgDexCard>
+            val isRemoteSearching = flows[1] as Boolean
+            val newSets = flows[2] as List<SetEntity>
+            val isDownloading = flows[3] as Boolean
+
+            updateState {
+                copy(
+                    searchResults = remoteResults.toImmutableList(),
                     isSearching = isRemoteSearching,
-                    newSetsToDownload = newSets,
+                    newSetsToDownload = newSets.toImmutableList(),
                     isDownloadingNewSets = isDownloading
                 )
             }
@@ -601,7 +631,7 @@ class CollectionViewModel(
             } else {
                 current.rarities + rarity
             }
-            current.copy(rarities = newRarities)
+            current.copy(rarities = newRarities.toImmutableSet())
         }
     }
 
@@ -612,7 +642,7 @@ class CollectionViewModel(
             } else {
                 current.categories + category
             }
-            current.copy(categories = newCategories)
+            current.copy(categories = newCategories.toImmutableSet())
         }
     }
 
@@ -623,7 +653,7 @@ class CollectionViewModel(
             } else {
                 current.types + type
             }
-            current.copy(types = newTypes)
+            current.copy(types = newTypes.toImmutableSet())
         }
     }
 
@@ -634,7 +664,7 @@ class CollectionViewModel(
             } else {
                 current.conditions + condition
             }
-            current.copy(conditions = newConditions)
+            current.copy(conditions = newConditions.toImmutableSet())
         }
     }
 
@@ -645,7 +675,7 @@ class CollectionViewModel(
             } else {
                 current.finishes + finish
             }
-            current.copy(finishes = newFinishes)
+            current.copy(finishes = newFinishes.toImmutableSet())
         }
     }
 

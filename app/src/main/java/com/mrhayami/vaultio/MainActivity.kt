@@ -121,7 +121,14 @@ class MainActivity : ComponentActivity() {
                                     repository = repository,
                                     userPreferencesRepository = userPreferencesRepository,
                                     onNavigateToScanner = { navController.navigate(Screen.Scanner.route) },
-                                    onNavigateToCardDetail = { id -> navController.navigate("card_detail/$id") },
+                                    onNavigateToCardDetail = { id ->
+                                        navController.navigate(
+                                            Screen.CardDetail.route.replace(
+                                                "{userCardId}",
+                                                id.toString()
+                                            )
+                                        )
+                                    },
                                     onNavigateToWishlist = { navController.navigate(Screen.Wishlist.route) }
                                 ) 
                             }
@@ -152,7 +159,12 @@ class MainActivity : ComponentActivity() {
                                         when (effect) {
                                             com.mrhayami.vaultio.ui.stats.StatsEffect.Navigation.GoBack -> navController.popBackStack()
                                             is com.mrhayami.vaultio.ui.stats.StatsEffect.Navigation.GoToCardDetail ->
-                                                navController.navigate("card_detail/${effect.userCardId}")
+                                                navController.navigate(
+                                                    Screen.CardDetail.route.replace(
+                                                        "{userCardId}",
+                                                        effect.userCardId.toString()
+                                                    )
+                                                )
                                         }
                                     }
                                 )
@@ -244,7 +256,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             composable(
-                                route = "card_detail/{userCardId}",
+                                route = Screen.CardDetail.route,
                                 arguments = listOf(navArgument("userCardId") { type = NavType.LongType }),
                                 enterTransition = {
                                     slideIntoContainer(
@@ -270,9 +282,19 @@ class MainActivity : ComponentActivity() {
                                     repository = repository,
                                     userCardId = userCardId,
                                     onNavigateBack = { navController.popBackStack() },
-                                    onNavigateToCard = { id -> 
-                                        navController.navigate("card_detail/$id") {
-                                            popUpTo("card_detail/$userCardId") { inclusive = true }
+                                    onNavigateToCard = { id ->
+                                        navController.navigate(
+                                            Screen.CardDetail.route.replace(
+                                                "{userCardId}",
+                                                id.toString()
+                                            )
+                                        ) {
+                                            popUpTo(
+                                                Screen.CardDetail.route.replace(
+                                                    "{userCardId}",
+                                                    userCardId.toString()
+                                                )
+                                            ) { inclusive = true }
                                         }
                                     },
                                     onNavigateToGrading = { id, bmp ->

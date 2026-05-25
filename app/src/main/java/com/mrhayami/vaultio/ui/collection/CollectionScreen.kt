@@ -37,7 +37,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -240,6 +239,7 @@ fun CollectionContent(
     var showSortFilterSheet by remember { mutableStateOf(false) }
     var showMoveToFolderSheet by remember { mutableStateOf(false) }
     var fabExpanded by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
     
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
@@ -257,237 +257,35 @@ fun CollectionContent(
     Scaffold(
         modifier = modifier,
         topBar = {
-            if (uiState.isSelectionMode) {
-                TopAppBar(
-                    title = { Text("${uiState.selectedIds.size} Selected") },
-                    navigationIcon = {
-                        IconButton(onClick = { onEvent(CollectionEvent.OnClearSelection) }) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Clear Selection")
-                        }
-                    },
-                    actions = {
-                        val allSelected = uiState.selectedIds.size == uiState.userCards.size
-                        IconButton(onClick = { if (allSelected) onEvent(CollectionEvent.OnClearSelection) else onEvent(CollectionEvent.OnSelectAll) }) {
-                            Icon(
-                                if (allSelected) Icons.Rounded.Deselect else Icons.Rounded.SelectAll,
-                                contentDescription = if (allSelected) "Select None" else "Select All"
-                            )
-                        }
-                        IconButton(onClick = { showMoveToFolderSheet = true }) {
-                            Icon(Icons.AutoMirrored.Rounded.DriveFileMove, contentDescription = "Move to Folder")
-                        }
-                        IconButton(onClick = { onEvent(CollectionEvent.OnDeleteSelectedCards) }) {
-                            Icon(Icons.Rounded.Delete, contentDescription = "Delete Selected")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                )
-            } else {
-                TopAppBar(
-                    title = {
-                        if (uiState.isSearchBarVisible) {
-                            val focusRequester = remember { FocusRequester() }
-                            val focusManager = LocalFocusManager.current
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                    .padding(horizontal = 16.dp),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                BasicTextField(
-                                    value = uiState.searchQuery,
-                                    onValueChange = { onEvent(CollectionEvent.OnSearchQueryChange(it)) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .focusRequester(focusRequester),
-                                    singleLine = true,
-                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    ),
-                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                                    decorationBox = { innerTextField ->
-                                        if (uiState.searchQuery.isEmpty()) {
-                                            Text(
-                                                "Search your cards...",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                            )
-                                        }
-                                        innerTextField()
-                                    }
-                                )
-                            }
-                            LaunchedEffect(Unit) { focusRequester.requestFocus() }
-                        } else {
-                            Text("Collection")
-                        }
-                    },
-                    navigationIcon = {
-                        if (uiState.isSearchBarVisible) {
-                            IconButton(onClick = { onEvent(CollectionEvent.OnToggleSearchBar) }) {
-                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                            }
-                        }
-                    },
-                    actions = {
-                        if (!uiState.isSearchBarVisible) {
-                            IconButton(onClick = { onEvent(CollectionEvent.OnToggleSearchBar) }) {
-                                Icon(Icons.Rounded.Search, contentDescription = "Search")
-                            }
-
-                            IconButton(onClick = onNavigateToWishlist) {
-                                Icon(Icons.Rounded.FavoriteBorder, contentDescription = "Wishlist")
-                            }
-
-                            var showMenu by remember { mutableStateOf(false) }
-                            var showExportDialog by remember { mutableStateOf(false) }
-
-                            Box {
-                                IconButton(onClick = { showMenu = true }) {
-                                    Icon(Icons.Rounded.MoreVert, contentDescription = "More")
-                                }
-                                DropdownMenu(
-                                    expanded = showMenu,
-                                    onDismissRequest = { showMenu = false },
-                                    shape = RoundedCornerShape(28.dp),
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    tonalElevation = 6.dp,
-                                    shadowElevation = 8.dp
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("View Settings", style = MaterialTheme.typography.labelLarge) },
-                                        onClick = {
-                                            showMenu = false
-                                            showViewSettings = true
-                                        },
-                                        leadingIcon = { Icon(Icons.Rounded.Tune, null, modifier = Modifier.size(20.dp)) },
-                                        modifier = Modifier.padding(horizontal = 4.dp)
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Manage Folders", style = MaterialTheme.typography.labelLarge) },
-                                        onClick = {
-                                            showMenu = false
-                                            showManageFolders = true
-                                        },
-                                        leadingIcon = { Icon(Icons.Rounded.FolderCopy, null, modifier = Modifier.size(20.dp)) },
-                                        modifier = Modifier.padding(horizontal = 4.dp)
-                                    )
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp, horizontal = 12.dp))
-                                    DropdownMenuItem(
-                                        text = { Text("Import Collection", style = MaterialTheme.typography.labelLarge) },
-                                        onClick = {
-                                            showMenu = false
-                                            importLauncher.launch(arrayOf("application/json"))
-                                        },
-                                        leadingIcon = { Icon(Icons.Rounded.FileDownload, null, modifier = Modifier.size(20.dp)) },
-                                        modifier = Modifier.padding(horizontal = 4.dp)
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Export Collection", style = MaterialTheme.typography.labelLarge) },
-                                        onClick = {
-                                            showMenu = false
-                                            showExportDialog = true
-                                        },
-                                        leadingIcon = { Icon(Icons.Rounded.FileUpload, null, modifier = Modifier.size(20.dp)) },
-                                        modifier = Modifier.padding(horizontal = 4.dp)
-                                    )
-                                }
-                            }
-
-                            if (showExportDialog) {
-                                ExportSelectionDialog(
-                                    folders = uiState.folders,
-                                    onDismiss = { showExportDialog = false },
-                                    onConfirm = { folderIds ->
-                                        onEvent(CollectionEvent.OnExportCollection(folderIds))
-                                        showExportDialog = false
-                                    }
-                                )
-                            }
-                        } else {
-                            IconButton(onClick = { onEvent(CollectionEvent.OnSearchQueryChange("")) }) {
-                                Icon(Icons.Rounded.Clear, contentDescription = "Clear Search")
-                            }
-                        }
-                    },
-                    windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Top)
-                )
-            }
+            CollectionTopBar(
+                uiState = uiState,
+                onEvent = onEvent,
+                onNavigateToWishlist = onNavigateToWishlist,
+                onImportClick = { importLauncher.launch(arrayOf("application/json")) },
+                onExportClick = { showExportDialog = true },
+                onShowViewSettings = { showViewSettings = true },
+                onShowManageFolders = { showManageFolders = true },
+                onShowMoveToFolder = { showMoveToFolderSheet = true }
+            )
         },
         floatingActionButton = {
             if (!uiState.isSelectionMode) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    val rotation by animateFloatAsState(
-                        targetValue = if (fabExpanded) 45f else 0f,
-                        label = "FabRotation"
-                    )
-
-                    AnimatedVisibility(
-                        visible = fabExpanded,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            SmallFloatingActionButton(
-                                onClick = {
-                                    showFolderDialog = FolderEntity(name = "")
-                                    fabExpanded = false
-                                },
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                shape = CircleShape
-                            ) {
-                                Icon(Icons.Rounded.CreateNewFolder, contentDescription = "Add Folder")
-                            }
-                            SmallFloatingActionButton(
-                                onClick = {
-                                    showAddCardModal = true
-                                    fabExpanded = false
-                                },
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                shape = CircleShape
-                            ) {
-                                Icon(Icons.Rounded.Add, contentDescription = "Add Card Manually")
-                            }
-                            SmallFloatingActionButton(
-                                onClick = {
-                                    onNavigateToScanner()
-                                    fabExpanded = false
-                                },
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                shape = CircleShape
-                            ) {
-                                Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan Card")
-                            }
-                        }
+                CollectionFab(
+                    expanded = fabExpanded,
+                    onToggle = { fabExpanded = !fabExpanded },
+                    onAddFolder = {
+                        showFolderDialog = FolderEntity(name = "")
+                        fabExpanded = false
+                    },
+                    onAddManual = {
+                        showAddCardModal = true
+                        fabExpanded = false
+                    },
+                    onScan = {
+                        onNavigateToScanner()
+                        fabExpanded = false
                     }
-
-                    FloatingActionButton(
-                        onClick = { fabExpanded = !fabExpanded },
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        shape = CircleShape
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Add,
-                            contentDescription = if (fabExpanded) "Close Menu" else "Open Menu",
-                            modifier = Modifier.graphicsLayer { rotationZ = rotation }
-                        )
-                    }
-                }
+                )
             }
         }
     ) { padding ->
@@ -524,7 +322,7 @@ fun CollectionContent(
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 } else if (uiState.filteredUserCards.isEmpty() && uiState.viewMode != ViewMode.POKEDEX) {
                     Text(
-                        if (uiState.searchQuery.isNotEmpty()) "No cards match your search." 
+                        if (uiState.searchQuery.isNotEmpty()) "No cards match your search."
                         else if (uiState.selectedFolderId != null) "This folder is empty."
                         else "Your collection is empty.\nTap + to add cards!",
                         modifier = Modifier.align(Alignment.Center),
@@ -532,51 +330,28 @@ fun CollectionContent(
                         style = MaterialTheme.typography.bodyLarge
                     )
                 } else {
-                    AnimatedContent(
-                        targetState = uiState.viewMode,
-                        transitionSpec = {
-                            (fadeIn(tween(200)) + scaleIn(
-                                initialScale = 0.95f,
-                                animationSpec = tween(200)
-                            ))
-                                .togetherWith(
-                                    fadeOut(tween(200)) + scaleOut(
-                                        targetScale = 0.95f,
-                                        animationSpec = tween(200)
-                                    )
-                                )
-                                .using(SizeTransform(clip = false))
-                        },
-                        label = "ViewModeTransition"
-                    ) { targetViewMode ->
-                        when (targetViewMode) {
-                            ViewMode.LIST -> CollectionListView(
-                                userCards = uiState.filteredUserCards,
-                                selectedIds = uiState.selectedIds,
-                                isSelectionMode = uiState.isSelectionMode,
-                                settings = uiState.listSettings,
-                                preferSetLogo = uiState.preferSetLogo,
-                                onCardClick = onCardClick,
-                                onCardLongClick = onCardLongClick
-                            )
-                            ViewMode.GRID -> CollectionGridView(
-                                userCards = uiState.filteredUserCards,
-                                selectedIds = uiState.selectedIds,
-                                isSelectionMode = uiState.isSelectionMode,
-                                settings = uiState.gridSettings,
-                                onCardClick = onCardClick,
-                                onCardLongClick = onCardLongClick
-                            )
-                            ViewMode.POKEDEX -> PokedexView(
-                                entries = uiState.pokedexEntries,
-                                settings = uiState.pokedexSettings,
-                                onDexClick = onDexClick
-                            )
-                        }
-                    }
+                    AnimatedViewModeContent(
+                        viewMode = uiState.viewMode,
+                        uiState = uiState,
+                        onCardClick = onCardClick,
+                        onCardLongClick = onCardLongClick,
+                        onDexClick = onDexClick
+                    )
                 }
             }
         }
+    }
+
+    // Dialogs and Bottom Sheets
+    if (showExportDialog) {
+        ExportSelectionDialog(
+            folders = uiState.folders,
+            onDismiss = { showExportDialog = false },
+            onConfirm = { folderIds ->
+                onEvent(CollectionEvent.OnExportCollection(folderIds))
+                showExportDialog = false
+            }
+        )
     }
 
     if (showViewSettings) {
@@ -630,73 +405,27 @@ fun CollectionContent(
 
     if (showMoveToFolderSheet) {
         ModalBottomSheet(onDismissRequest = { showMoveToFolderSheet = false }) {
-            Column(modifier = Modifier
-                .padding(16.dp)
-                .navigationBarsPadding()) {
-                Text("Move to Folder", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
-                uiState.folders.forEach { folder ->
-                    val clickableModifier = remember(folder.id) {
-                        Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable {
-                                onEvent(CollectionEvent.OnMoveSelectedToFolder(folder.id))
-                                showMoveToFolderSheet = false
-                            }
-                    }
-                    ListItem(
-                        headlineContent = { Text(folder.name) },
-                        leadingContent = {
-                            Icon(
-                                getIconFromName(folder.icon),
-                                contentDescription = null,
-                                tint = folder.color?.let { Color(it.toLong().toInt()) } ?: MaterialTheme.colorScheme.primary
-                            )
-                        },
-                        modifier = clickableModifier
-                    )
+            FolderList(
+                title = "Move to Folder",
+                folders = uiState.folders,
+                onFolderClick = { folderId ->
+                    onEvent(CollectionEvent.OnMoveSelectedToFolder(folderId))
+                    showMoveToFolderSheet = false
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+            )
         }
     }
 
     if (showManageFolders) {
         ModalBottomSheet(onDismissRequest = { showManageFolders = false }) {
-            Column(modifier = Modifier
-                .padding(16.dp)
-                .navigationBarsPadding()) {
-                Text("Manage Folders", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
-                LazyColumn {
-                    items(uiState.folders, key = { it.id }) { folder ->
-                        ListItem(
-                            headlineContent = { Text(folder.name) },
-                            leadingContent = {
-                                Icon(
-                                    getIconFromName(folder.icon),
-                                    contentDescription = null,
-                                    tint = folder.color?.let { Color(it.toLong().toInt()) } ?: MaterialTheme.colorScheme.primary
-                                )
-                            },
-                            trailingContent = {
-                                Row {
-                                    IconButton(onClick = {
-                                        showFolderDialog = folder
-                                        showManageFolders = false
-                                    }) {
-                                        Icon(Icons.Rounded.Edit, contentDescription = "Edit")
-                                    }
-                                    IconButton(onClick = { onEvent(CollectionEvent.OnDeleteFolder(folder)) }) {
-                                        Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                                    }
-                                }
-                            }
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+            ManageFoldersContent(
+                folders = uiState.folders,
+                onEditFolder = { folder ->
+                    showFolderDialog = folder
+                    showManageFolders = false
+                },
+                onDeleteFolder = { onEvent(CollectionEvent.OnDeleteFolder(it)) }
+            )
         }
     }
 
@@ -708,7 +437,15 @@ fun CollectionContent(
                 if (showFolderDialog!!.id == 0L) {
                     onEvent(CollectionEvent.OnAddFolder(name, icon, color))
                 } else {
-                    onEvent(CollectionEvent.OnUpdateFolder(showFolderDialog!!.copy(name = name, icon = icon, color = color)))
+                    onEvent(
+                        CollectionEvent.OnUpdateFolder(
+                            showFolderDialog!!.copy(
+                                name = name,
+                                icon = icon,
+                                color = color
+                            )
+                        )
+                    )
                 }
                 showFolderDialog = null
             }
@@ -717,62 +454,14 @@ fun CollectionContent(
 
     if (uiState.selectedDexId != null) {
         ModalBottomSheet(onDismissRequest = { onEvent(CollectionEvent.OnDismissDexDetail) }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .navigationBarsPadding()
-            ) {
-                Text(
-                    "Pokédex #${uiState.selectedDexId} Collected Cards",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                if (uiState.collectedCardsForDex.isEmpty()) {
-                    Text("No cards collected for this Pokemon in the current filter.", modifier = Modifier.padding(vertical = 32.dp))
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(uiState.collectedCardsForDex) { item ->
-                            Card(
-                                onClick = {
-                                    onNavigateToCardDetail(item.details.userCard.id)
-                                    onEvent(CollectionEvent.OnDismissDexDetail)
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                            ) {
-                                Box {
-                                    AsyncImage(
-                                        model = "${item.details.card.image}/high.webp",
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .aspectRatio(0.718f),
-                                        contentScale = ContentScale.FillBounds
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomStart)
-                                            .padding(6.dp)
-                                    ) {
-                                        CardAttributeBadges(
-                                            finish = item.details.userCard.finish,
-                                            printing = item.details.userCard.printing
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+            DexDetailContent(
+                dexId = uiState.selectedDexId,
+                cards = uiState.collectedCardsForDex,
+                onCardClick = { userCardId ->
+                    onNavigateToCardDetail(userCardId)
+                    onEvent(CollectionEvent.OnDismissDexDetail)
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+            )
         }
     }
 
@@ -794,6 +483,459 @@ fun CollectionContent(
                 }
             }
         )
+    }
+}
+
+@Composable
+fun CollectionTopBar(
+    uiState: CollectionUiState,
+    onEvent: (CollectionEvent) -> Unit,
+    onNavigateToWishlist: () -> Unit,
+    onImportClick: () -> Unit,
+    onExportClick: () -> Unit,
+    onShowViewSettings: () -> Unit,
+    onShowManageFolders: () -> Unit,
+    onShowMoveToFolder: () -> Unit
+) {
+    if (uiState.isSelectionMode) {
+        SelectionTopBar(
+            selectedCount = uiState.selectedIds.size,
+            isAllSelected = uiState.selectedIds.size == uiState.userCards.size,
+            onClearSelection = { onEvent(CollectionEvent.OnClearSelection) },
+            onToggleSelectAll = {
+                if (uiState.selectedIds.size == uiState.userCards.size) onEvent(CollectionEvent.OnClearSelection)
+                else onEvent(CollectionEvent.OnSelectAll)
+            },
+            onMoveToFolder = onShowMoveToFolder,
+            onDeleteSelected = { onEvent(CollectionEvent.OnDeleteSelectedCards) }
+        )
+    } else {
+        SearchTopBar(
+            isSearchBarVisible = uiState.isSearchBarVisible,
+            searchQuery = uiState.searchQuery,
+            onSearchQueryChange = { onEvent(CollectionEvent.OnSearchQueryChange(it)) },
+            onToggleSearchBar = { onEvent(CollectionEvent.OnToggleSearchBar) },
+            onNavigateToWishlist = onNavigateToWishlist,
+            onImportClick = onImportClick,
+            onExportClick = onExportClick,
+            onShowViewSettings = onShowViewSettings,
+            onShowManageFolders = onShowManageFolders
+        )
+    }
+}
+
+@Composable
+fun SelectionTopBar(
+    selectedCount: Int,
+    isAllSelected: Boolean,
+    onClearSelection: () -> Unit,
+    onToggleSelectAll: () -> Unit,
+    onMoveToFolder: () -> Unit,
+    onDeleteSelected: () -> Unit
+) {
+    TopAppBar(
+        title = { Text("$selectedCount Selected") },
+        navigationIcon = {
+            IconButton(onClick = onClearSelection) {
+                Icon(Icons.Rounded.Close, contentDescription = "Clear Selection")
+            }
+        },
+        actions = {
+            IconButton(onClick = onToggleSelectAll) {
+                Icon(
+                    if (isAllSelected) Icons.Rounded.Deselect else Icons.Rounded.SelectAll,
+                    contentDescription = if (isAllSelected) "Select None" else "Select All"
+                )
+            }
+            IconButton(onClick = onMoveToFolder) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.DriveFileMove,
+                    contentDescription = "Move to Folder"
+                )
+            }
+            IconButton(onClick = onDeleteSelected) {
+                Icon(Icons.Rounded.Delete, contentDescription = "Delete Selected")
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    )
+}
+
+@Composable
+fun SearchTopBar(
+    isSearchBarVisible: Boolean,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onToggleSearchBar: () -> Unit,
+    onNavigateToWishlist: () -> Unit,
+    onImportClick: () -> Unit,
+    onExportClick: () -> Unit,
+    onShowViewSettings: () -> Unit,
+    onShowManageFolders: () -> Unit
+) {
+    TopAppBar(
+        title = {
+            if (isSearchBarVisible) {
+                SearchBar(searchQuery, onSearchQueryChange)
+            } else {
+                Text("Collection")
+            }
+        },
+        navigationIcon = {
+            if (isSearchBarVisible) {
+                IconButton(onClick = onToggleSearchBar) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                }
+            }
+        },
+        actions = {
+            if (!isSearchBarVisible) {
+                IconButton(onClick = onToggleSearchBar) {
+                    Icon(Icons.Rounded.Search, contentDescription = "Search")
+                }
+                IconButton(onClick = onNavigateToWishlist) {
+                    Icon(Icons.Rounded.FavoriteBorder, contentDescription = "Wishlist")
+                }
+                MoreOptionsMenu(
+                    onShowViewSettings = onShowViewSettings,
+                    onShowManageFolders = onShowManageFolders,
+                    onImportClick = onImportClick,
+                    onExportClick = onExportClick
+                )
+            } else {
+                IconButton(onClick = { onSearchQueryChange("") }) {
+                    Icon(Icons.Rounded.Clear, contentDescription = "Clear Search")
+                }
+            }
+        },
+        windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Top)
+    )
+}
+
+@Composable
+fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+            decorationBox = { innerTextField ->
+                if (query.isEmpty()) {
+                    Text(
+                        "Search your cards...",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                innerTextField()
+            }
+        )
+    }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+}
+
+@Composable
+fun MoreOptionsMenu(
+    onShowViewSettings: () -> Unit,
+    onShowManageFolders: () -> Unit,
+    onImportClick: () -> Unit,
+    onExportClick: () -> Unit
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { showMenu = true }) {
+            Icon(Icons.Rounded.MoreVert, contentDescription = "More")
+        }
+        DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ) {
+            DropdownMenuItem(
+                text = { Text("View Settings") },
+                onClick = { showMenu = false; onShowViewSettings() },
+                leadingIcon = { Icon(Icons.Rounded.Tune, null) }
+            )
+            DropdownMenuItem(
+                text = { Text("Manage Folders") },
+                onClick = { showMenu = false; onShowManageFolders() },
+                leadingIcon = { Icon(Icons.Rounded.FolderCopy, null) }
+            )
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("Import Collection") },
+                onClick = { showMenu = false; onImportClick() },
+                leadingIcon = { Icon(Icons.Rounded.FileDownload, null) }
+            )
+            DropdownMenuItem(
+                text = { Text("Export Collection") },
+                onClick = { showMenu = false; onExportClick() },
+                leadingIcon = { Icon(Icons.Rounded.FileUpload, null) }
+            )
+        }
+    }
+}
+
+@Composable
+fun CollectionFab(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onAddFolder: () -> Unit,
+    onAddManual: () -> Unit,
+    onScan: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        val rotation by animateFloatAsState(
+            targetValue = if (expanded) 45f else 0f,
+            label = "FabRotation"
+        )
+
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SmallFloatingActionButton(
+                    onClick = onAddFolder,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Rounded.CreateNewFolder, contentDescription = "Add Folder")
+                }
+                SmallFloatingActionButton(
+                    onClick = onAddManual,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Rounded.Add, contentDescription = "Add Card Manually")
+                }
+                SmallFloatingActionButton(
+                    onClick = onScan,
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan Card")
+                }
+            }
+        }
+
+        FloatingActionButton(
+            onClick = onToggle,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            shape = CircleShape
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = if (expanded) "Close Menu" else "Open Menu",
+                modifier = Modifier.graphicsLayer { rotationZ = rotation }
+            )
+        }
+    }
+}
+
+@Composable
+fun AnimatedViewModeContent(
+    viewMode: ViewMode,
+    uiState: CollectionUiState,
+    onCardClick: (Long) -> Unit,
+    onCardLongClick: (Long) -> Unit,
+    onDexClick: (Int) -> Unit
+) {
+    AnimatedContent(
+        targetState = viewMode,
+        transitionSpec = {
+            (fadeIn(tween(200)) + scaleIn(initialScale = 0.95f, animationSpec = tween(200)))
+                .togetherWith(
+                    fadeOut(tween(200)) + scaleOut(
+                        targetScale = 0.95f,
+                        animationSpec = tween(200)
+                    )
+                )
+                .using(SizeTransform(clip = false))
+        },
+        label = "ViewModeTransition"
+    ) { targetViewMode ->
+        when (targetViewMode) {
+            ViewMode.LIST -> CollectionListView(
+                userCards = uiState.filteredUserCards,
+                selectedIds = uiState.selectedIds,
+                isSelectionMode = uiState.isSelectionMode,
+                settings = uiState.listSettings,
+                preferSetLogo = uiState.preferSetLogo,
+                onCardClick = onCardClick,
+                onCardLongClick = onCardLongClick
+            )
+
+            ViewMode.GRID -> CollectionGridView(
+                userCards = uiState.filteredUserCards,
+                selectedIds = uiState.selectedIds,
+                isSelectionMode = uiState.isSelectionMode,
+                settings = uiState.gridSettings,
+                onCardClick = onCardClick,
+                onCardLongClick = onCardLongClick
+            )
+
+            ViewMode.POKEDEX -> PokedexView(
+                entries = uiState.pokedexEntries,
+                settings = uiState.pokedexSettings,
+                onDexClick = onDexClick
+            )
+        }
+    }
+}
+
+@Composable
+fun FolderList(title: String, folders: List<FolderEntity>, onFolderClick: (Long) -> Unit) {
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .navigationBarsPadding()) {
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(16.dp))
+        folders.forEach { folder ->
+            ListItem(
+                headlineContent = { Text(folder.name) },
+                leadingContent = {
+                    Icon(
+                        getIconFromName(folder.icon),
+                        contentDescription = null,
+                        tint = folder.color?.let { Color(it.toLong().toInt()) }
+                            ?: MaterialTheme.colorScheme.primary
+                    )
+                },
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onFolderClick(folder.id) }
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+fun ManageFoldersContent(
+    folders: List<FolderEntity>,
+    onEditFolder: (FolderEntity) -> Unit,
+    onDeleteFolder: (FolderEntity) -> Unit
+) {
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .navigationBarsPadding()) {
+        Text("Manage Folders", style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(16.dp))
+        LazyColumn {
+            items(folders, key = { it.id }) { folder ->
+                ListItem(
+                    headlineContent = { Text(folder.name) },
+                    leadingContent = {
+                        Icon(
+                            getIconFromName(folder.icon),
+                            contentDescription = null,
+                            tint = folder.color?.let { Color(it.toLong().toInt()) }
+                                ?: MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    trailingContent = {
+                        Row {
+                            IconButton(onClick = { onEditFolder(folder) }) {
+                                Icon(Icons.Rounded.Edit, contentDescription = "Edit")
+                            }
+                            IconButton(onClick = { onDeleteFolder(folder) }) {
+                                Icon(
+                                    Icons.Rounded.Delete,
+                                    contentDescription = "Delete",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+fun DexDetailContent(dexId: Int, cards: List<CardUiModel>, onCardClick: (Long) -> Unit) {
+    Column(modifier = Modifier
+        .fillMaxWidth()
+        .padding(16.dp)
+        .navigationBarsPadding()) {
+        Text(
+            "Pokédex #$dexId Collected Cards",
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        if (cards.isEmpty()) {
+            Text(
+                "No cards collected for this Pokemon in the current filter.",
+                modifier = Modifier.padding(vertical = 32.dp)
+            )
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(cards) { item ->
+                    Card(
+                        onClick = { onCardClick(item.details.userCard.id) },
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Box {
+                            AsyncImage(
+                                model = "${item.details.card.image}/high.webp",
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(0.718f),
+                                contentScale = ContentScale.FillBounds
+                            )
+                            Box(modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(6.dp)) {
+                                CardAttributeBadges(
+                                    finish = item.details.userCard.finish,
+                                    printing = item.details.userCard.printing
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
@@ -825,14 +967,19 @@ private fun CollectionContentPreview() {
     MaterialTheme {
         CollectionContent(
             uiState = CollectionUiState(
-                userCards = List(5) {
-                    mockCardWithDetails(
-                        "swsh1-$it",
-                        "Pokemon Card $it"
-                    ).details
-                },
-                filteredUserCards = List(5) { mockCardWithDetails("swsh1-$it", "Pokemon Card $it") },
-                folders = listOf(FolderEntity(id = 1L, name = "Favorites", icon = "star")),
+                userCards = kotlinx.collections.immutable.persistentListOf(
+                    mockCardWithDetails("swsh1-1", "Pokemon Card 1").details
+                ),
+                filteredUserCards = kotlinx.collections.immutable.persistentListOf(
+                    mockCardWithDetails("swsh1-1", "Pokemon Card 1")
+                ),
+                folders = kotlinx.collections.immutable.persistentListOf(
+                    FolderEntity(
+                        id = 1L,
+                        name = "Favorites",
+                        icon = "star"
+                    )
+                ),
                 totalValue = 420.69,
                 isLoading = false
             ),
@@ -841,26 +988,6 @@ private fun CollectionContentPreview() {
             onNavigateToCardDetail = {},
             onNavigateToWishlist = {},
             importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {}
-        )
-    }
-}
-
-@Preview(showBackground = true, name = "Collection Content Empty")
-@Composable
-private fun CollectionContentEmptyPreview() {
-    MaterialTheme {
-        CollectionContent(
-            uiState = CollectionUiState(
-                userCards = emptyList(),
-                filteredUserCards = emptyList(),
-                isLoading = false
-            ),
-            onNavigateToScanner = {},
-            onNavigateToCardDetail = {},
-            onNavigateToWishlist = {},
-            importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {},
-            onEvent = {},
-            modifier = Modifier
         )
     }
 }
