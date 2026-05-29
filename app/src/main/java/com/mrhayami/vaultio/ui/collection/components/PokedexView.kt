@@ -85,7 +85,7 @@ fun PokedexView(
                     ) {
                         Text(
                             "${entry.cardCount}",
-                            modifier = Modifier.padding(2.dp)
+                            modifier = Modifier.padding(3.dp, 2.dp)
                         )
                     }
                 }

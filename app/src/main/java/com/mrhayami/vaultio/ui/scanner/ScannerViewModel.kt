@@ -2,6 +2,7 @@ package com.mrhayami.vaultio.ui.scanner
 
 import android.graphics.Bitmap
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -56,6 +57,11 @@ data class ScannerUiState(
     val priceCheckInfo: PriceCheckInfo? = null,
     val isSaving: Boolean = false,
     val targetUserCardId: Long? = null,
+    val isGlareDetected: Boolean = false,
+    val exposureIndex: Int = 0,
+    val exposureRange: IntRange = 0..0,
+    val isExposureSupported: Boolean = false,
+    val focusPoint: Offset? = null
 ) {
     val isBulkMode: Boolean get() = activeMode == ScannerMode.BULK
     val isGradingMode: Boolean get() = activeMode == ScannerMode.GRADING
@@ -79,7 +85,11 @@ sealed interface ScannerEvent {
     data class CardSelected(val card: TcgDexCard?) : ScannerEvent
     data class PermissionResult(val granted: Boolean) : ScannerEvent
     data object ToggleTorch : ScannerEvent
-    data class LinesDetected(val lines: List<DetectedLine>, val pHash: Long?) : ScannerEvent
+    data class LinesDetected(
+        val lines: List<DetectedLine>,
+        val pHash: Long?,
+        val isGlareDetected: Boolean = false
+    ) : ScannerEvent
     data class SelectMode(val mode: ScannerMode) : ScannerEvent
     data class CapturePhoto(val bitmap: Bitmap) : ScannerEvent
     data class ConfirmPageCell(val index: Int, val card: TcgDexCard?) : ScannerEvent
@@ -89,6 +99,12 @@ sealed interface ScannerEvent {
     data class SetBulkDefaults(val defaults: BulkScanDefaults) : ScannerEvent
     data object UndoLastBulkScan : ScannerEvent
     data object ClearBulkSession : ScannerEvent
+    data class AdjustExposure(val index: Int) : ScannerEvent
+    data class SetExposureState(val range: IntRange, val current: Int, val supported: Boolean) :
+        ScannerEvent
+
+    data class TapToFocus(val point: Offset) : ScannerEvent
+    data object ClearFocus : ScannerEvent
     data class ConfirmSkippedCard(
         val card: TcgDexCard,
         val quantity: Int,
@@ -199,7 +215,11 @@ class ScannerViewModel(
                     }
                 }
             }
-            is ScannerEvent.LinesDetected -> onLinesDetected(event.lines, event.pHash)
+            is ScannerEvent.LinesDetected -> onLinesDetected(
+                event.lines,
+                event.pHash,
+                event.isGlareDetected
+            )
             ScannerEvent.ResumeScanning -> resumeScanning()
             is ScannerEvent.CardSelected -> {
                 if (_uiState.value.isPriceCheckMode && event.card != null) {
@@ -278,6 +298,26 @@ class ScannerViewModel(
                 )
                 _uiState.update { it.copy(skippedCards = it.skippedCards.filter { c -> c.id != event.card.id }) }
             }
+            is ScannerEvent.AdjustExposure -> _uiState.update { it.copy(exposureIndex = event.index) }
+            is ScannerEvent.SetExposureState -> _uiState.update {
+                it.copy(
+                    exposureRange = event.range,
+                    exposureIndex = event.current,
+                    isExposureSupported = event.supported
+                )
+            }
+
+            is ScannerEvent.TapToFocus -> {
+                _uiState.update { it.copy(focusPoint = event.point) }
+                viewModelScope.launch {
+                    delay(2000)
+                    if (_uiState.value.focusPoint == event.point) {
+                        _uiState.update { it.copy(focusPoint = null) }
+                    }
+                }
+            }
+
+            ScannerEvent.ClearFocus -> _uiState.update { it.copy(focusPoint = null) }
         }
     }
 
@@ -321,8 +361,10 @@ class ScannerViewModel(
         }
     }
 
-    private fun onLinesDetected(lines: List<DetectedLine>, pHash: Long?) {
+    private fun onLinesDetected(lines: List<DetectedLine>, pHash: Long?, isGlareDetected: Boolean) {
         if (_uiState.value.activeMode == ScannerMode.IDLE || _uiState.value.isPaused || _uiState.value.isSearching) return
+
+        _uiState.update { it.copy(isGlareDetected = isGlareDetected) }
 
         viewModelScope.launch(defaultDispatcher) {
             val nameCandidates = lines

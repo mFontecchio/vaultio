@@ -19,7 +19,7 @@ data class DetectedLine(
 
 class CameraAnalyzer(
     private val viewportAspectRatio: Float,
-    private val onLinesDetected: (List<DetectedLine>, Long?) -> Unit
+    private val onLinesDetected: (List<DetectedLine>, Long?, Boolean) -> Unit
 ) : ImageAnalysis.Analyzer {
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -100,6 +100,9 @@ class CameraAnalyzer(
             null
         }
 
+        // Detect glare for UI feedback
+        val isGlareDetected = ScannerUtils.detectGlare(cropped)
+
         val enhanced = ScannerUtils.enhanceImage(cropped, reusableEnhanced)
         reusableEnhanced = enhanced
         
@@ -118,7 +121,7 @@ class CameraAnalyzer(
                         )
                     }
                 }
-                onLinesDetected(lines, pHash)
+                onLinesDetected(lines, pHash, isGlareDetected)
             }
             .addOnFailureListener { e -> e.printStackTrace() }
             .addOnCompleteListener {

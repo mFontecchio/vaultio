@@ -6,6 +6,7 @@ import android.util.Size
 import android.widget.Toast
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageProxy
@@ -34,6 +35,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +45,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -64,6 +67,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.filled.BrightnessHigh
+import androidx.compose.material.icons.filled.BrightnessLow
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
@@ -93,6 +99,8 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -114,11 +122,14 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -149,8 +160,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
-import androidx.camera.core.Preview as CameraPreview
+import androidx.camera.core.Preview as CameraXPreview
 import androidx.compose.ui.geometry.Size as ComposeSize
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -285,8 +297,8 @@ fun ScannerContent(
                         .background(Color.Black)
                 ) {
                     val onLinesDetected = remember(onEventStable) {
-                        { lines: List<DetectedLine>, pHash: Long? ->
-                            onEventStable(ScannerEvent.LinesDetected(lines, pHash))
+                        { lines: List<DetectedLine>, pHash: Long?, isGlareDetected: Boolean ->
+                            onEventStable(ScannerEvent.LinesDetected(lines, pHash, isGlareDetected))
                         }
                     }
                     val onPhotoCaptured = remember(onEventStable) {
@@ -299,8 +311,14 @@ fun ScannerContent(
                         isGradingMode = uiState.isGradingMode,
                         isTorchEnabled = uiState.isTorchEnabled,
                         autoCaptureTrigger = uiState.autoCaptureTrigger,
+                        exposureIndex = uiState.exposureIndex,
+                        focusPoint = uiState.focusPoint,
                         onLinesDetected = onLinesDetected,
-                        onPhotoCaptured = onPhotoCaptured
+                        onPhotoCaptured = onPhotoCaptured,
+                        onExposureStateChanged = { range, current, supported ->
+                            onEventStable(ScannerEvent.SetExposureState(range, current, supported))
+                        },
+                        onTap = { onEventStable(ScannerEvent.TapToFocus(it)) }
                     )
                     
                     if (uiState.isPageScanMode) {
@@ -310,8 +328,123 @@ fun ScannerContent(
                             isSearching = uiState.isSearching,
                             isGradingMode = uiState.isGradingMode,
                             isPriceCheckMode = uiState.isPriceCheckMode,
-                            isTargetDetected = uiState.autoSelectedCard != null || uiState.priceCheckInfo != null
+                            isTargetDetected = uiState.autoSelectedCard != null || uiState.priceCheckInfo != null,
+                            focusPoint = uiState.focusPoint
                         )
+                    }
+
+                    // Glare Warning
+                    AnimatedVisibility(
+                        visible = uiState.isGlareDetected,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 100.dp)
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            shape = CircleShape,
+                            tonalElevation = 4.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    "Glare Detected",
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+                    }
+
+                    // Exposure Slider (Only show when supported and user interacts or manually toggled)
+                    if (uiState.isExposureSupported) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 16.dp)
+                                .height(250.dp)
+                                .width(48.dp)
+                                .background(Color.Black.copy(alpha = 0.4f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .padding(vertical = 12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Icon(
+                                    Icons.Default.BrightnessHigh,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .width(48.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Slider(
+                                        value = uiState.exposureIndex.toFloat(),
+                                        onValueChange = {
+                                            onEventStable(
+                                                ScannerEvent.AdjustExposure(
+                                                    it.toInt()
+                                                )
+                                            )
+                                        },
+                                        valueRange = uiState.exposureRange.first.toFloat()..uiState.exposureRange.last.toFloat(),
+                                        modifier = Modifier
+                                            .graphicsLayer {
+                                                rotationZ = 270f
+                                                transformOrigin = TransformOrigin.Center
+                                            }
+                                            .layout { measurable, constraints ->
+                                                // Swap constraints for rotation
+                                                val placeable = measurable.measure(
+                                                    constraints.copy(
+                                                        minWidth = constraints.minHeight,
+                                                        maxWidth = constraints.maxHeight,
+                                                        minHeight = constraints.minWidth,
+                                                        maxHeight = constraints.maxWidth
+                                                    )
+                                                )
+                                                layout(placeable.height, placeable.width) {
+                                                    placeable.place(
+                                                        -(placeable.width - placeable.height) / 2,
+                                                        -(placeable.height - placeable.width) / 2
+                                                    )
+                                                }
+                                            },
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = Color.White,
+                                            activeTrackColor = Color.White,
+                                            inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                                        )
+                                    )
+                                }
+
+                                Icon(
+                                    Icons.Default.BrightnessLow,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1158,8 +1291,12 @@ fun CameraPreview(
     isGradingMode: Boolean = false,
     isTorchEnabled: Boolean = false,
     autoCaptureTrigger: Long = 0L,
-    onLinesDetected: (List<DetectedLine>, Long?) -> Unit,
-    onPhotoCaptured: (Bitmap) -> Unit = {}
+    exposureIndex: Int = 0,
+    focusPoint: Offset? = null,
+    onLinesDetected: (List<DetectedLine>, Long?, Boolean) -> Unit,
+    onPhotoCaptured: (Bitmap) -> Unit = {},
+    onExposureStateChanged: (IntRange, Int, Boolean) -> Unit = { _, _, _ -> },
+    onTap: (Offset) -> Unit = {}
 ) {
     if (LocalInspectionMode.current) {
         Box(
@@ -1190,6 +1327,26 @@ fun CameraPreview(
 
     LaunchedEffect(isTorchEnabled, cameraControl) {
         cameraControl?.enableTorch(isTorchEnabled)
+    }
+
+    LaunchedEffect(exposureIndex, cameraControl) {
+        cameraControl?.setExposureCompensationIndex(exposureIndex)
+    }
+
+    LaunchedEffect(focusPoint, cameraControl, previewViewRef) {
+        val pc = cameraControl ?: return@LaunchedEffect
+        val pv = previewViewRef ?: return@LaunchedEffect
+        val pt = focusPoint ?: return@LaunchedEffect
+
+        val factory = pv.meteringPointFactory
+        val point = factory.createPoint(pt.x, pt.y)
+        val action = FocusMeteringAction.Builder(
+            point,
+            FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
+        )
+            .setAutoCancelDuration(3, TimeUnit.SECONDS)
+            .build()
+        pc.startFocusAndMetering(action)
     }
 
     LaunchedEffect(autoCaptureTrigger) {
@@ -1290,7 +1447,7 @@ fun CameraPreview(
             }, ContextCompat.getMainExecutor(context))
         }
 
-        val preview = CameraPreview.Builder()
+        val preview = CameraXPreview.Builder()
             .setResolutionSelector(resolutionSelector)
             .build().also {
                 it.surfaceProvider = previewView.surfaceProvider
@@ -1337,6 +1494,14 @@ fun CameraPreview(
                 }
             }
             cameraControl = camera.cameraControl
+
+            // Report initial exposure state
+            val exposureState = camera.cameraInfo.exposureState
+            onExposureStateChanged(
+                exposureState.exposureCompensationRange.let { it.lower..it.upper },
+                exposureState.exposureCompensationIndex,
+                exposureState.isExposureCompensationSupported
+            )
         } catch (exc: Exception) {
             exc.printStackTrace()
         }
@@ -1349,7 +1514,13 @@ fun CameraPreview(
                     keepScreenOn = true
                 }.also { previewViewRef = it }
             },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures { offset ->
+                        onTap(offset)
+                    }
+                },
             update = { /* Camera logic moved to LaunchedEffect */ }
         )
 
@@ -1710,7 +1881,8 @@ fun ScannerOverlay(
     isSearching: Boolean,
     isGradingMode: Boolean = false,
     isPriceCheckMode: Boolean = false,
-    isTargetDetected: Boolean = false
+    isTargetDetected: Boolean = false,
+    focusPoint: Offset? = null
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "scanning")
     val scannerLineAnimState = infiniteTransition.animateFloat(
@@ -1883,6 +2055,25 @@ fun ScannerOverlay(
             color = bracketColor,
             style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
         )
+
+        // Focus Ring
+        focusPoint?.let { pt ->
+            drawCircle(
+                color = Color.White.copy(alpha = 0.6f),
+                center = pt,
+                radius = 40.dp.toPx(),
+                style = Stroke(width = 2.dp.toPx())
+            )
+            drawCircle(
+                color = Color.White.copy(alpha = 0.3f),
+                center = pt,
+                radius = 35.dp.toPx(),
+                style = Stroke(
+                    width = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 5f), 0f)
+                )
+            )
+        }
         
         // Active scan line
         drawLine(
@@ -1920,6 +2111,19 @@ fun ScannerOverlayPreview() {
     VaultioTheme {
         Box(modifier = Modifier.fillMaxSize()) {
             ScannerOverlay(isSearching = true, isPriceCheckMode = false)
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+fun ScannerOverlayFocusPreview() {
+    VaultioTheme {
+        Box(modifier = Modifier.fillMaxSize()) {
+            ScannerOverlay(
+                isSearching = true,
+                focusPoint = Offset(500f, 1000f)
+            )
         }
     }
 }

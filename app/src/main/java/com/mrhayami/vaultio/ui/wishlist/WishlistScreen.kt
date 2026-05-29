@@ -22,8 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CatchingPokemon
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,19 +45,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.mrhayami.vaultio.data.local.CardEntity
+import com.mrhayami.vaultio.data.local.SetEntity
+import com.mrhayami.vaultio.data.local.WishlistCardEntity
 import com.mrhayami.vaultio.data.local.WishlistCardWithDetails
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.collection.CollectionEvent
 import com.mrhayami.vaultio.ui.collection.components.AddCardModal
+import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -268,20 +272,62 @@ fun WishlistItem(
                 Row {
                     IconButton(onClick = onMoveToCollection) {
                         Icon(
-                            Icons.Rounded.ShoppingCart,
+                            Icons.Rounded.CatchingPokemon,
                             contentDescription = "Move to Collection",
-                            tint = Color(0xFF00E676)
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                     IconButton(onClick = onDelete) {
                         Icon(
                             Icons.Rounded.Delete,
                             contentDescription = "Remove",
-                            tint = MaterialTheme.colorScheme.error
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun WishlistItemPreview() {
+    val sampleItem = WishlistCardWithDetails(
+        wishlistCard = WishlistCardEntity(
+            id = 1,
+            cardId = "swsh11-1",
+            quantity = 2,
+            condition = "Near Mint",
+            finish = "Normal"
+        ),
+        card = CardEntity(
+            id = "swsh11-1",
+            localId = "1",
+            name = "Giratina VSTAR",
+            image = "https://images.pokemontcg.io/swsh11/131",
+            setId = "swsh11",
+            rarity = "Rare Holo VSTAR",
+            category = "Pokemon",
+            types = "Dragon",
+            dexId = "487"
+        ),
+        set = SetEntity(
+            id = "swsh11",
+            name = "Lost Origin",
+            series = "Sword & Shield",
+            logo = "https://images.pokemontcg.io/swsh11/logo.png",
+            symbol = "https://images.pokemontcg.io/swsh11/symbol.png",
+            totalCards = 196,
+            releaseDate = "2022-09-09"
+        )
+    )
+
+    VaultioTheme {
+        WishlistItem(
+            item = sampleItem,
+            onDelete = {},
+            onMoveToCollection = {}
+        )
     }
 }
