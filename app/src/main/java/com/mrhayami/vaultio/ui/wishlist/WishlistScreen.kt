@@ -45,7 +45,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -61,6 +64,7 @@ import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.collection.CollectionEvent
 import com.mrhayami.vaultio.ui.collection.components.AddCardModal
+import com.mrhayami.vaultio.ui.components.MicroCaptureFanfare
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import java.util.Locale
 
@@ -74,6 +78,7 @@ fun WishlistScreen(
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showAddModal by remember { mutableStateOf(false) }
+    var fanfarePosition by remember { mutableStateOf<Offset?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.sideEffects.collect { effect ->
@@ -83,6 +88,8 @@ fun WishlistScreen(
                     effect.message,
                     Toast.LENGTH_SHORT
                 ).show()
+
+                is WishlistEffect.ShowFanfare -> fanfarePosition = effect.position
             }
         }
     }
@@ -149,7 +156,14 @@ fun WishlistScreen(
                     WishlistItem(
                         item = item,
                         onDelete = { viewModel.onEvent(WishlistEvent.RemoveFromWishlist(item.wishlistCard.id)) },
-                        onMoveToCollection = { viewModel.onEvent(WishlistEvent.MoveToCollection(item.wishlistCard.id)) }
+                        onMoveToCollection = { pos ->
+                            viewModel.onEvent(
+                                WishlistEvent.MoveToCollection(
+                                    item.wishlistCard.id,
+                                    pos
+                                )
+                            )
+                        }
                     )
                 }
             }
@@ -199,6 +213,13 @@ fun WishlistScreen(
                 )
             }
         }
+
+        fanfarePosition?.let { pos ->
+            MicroCaptureFanfare(
+                center = pos,
+                onAnimationFinished = { fanfarePosition = null }
+            )
+        }
     }
 }
 
@@ -206,8 +227,10 @@ fun WishlistScreen(
 fun WishlistItem(
     item: WishlistCardWithDetails,
     onDelete: () -> Unit,
-    onMoveToCollection: () -> Unit
+    onMoveToCollection: (Offset) -> Unit
 ) {
+    var buttonPosition by remember { mutableStateOf(Offset.Zero) }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -270,7 +293,16 @@ fun WishlistItem(
                 modifier = Modifier.fillMaxHeight()
             ) {
                 Row {
-                    IconButton(onClick = onMoveToCollection) {
+                    IconButton(
+                        onClick = { onMoveToCollection(buttonPosition) },
+                        modifier = Modifier.onGloballyPositioned { layoutCoordinates ->
+                            val windowPos = layoutCoordinates.positionInWindow()
+                            buttonPosition = Offset(
+                                windowPos.x + layoutCoordinates.size.width / 2f,
+                                windowPos.y + layoutCoordinates.size.height / 2f
+                            )
+                        }
+                    ) {
                         Icon(
                             Icons.Rounded.CatchingPokemon,
                             contentDescription = "Move to Collection",

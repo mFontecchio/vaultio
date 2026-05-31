@@ -1,5 +1,6 @@
 package com.mrhayami.vaultio.ui.components
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -12,11 +13,17 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CatchingPokemon
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -24,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -599,6 +607,112 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGustsOfWind(pro
     }
 }
 
+@Composable
+fun MicroCaptureFanfare(
+    center: Offset,
+    modifier: Modifier = Modifier,
+    onAnimationFinished: () -> Unit = {}
+) {
+    val progress = remember { Animatable(0f) }
+    val particles = remember {
+        val random = Random(System.currentTimeMillis())
+        List(30) {
+            val angle = random.nextFloat() * 2 * PI.toFloat()
+            val speed = random.nextFloat() * 400f + 100f
+            Offset(cos(angle) * speed, sin(angle) * speed)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 1000, easing = LinearEasing)
+        )
+        onAnimationFinished()
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .drawBehind {
+                val t = progress.value
+
+                // 1. Concentric Expanding Rings
+                val ringCount = 2
+                repeat(ringCount) { i ->
+                    val ringT = (t * 1.5f - (i * 0.2f)).coerceIn(0f, 1f)
+                    if (ringT > 0f) {
+                        val radius = ringT * 100.dp.toPx()
+                        val alpha = (1f - ringT).pow(2)
+                        drawCircle(
+                            color = Color.White.copy(alpha = alpha * 0.8f),
+                            radius = radius,
+                            center = center,
+                            style = Stroke(width = 2.dp.toPx())
+                        )
+                    }
+                }
+
+                // 2. Radiating Sparkles
+                particles.forEachIndexed { index, velocity ->
+                    val particleT = (t * 1.2f).coerceIn(0f, 1f)
+                    if (particleT > 0f) {
+                        val pos = center + velocity * particleT
+                        val alpha = (1f - particleT).pow(2)
+                        val particleSize = (1f - particleT) * 4.dp.toPx()
+                        val color = if (index % 2 == 0) Color(0xFF00E676) else Color.White
+                        drawCircle(
+                            color = color.copy(alpha = alpha),
+                            radius = particleSize,
+                            center = pos
+                        )
+                    }
+                }
+            }
+    ) {
+        val t = progress.value
+
+        val ballScale = when {
+            t < 0.3f -> (t / 0.3f) * 1.2f
+            t < 0.5f -> 1.2f + sin((t - 0.3f) * 40f) * 0.2f
+            else -> 1.2f
+        }
+
+        val ballAlpha = when {
+            t < 0.1f -> t / 0.1f
+            t < 0.7f -> 1f
+            else -> 1f - ((t - 0.7f) / 0.3f)
+        }
+
+        if (ballAlpha > 0f) {
+            Icon(
+                Icons.Rounded.CatchingPokemon,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(48.dp)
+                    .graphicsLayer {
+                        translationX = center.x - size.width / 2
+                        translationY = center.y - size.height / 2
+                        scaleX = ballScale
+                        scaleY = ballScale
+                        alpha = ballAlpha
+                    },
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Micro Capture Fanfare Preview")
+@Composable
+private fun MicroCaptureFanfarePreview() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        MicroCaptureFanfare(
+            center = Offset(500f, 500f)
+        )
+    }
+}
+
 @Preview(showBackground = true, name = "Holo Effect Preview")
 @Composable
 private fun HoloEffectPreview() {
@@ -611,7 +725,7 @@ private fun HoloEffectPreview() {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Holo Card")
-            Text("(Drag to tilt)", style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+            Text("(Drag to tilt)", style = MaterialTheme.typography.labelSmall)
         }
     }
 }

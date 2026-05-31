@@ -1,5 +1,6 @@
 package com.mrhayami.vaultio.ui.wishlist
 
+import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -61,7 +62,7 @@ class WishlistViewModel(
             )
 
             is WishlistEvent.RemoveFromWishlist -> removeFromWishlist(event.id)
-            is WishlistEvent.MoveToCollection -> moveToCollection(event.id)
+            is WishlistEvent.MoveToCollection -> moveToCollection(event.id, event.position)
         }
     }
 
@@ -102,9 +103,10 @@ class WishlistViewModel(
         }
     }
 
-    private fun moveToCollection(id: Long) {
+    private fun moveToCollection(id: Long, position: Offset) {
         viewModelScope.launch {
             repository.moveWishlistCardToCollection(id)
+            emitEffect(WishlistEffect.ShowFanfare(position))
             emitEffect(WishlistEffect.ShowToast("Moved to collection"))
         }
     }
