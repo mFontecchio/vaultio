@@ -1,6 +1,7 @@
 package com.mrhayami.vaultio.ui.components
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -626,7 +627,7 @@ fun MicroCaptureFanfare(
     LaunchedEffect(Unit) {
         progress.animateTo(
             targetValue = 1f,
-            animationSpec = tween(durationMillis = 1000, easing = LinearEasing)
+            animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
         )
         onAnimationFinished()
     }
@@ -642,8 +643,8 @@ fun MicroCaptureFanfare(
                 repeat(ringCount) { i ->
                     val ringT = (t * 1.5f - (i * 0.2f)).coerceIn(0f, 1f)
                     if (ringT > 0f) {
-                        val radius = ringT * 100.dp.toPx()
-                        val alpha = (1f - ringT).pow(2)
+                        val radius = ringT * 80.dp.toPx()
+                        val alpha = (1f - ringT).pow(2.5f)
                         drawCircle(
                             color = Color.White.copy(alpha = alpha * 0.8f),
                             radius = radius,
@@ -653,14 +654,22 @@ fun MicroCaptureFanfare(
                     }
                 }
 
-                // 2. Radiating Sparkles
+                // 2. Radiating Multicolor Sparkles
                 particles.forEachIndexed { index, velocity ->
                     val particleT = (t * 1.2f).coerceIn(0f, 1f)
                     if (particleT > 0f) {
                         val pos = center + velocity * particleT
                         val alpha = (1f - particleT).pow(2)
                         val particleSize = (1f - particleT) * 4.dp.toPx()
-                        val color = if (index % 2 == 0) Color(0xFF00E676) else Color.White
+
+                        val color = when (index % 5) {
+                            0 -> Color(0xFF00E676) // Green
+                            1 -> Color(0xFFFFD600) // Gold
+                            2 -> Color(0xFF00B0FF) // Cyan
+                            3 -> Color(0xFFFF4081) // Pink
+                            else -> Color.White
+                        }
+
                         drawCircle(
                             color = color.copy(alpha = alpha),
                             radius = particleSize,
@@ -673,9 +682,9 @@ fun MicroCaptureFanfare(
         val t = progress.value
 
         val ballScale = when {
-            t < 0.3f -> (t / 0.3f) * 1.2f
-            t < 0.5f -> 1.2f + sin((t - 0.3f) * 40f) * 0.2f
-            else -> 1.2f
+            t < 0.2f -> (t / 0.2f) * 1.05f
+            t < 0.4f -> 1.05f + sin((t - 0.2f) * 30f) * 0.02f
+            else -> 1.05f
         }
 
         val ballAlpha = when {

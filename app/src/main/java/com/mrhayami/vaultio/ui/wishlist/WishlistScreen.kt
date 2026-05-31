@@ -157,6 +157,7 @@ fun WishlistScreen(
                         item = item,
                         onDelete = { viewModel.onEvent(WishlistEvent.RemoveFromWishlist(item.wishlistCard.id)) },
                         onMoveToCollection = { pos ->
+                            fanfarePosition = pos
                             viewModel.onEvent(
                                 WishlistEvent.MoveToCollection(
                                     item.wishlistCard.id,
