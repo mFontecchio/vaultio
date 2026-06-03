@@ -152,15 +152,15 @@ fun WishlistScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(uiState.wishlistItems, key = { it.wishlistCard.id }) { item ->
+                items(uiState.wishlistItems, key = { it.details.wishlistCard.id }) { item ->
                     WishlistItem(
                         item = item,
-                        onDelete = { viewModel.onEvent(WishlistEvent.RemoveFromWishlist(item.wishlistCard.id)) },
+                        onDelete = { viewModel.onEvent(WishlistEvent.RemoveFromWishlist(item.details.wishlistCard.id)) },
                         onMoveToCollection = { pos ->
                             fanfarePosition = pos
                             viewModel.onEvent(
                                 WishlistEvent.MoveToCollection(
-                                    item.wishlistCard.id,
+                                    item.details.wishlistCard.id,
                                     pos
                                 )
                             )
@@ -226,7 +226,7 @@ fun WishlistScreen(
 
 @Composable
 fun WishlistItem(
-    item: WishlistCardWithDetails,
+    item: WishlistItemUiModel,
     onDelete: () -> Unit,
     onMoveToCollection: (Offset) -> Unit
 ) {
@@ -253,7 +253,7 @@ fun WishlistItem(
                     .clip(RoundedCornerShape(8.dp))
             ) {
                 AsyncImage(
-                    model = "${item.card.image}/low.webp",
+                    model = "${item.details.card.image}/low.webp",
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
@@ -265,23 +265,23 @@ fun WishlistItem(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    item.card.name,
+                    item.details.card.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "${item.set.name} • #${item.card.localId}",
+                    "${item.details.set.name} • #${item.details.card.localId}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "${item.wishlistCard.condition} • ${item.wishlistCard.finish}",
+                    "${item.details.wishlistCard.condition} • ${item.details.wishlistCard.finish}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
-                if (item.wishlistCard.quantity > 1) {
+                if (item.details.wishlistCard.quantity > 1) {
                     Text(
-                        "Qty: ${item.wishlistCard.quantity}",
+                        "Qty: ${item.details.wishlistCard.quantity}",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -318,6 +318,28 @@ fun WishlistItem(
                         )
                     }
                 }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "$${String.format(Locale.US, "%.2f", item.price)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (item.details.wishlistCard.quantity > 1) {
+                        Text(
+                            text = "Total: $${
+                                String.format(
+                                    Locale.US,
+                                    "%.2f",
+                                    item.price * item.details.wishlistCard.quantity
+                                )
+                            }",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     }
@@ -326,7 +348,7 @@ fun WishlistItem(
 @Preview(showBackground = true)
 @Composable
 fun WishlistItemPreview() {
-    val sampleItem = WishlistCardWithDetails(
+    val sampleDetails = WishlistCardWithDetails(
         wishlistCard = WishlistCardEntity(
             id = 1,
             cardId = "swsh11-1",
@@ -354,6 +376,11 @@ fun WishlistItemPreview() {
             totalCards = 196,
             releaseDate = "2022-09-09"
         )
+    )
+
+    val sampleItem = WishlistItemUiModel(
+        details = sampleDetails,
+        price = 12.50
     )
 
     VaultioTheme {

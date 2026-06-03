@@ -28,7 +28,7 @@ class WishlistViewModel(
             val vintagePriceMap =
                 vintagePrices.associateBy { "${it.cardId}_${it.finish}_${it.condition}_${it.printing}" }
 
-            val totalValue = wishlist.sumOf { item ->
+            val uiItems = wishlist.map { item ->
                 val cardId = item.wishlistCard.cardId
                 val finish = item.wishlistCard.finish
                 val condition = item.wishlistCard.condition
@@ -37,12 +37,15 @@ class WishlistViewModel(
                 val price = priceMap["${cardId}_${finish}_${condition}"]?.marketPrice
                     ?: vintagePriceMap["${cardId}_${finish}_${condition}_${printing}"]?.marketPrice
                     ?: 0.0
-                price * item.wishlistCard.quantity
+
+                WishlistItemUiModel(details = item, price = price)
             }
+
+            val totalValue = uiItems.sumOf { it.price * it.details.wishlistCard.quantity }
 
             updateState {
                 copy(
-                    wishlistItems = wishlist,
+                    wishlistItems = uiItems,
                     totalWishlistValue = totalValue,
                     isLoading = false
                 )

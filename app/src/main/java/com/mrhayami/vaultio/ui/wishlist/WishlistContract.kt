@@ -4,9 +4,14 @@ import androidx.compose.ui.geometry.Offset
 import com.mrhayami.vaultio.data.local.WishlistCardWithDetails
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 
+data class WishlistItemUiModel(
+    val details: WishlistCardWithDetails,
+    val price: Double
+)
+
 data class WishlistUiState(
     val isLoading: Boolean = true,
-    val wishlistItems: List<WishlistCardWithDetails> = emptyList(),
+    val wishlistItems: List<WishlistItemUiModel> = emptyList(),
     val isSearching: Boolean = false,
     val searchResults: List<TcgDexCard> = emptyList(),
     val totalWishlistValue: Double = 0.0
