@@ -107,13 +107,18 @@ Notable packages:
 
 ## Contributing
 
-This is a personal / small-team project. If you open a PR:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions, and PR expectations.
 
-1. Match existing Kotlin / Compose style and MVI patterns
-2. Prefer focused diffs over drive-by refactors
-3. Run `testDebugUnitTest` before requesting review
-4. Call out Room schema bumps explicitly (destructive migration)
+- Bug reports and feature requests use GitHub issue forms under **New issue**
+- Pull requests use the template in `.github/PULL_REQUEST_TEMPLATE.md`
 
 ## License
 
-No license file is published yet. All rights reserved unless otherwise noted by the repository owner.
+Licensed under the [Apache License 2.0](LICENSE).
+
+```
+Copyright 2026 Michael Fontecchio
+```
+
+See [NOTICE](NOTICE) for attribution and trademark notes. Pokémon and related marks belong to
+their respective owners; Vaultio is an unofficial fan project.
