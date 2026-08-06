@@ -39,11 +39,16 @@
 - **Room Changes**: Update `Entities.kt`, `Daos.kt`, and `VaultioDatabase.kt`. Version bumps wipe
   data due to `fallbackToDestructiveMigration()`.
 - **User Preferences**: Managed via `UserPreferencesRepository.kt` using DataStore.
-- **Logging**: Global `HttpLoggingInterceptor.Level.BODY` is enabled.
+- **Logging**: `HttpLoggingInterceptor.Level.BODY` in debug only; none in nightly/release.
+- **Build types**: `debug` (`.debug` suffix), `nightly` (`.nightly` suffix, Great Ball icon,
+  release-like minify), `release` (Play identity, Poké Ball icon).
 
 ## Useful workflows
 
 - **Testing**: `./gradlew.bat testDebugUnitTest --console=plain`
-- **Building**: `./gradlew.bat assembleDebug --console=plain`
+- **Building**:
+  - `./gradlew.bat assembleDebug --console=plain`
+  - `./gradlew.bat assembleNightly --console=plain`
+  - `./gradlew.bat assembleRelease --console=plain`
 - **Unit Tests**: Scanner matching logic is verified in `ScannerMatchingTest.kt`.
 

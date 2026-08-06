@@ -29,6 +29,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            resValue("string", "app_name", "Vaultio Debug")
+        }
         release {
             isShrinkResources = true
             isMinifyEnabled = true
@@ -36,6 +41,20 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Debug keystore for local IDE install/run. Replace with a Play upload
+            // keystore before shipping store builds.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+        create("nightly") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".nightly"
+            versionNameSuffix = "-nightly"
+            resValue("string", "app_name", "Vaultio Nightly")
+            matchingFallbacks += listOf("release")
+            // Signed with the debug keystore so Android Studio can install/run locally.
+            // Still release-like: minify/shrink on, not debuggable.
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
         }
     }
     compileOptions {
