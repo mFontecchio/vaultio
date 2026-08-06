@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed monochrome — ball in adaptive safe zone (72/108 dp). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- r = 36 → diameter 72dp safe zone -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,54m-36,0a36,36 0,1 1,72 0a36,36 0,1 1,-72 0" />
+
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M18,54 A36,36 0,0 0 90,54 Z" />
+
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M18.2,49 L89.8,49 L89.8,59 L18.2,59 Z" />
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,54m-11.8,0a11.8,11.8 0,1 1,23.6 0a11.8,11.8 0,1 1,-23.6 0" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M54,54m-8.5,0a8.5,8.5 0,1 1,17 0a8.5,8.5 0,1 1,-17 0" />
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M49,49.8 L54,58.6 L59,49.8 L57.1,49.8 L54,55.2 L50.9,49.8 Z" />
+</vector>
