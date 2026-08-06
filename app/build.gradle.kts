@@ -1,15 +1,34 @@
 import java.util.Properties
 
-val localProps = Properties().also { props ->
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { props.load(it) }
-}
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
 }
+
+val keystoreProperties = Properties().also { props ->
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { props.load(it) }
+}
+
+val releaseStoreFilePath = System.getenv("VAULTIO_KEYSTORE_PATH")
+    ?: keystoreProperties.getProperty("storeFile")
+val releaseStorePassword = System.getenv("VAULTIO_KEYSTORE_PASSWORD")
+    ?: keystoreProperties.getProperty("storePassword")
+val releaseKeyAlias = System.getenv("VAULTIO_KEY_ALIAS")
+    ?: keystoreProperties.getProperty("keyAlias")
+val releaseKeyPassword = System.getenv("VAULTIO_KEY_PASSWORD")
+    ?: keystoreProperties.getProperty("keyPassword")
+
+val releaseStoreFile = releaseStoreFilePath
+    ?.takeIf { it.isNotBlank() }
+    ?.let { rootProject.file(it) }
+
+val hasReleaseSigning = releaseStoreFile != null &&
+    releaseStoreFile.isFile &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.mrhayami.vaultio"
@@ -23,9 +42,17 @@ android {
         versionName = "1.2.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
 
-        val justTcgApiKey = localProps.getProperty("JUST_TCG_API_KEY") ?: ""
-        buildConfigField("String", "JUST_TCG_API_KEY", "\"$justTcgApiKey\"")
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
@@ -41,9 +68,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Debug keystore for local IDE install/run. Replace with a Play upload
-            // keystore before shipping store builds.
-            signingConfig = signingConfigs.getByName("debug")
+            // Upload keystore when env / keystore.properties present; else debug for local IDE.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         create("nightly") {
             initWith(getByName("release"))
@@ -51,9 +81,11 @@ android {
             versionNameSuffix = "-nightly"
             resValue("string", "app_name", "Vaultio Nightly")
             matchingFallbacks += listOf("release")
-            // Signed with the debug keystore so Android Studio can install/run locally.
-            // Still release-like: minify/shrink on, not debuggable.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isDebuggable = false
         }
     }

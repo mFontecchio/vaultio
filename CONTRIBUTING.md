@@ -20,7 +20,8 @@ will not be tolerated.
 
 1. Fork and clone the repo
 2. Open in Android Studio (JDK 11+) or sync with Gradle from the CLI
-3. Optional: add `JUST_TCG_API_KEY=...` to `local.properties` (see README)
+3. Optionally paste a JustTCG API key in **Settings** (DataStore). Never commit API keys,
+   `local.properties`, keystores, or `keystore.properties`
 4. Run a debug build and, before PR, unit tests:
 
    ```bat
@@ -30,6 +31,8 @@ will not be tolerated.
 
 Camera scanning needs a physical device. Emulators are fine for most other UI flows.
 
+CI must pass on your PR (`test` + `build-debug` workflows).
+
 ## Project conventions
 
 - **Kotlin + Jetpack Compose**, Material 3
@@ -38,7 +41,8 @@ Camera scanning needs a physical device. Emulators are fine for most other UI fl
 - **Focused diffs** — one concern per PR; avoid drive-by refactors
 - **Room**: bump `VaultioDatabase` version when changing entities/DAOs. Migrations are destructive
   (`fallbackToDestructiveMigration()`) — call this out in the PR
-- **Secrets**: never commit API keys, `local.properties`, or keystores
+- **Secrets**: never commit API keys, `local.properties`, keystores (`*.jks` / `*.keystore`), or
+  `keystore.properties`
 
 ## Pull request process
 
@@ -46,13 +50,14 @@ Camera scanning needs a physical device. Emulators are fine for most other UI fl
 2. Create a branch from the latest default / feature branch you were asked to target
 3. Keep commits readable; squash is fine if the history is noisy
 4. Fill out the pull request template
-5. Ensure the app builds and relevant tests pass
+5. Ensure the app builds and relevant tests pass; wait for CI
 6. Expect review feedback on UX, MVI shape, and Android lifecycle / concurrency
 
 ### PR checklist (summary)
 
 - [ ] Builds (`assembleDebug` at minimum)
 - [ ] `testDebugUnitTest` passes when code under test changed
+- [ ] CI green on the PR
 - [ ] Room / prefs / nav changes documented in the PR body
 - [ ] No secrets or generated junk in the diff
 

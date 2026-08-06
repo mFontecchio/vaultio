@@ -1,5 +1,7 @@
 # Vaultio
 
+[![CI](https://github.com/mFontecchio/vaultio/actions/workflows/ci.yml/badge.svg)](https://github.com/mFontecchio/vaultio/actions/workflows/ci.yml)
+
 Offline-first Android app for managing a Pokémon TCG collection — live camera scanning, local set
 catalogs, market pricing, wishlist, collection stats, and on-device AI grading estimates.
 
@@ -35,22 +37,17 @@ Single Gradle module: `:app`.
 
 ## Requirements
 
-- Android Studio (recent stable) with JDK 11+
+- Android Studio (recent stable) with JDK 11+ (CI uses JDK 17)
 - Android device or emulator (API 26+); **camera features need a physical device**
-- Optional: JustTCG API key for fallback / vintage pricing and quota UI
+- Optional: JustTCG API key (entered in **Settings** at runtime) for fallback / vintage pricing
 
 ## Setup
 
 1. Clone the repo and open it in Android Studio (or sync with Gradle from the CLI).
-2. Ensure `local.properties` exists (Android Studio creates it). Optionally add:
-
-   ```properties
-   JUST_TCG_API_KEY=your_key_here
-   ```
-
-   The key is injected as `BuildConfig.JUST_TCG_API_KEY`. You can also paste a key in **Settings**
-   at runtime (stored in DataStore).
-3. Sync Gradle, then run a **debug** build.
+2. Ensure `local.properties` exists (Android Studio creates it with `sdk.dir`).
+3. Optionally paste a JustTCG API key in **Settings** (stored in DataStore on-device). Do **not** put
+   API keys in the repo, `local.properties`, or BuildConfig.
+4. Sync Gradle, then run a **debug** build.
 
 > Schema changes bump Room and use `fallbackToDestructiveMigration()` — local DB data is wiped on
 > version bumps. Back up anything you care about before upgrading schema-changing builds.
@@ -59,11 +56,14 @@ Single Gradle module: `:app`.
 
 | Type | Application ID | Notes |
 |---|---|---|
-| `debug` | `com.mrhayami.vaultio.debug` | Debuggable; verbose HTTP logging |
+| `debug` | `com.mrhayami.vaultio.debug` | Debuggable; verbose HTTP logging; debug keystore |
 | `nightly` | `com.mrhayami.vaultio.nightly` | Release-like minify/shrink; separate icon / name |
 | `release` | `com.mrhayami.vaultio` | Minify/shrink; Play identity |
 
 Each type can override `vaultio_icon.webp` under the matching source set.
+
+Locally, release/nightly fall back to the debug keystore when no upload keystore is configured.
+CI signs release and nightly with the upload keystore from GitHub Secrets (see below).
 
 ### CLI
 
@@ -75,6 +75,31 @@ gradlew.bat testDebugUnitTest --console=plain
 ```
 
 On macOS / Linux, use `./gradlew` instead of `gradlew.bat`.
+
+## Downloads & CI
+
+| Artifact | Where |
+|---|---|
+| Debug APK | [Actions → CI](https://github.com/mFontecchio/vaultio/actions/workflows/ci.yml) workflow artifacts (`app-debug`) |
+| Release APK | [GitHub Releases](https://github.com/mFontecchio/vaultio/releases) for tags `v*` (e.g. `v1.2.7`) |
+| Nightly APK | Rolling [Nightly](https://github.com/mFontecchio/vaultio/releases/tag/nightly) prerelease |
+
+CI runs unit tests and `assembleDebug` on pulls and pushes to the default branch. Pushing a `v*` tag
+builds a signed release APK. The Nightly workflow (schedule + manual) publishes a signed nightly APK.
+
+### Maintainer signing
+
+1. Generate an upload keystore (keep an offline backup; never commit it):
+
+   ```bat
+   keytool -genkeypair -v -keystore vaultio-upload.jks -keyalg RSA -keysize 2048 -validity 10000 -alias vaultio
+   ```
+
+2. Set GitHub Actions secrets: `VAULTIO_KEYSTORE_BASE64`, `VAULTIO_KEYSTORE_PASSWORD`,
+   `VAULTIO_KEY_ALIAS`, `VAULTIO_KEY_PASSWORD`.
+
+3. For local signed builds, copy [`keystore.properties.example`](keystore.properties.example) to
+   `keystore.properties` (gitignored) and point `storeFile` at your `.jks`.
 
 ## Project layout
 
@@ -103,7 +128,10 @@ Notable packages:
 
 - Collection and grading images stay on-device; grading uses on-device models where available
 - Catalog / pricing traffic goes to TCGDex and (optionally) JustTCG
+- JustTCG keys are Settings-only (DataStore); never commit keys or keystores
 - Camera and Internet permissions are required for scanning and online enrichment
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 ## Contributing
 
