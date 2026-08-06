@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Android
+        uses: ./.github/actions/setup-android
+
+      - name: Decode upload keystore
+        env:
+          VAULTIO_KEYSTORE_BASE64: ${{ secrets.VAULTIO_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$VAULTIO_KEYSTORE_BASE64" ]; then
+            echo "Missing secret VAULTIO_KEYSTORE_BASE64"
+            exit 1
+          fi
+          echo "$VAULTIO_KEYSTORE_BASE64" | base64 -d > vaultio-upload.jks
+          test -s vaultio-upload.jks
+
+      - name: Assemble release APK
+        env:
+          VAULTIO_KEYSTORE_PATH: vaultio-upload.jks
+          VAULTIO_KEYSTORE_PASSWORD: ${{ secrets.VAULTIO_KEYSTORE_PASSWORD }}
+          VAULTIO_KEY_ALIAS: ${{ secrets.VAULTIO_KEY_ALIAS }}
+          VAULTIO_KEY_PASSWORD: ${{ secrets.VAULTIO_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --console=plain
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/mapping/release/mapping.txt
+          generate_release_notes: true
+          fail_on_unmatched_files: false

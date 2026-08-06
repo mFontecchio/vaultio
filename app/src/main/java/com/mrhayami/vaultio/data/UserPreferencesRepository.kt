@@ -42,6 +42,7 @@ class UserPreferencesRepository(context: Context) {
         
         val POKEDEX_SHOW_UNCOLLECTED = booleanPreferencesKey("pokedex_show_uncollected")
         val POKEDEX_USE_SHINY_SPRITES = booleanPreferencesKey("pokedex_use_shiny_sprites")
+        val POKEDEX_USE_OFFICIAL_ART = booleanPreferencesKey("pokedex_use_official_art")
 
         val THEME_BRAND = stringPreferencesKey("theme_brand")
         val DARK_THEME_CONFIG = stringPreferencesKey("dark_theme_config")
@@ -50,6 +51,15 @@ class UserPreferencesRepository(context: Context) {
         val SHOW_FINISH_ANIMATIONS = booleanPreferencesKey("show_finish_animations")
         
         val JUST_TCG_API_KEY = stringPreferencesKey("just_tcg_api_key")
+        val PREFER_SET_LOGO = booleanPreferencesKey("prefer_set_logo")
+        
+        val SHOULD_SHOW_WALKTHROUGH = booleanPreferencesKey("should_show_walkthrough")
+        val LAST_SET_CHECK = stringPreferencesKey("last_set_check")
+
+        val BULK_SCAN_CONDITION = stringPreferencesKey("bulk_scan_condition")
+        val BULK_SCAN_PRINTING = stringPreferencesKey("bulk_scan_printing")
+        val BULK_SCAN_FINISH = stringPreferencesKey("bulk_scan_finish")
+        val BULK_SCAN_FOLDER_IDS = stringPreferencesKey("bulk_scan_folder_ids")
     }
 
     val viewMode: Flow<ViewMode> = dataStore.data.map {
@@ -105,7 +115,8 @@ class UserPreferencesRepository(context: Context) {
     val pokedexSettings: Flow<PokedexSettings> = dataStore.data.map {
         PokedexSettings(
             showUncollected = it[PreferencesKeys.POKEDEX_SHOW_UNCOLLECTED] ?: true,
-            useShinySprites = it[PreferencesKeys.POKEDEX_USE_SHINY_SPRITES] ?: false
+            useShinySprites = it[PreferencesKeys.POKEDEX_USE_SHINY_SPRITES] ?: false,
+            useOfficialArt = it[PreferencesKeys.POKEDEX_USE_OFFICIAL_ART] ?: false
         )
     }
 
@@ -113,6 +124,7 @@ class UserPreferencesRepository(context: Context) {
         dataStore.edit {
             it[PreferencesKeys.POKEDEX_SHOW_UNCOLLECTED] = settings.showUncollected
             it[PreferencesKeys.POKEDEX_USE_SHINY_SPRITES] = settings.useShinySprites
+            it[PreferencesKeys.POKEDEX_USE_OFFICIAL_ART] = settings.useOfficialArt
         }
     }
 
@@ -165,6 +177,76 @@ class UserPreferencesRepository(context: Context) {
     suspend fun setJustTcgApiKey(apiKey: String) {
         dataStore.edit {
             it[PreferencesKeys.JUST_TCG_API_KEY] = apiKey
+        }
+    }
+
+    val preferSetLogo: Flow<Boolean> = dataStore.data.map {
+        it[PreferencesKeys.PREFER_SET_LOGO] ?: true
+    }
+
+    suspend fun setPreferSetLogo(preferLogo: Boolean) {
+        dataStore.edit {
+            it[PreferencesKeys.PREFER_SET_LOGO] = preferLogo
+        }
+    }
+
+    val shouldShowWalkthrough: Flow<Boolean> = dataStore.data.map {
+        it[PreferencesKeys.SHOULD_SHOW_WALKTHROUGH] ?: true
+    }
+
+    suspend fun setShouldShowWalkthrough(show: Boolean) {
+        dataStore.edit {
+            it[PreferencesKeys.SHOULD_SHOW_WALKTHROUGH] = show
+        }
+    }
+
+    val lastSetCheck: Flow<Long> = dataStore.data.map {
+        it[PreferencesKeys.LAST_SET_CHECK]?.toLongOrNull() ?: 0L
+    }
+
+    suspend fun setLastSetCheck(timestamp: Long) {
+        dataStore.edit {
+            it[PreferencesKeys.LAST_SET_CHECK] = timestamp.toString()
+        }
+    }
+
+    val bulkScanCondition: Flow<String> = dataStore.data.map {
+        it[PreferencesKeys.BULK_SCAN_CONDITION] ?: PricingUtils.CONDITION_NM
+    }
+
+    suspend fun setBulkScanCondition(condition: String) {
+        dataStore.edit {
+            it[PreferencesKeys.BULK_SCAN_CONDITION] = condition
+        }
+    }
+
+    val bulkScanPrinting: Flow<String> = dataStore.data.map {
+        it[PreferencesKeys.BULK_SCAN_PRINTING] ?: PricingUtils.PRINTING_UNLIMITED
+    }
+
+    suspend fun setBulkScanPrinting(printing: String) {
+        dataStore.edit {
+            it[PreferencesKeys.BULK_SCAN_PRINTING] = printing
+        }
+    }
+
+    val bulkScanFinish: Flow<String> = dataStore.data.map {
+        it[PreferencesKeys.BULK_SCAN_FINISH] ?: PricingUtils.FINISH_NORMAL
+    }
+
+    suspend fun setBulkScanFinish(finish: String) {
+        dataStore.edit {
+            it[PreferencesKeys.BULK_SCAN_FINISH] = finish
+        }
+    }
+
+    val bulkScanFolderIds: Flow<List<Long>> = dataStore.data.map {
+        it[PreferencesKeys.BULK_SCAN_FOLDER_IDS]?.split(",")?.mapNotNull { id -> id.toLongOrNull() } ?: emptyList()
+    }
+
+    suspend fun setBulkScanFolderIds(ids: List<Long>) {
+        dataStore.edit {
+            it[PreferencesKeys.BULK_SCAN_FOLDER_IDS] = ids.joinToString(",")
         }
     }
 }

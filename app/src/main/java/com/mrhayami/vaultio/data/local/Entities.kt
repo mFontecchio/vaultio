@@ -22,7 +22,10 @@ data class SetEntity(
 
 @Entity(
     tableName = "cards",
-    indices = [Index(value = ["setId"])]
+    indices = [
+        Index(value = ["setId"]),
+        Index(value = ["pokemonName"])
+    ]
 )
 data class CardEntity(
     @PrimaryKey val id: String,
@@ -37,12 +40,16 @@ data class CardEntity(
     val dexIds: String? = null, // JSON array of all dex IDs for multi-Pokemon cards
     val pokemonName: String? = null, // Extracted Pokemon base name
     val tcgPlayerId: String? = null,
+    val pHash: Long? = null, // Perceptual hash for image-based disambiguation
     val lastUpdated: Long = System.currentTimeMillis()
 )
 
 @Entity(
     tableName = "user_cards",
-    indices = [Index(value = ["cardId"])]
+    indices = [
+        Index(value = ["cardId"]),
+        Index(value = ["dateAdded"])
+    ]
 )
 data class UserCardEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -131,7 +138,15 @@ data class PriceMetaEntity(
 @Entity(tableName = "api_usage")
 data class ApiUsageEntity(
     @PrimaryKey val date: String, // "yyyy-MM-dd"
-    val count: Int = 0
+    val count: Int = 0,
+    val dailyLimit: Int = 100,
+    val dailyRemaining: Int = 100,
+    val planLimit: Int = 1000,
+    val planUsed: Int = 0,
+    val planRemaining: Int = 1000,
+    val planName: String = "Free",
+    /** Epoch-millis of the last successful GET /health sync; 0 = never synced. */
+    val lastSyncedAt: Long = 0L
 )
 
 @Entity(tableName = "telemetry_log")
@@ -142,4 +157,54 @@ data class TelemetryLogEntity(
     val status: Int,
     val latency: Long,
     val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "collection_snapshots")
+data class CollectionSnapshotEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val totalValue: Double,
+    val cardCount: Int,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "card_grades",
+    foreignKeys = [
+        ForeignKey(
+            entity = UserCardEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["userCardId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["userCardId"])]
+)
+data class CardGradeEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userCardId: Long,
+    val overallScore: Double,
+    val centeringScore: Double,
+    val cornersScore: Double,
+    val edgesScore: Double,
+    val surfaceScore: Double,
+    val reasoning: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "wishlist_cards",
+    indices = [
+        Index(value = ["cardId"]),
+        Index(value = ["dateAdded"])
+    ]
+)
+data class WishlistCardEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val cardId: String,
+    val quantity: Int = 1,
+    val condition: String = PricingUtils.CONDITION_NM,
+    val printing: String = PricingUtils.PRINTING_UNLIMITED,
+    val finish: String = PricingUtils.FINISH_NORMAL,
+    val priority: Int = 1, // 1 = Low, 2 = Medium, 3 = High
+    val dateAdded: Long = System.currentTimeMillis()
 )

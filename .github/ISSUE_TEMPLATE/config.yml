@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the README
+    url: https://github.com/mFontecchio/vaultio/blob/main/README.md
+    about: Setup, build types, and architecture overview before filing an issue.
+  - name: Contributing guide
+    url: https://github.com/mFontecchio/vaultio/blob/main/CONTRIBUTING.md
+    about: How to report bugs, propose features, and open pull requests.

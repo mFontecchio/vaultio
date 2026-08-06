@@ -1,41 +1,92 @@
 import java.util.Properties
 
-val localProps = Properties().also { props ->
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { props.load(it) }
-}
-
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
 }
 
+val keystoreProperties = Properties().also { props ->
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { props.load(it) }
+}
+
+val releaseStoreFilePath = System.getenv("VAULTIO_KEYSTORE_PATH")
+    ?: keystoreProperties.getProperty("storeFile")
+val releaseStorePassword = System.getenv("VAULTIO_KEYSTORE_PASSWORD")
+    ?: keystoreProperties.getProperty("storePassword")
+val releaseKeyAlias = System.getenv("VAULTIO_KEY_ALIAS")
+    ?: keystoreProperties.getProperty("keyAlias")
+val releaseKeyPassword = System.getenv("VAULTIO_KEY_PASSWORD")
+    ?: keystoreProperties.getProperty("keyPassword")
+
+val releaseStoreFile = releaseStoreFilePath
+    ?.takeIf { it.isNotBlank() }
+    ?.let { rootProject.file(it) }
+
+val hasReleaseSigning = releaseStoreFile != null &&
+    releaseStoreFile.isFile &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
+
 android {
     namespace = "com.mrhayami.vaultio"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.mrhayami.vaultio"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 3
-        versionName = "1.0.2"
+        versionName = "1.2.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
 
-        val justTcgApiKey = localProps.getProperty("JUST_TCG_API_KEY") ?: ""
-        buildConfigField("String", "JUST_TCG_API_KEY", "\"$justTcgApiKey\"")
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            resValue("string", "app_name", "Vaultio Debug")
+        }
         release {
-            isMinifyEnabled = false
+            isShrinkResources = true
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Upload keystore when env / keystore.properties present; else debug for local IDE.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+        }
+        create("nightly") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".nightly"
+            versionNameSuffix = "-nightly"
+            resValue("string", "app_name", "Vaultio Nightly")
+            matchingFallbacks += listOf("release")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+            isDebuggable = false
         }
     }
     compileOptions {
@@ -73,8 +124,10 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.retrofit)
     implementation(libs.converter.moshi)
+    implementation(libs.kotlinx.collections.immutable)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.accompanist.permissions)
     implementation(libs.play.services.location)
     implementation(libs.androidx.camera.camera2)
@@ -92,6 +145,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.core)
     testImplementation(libs.androidx.junit)
+    testImplementation(libs.mockk)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -101,4 +155,10 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     ksp(libs.androidx.room.compiler)
     ksp(libs.moshi.kotlin.codegen)
+    implementation(libs.vico.compose)
+    implementation(libs.vico.compose.m3)
+    implementation(libs.vico.views)
+
+    // AI & Vision (2026 Standards)
+    implementation(libs.mlkit.genai.prompt)
 }

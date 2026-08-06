@@ -1,15 +1,58 @@
 package com.mrhayami.vaultio.ui.screens
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.ImageNotSupported
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,58 +62,59 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.local.SetEntity
-import com.mrhayami.vaultio.data.repository.VaultioRepository
-import kotlinx.coroutines.launch
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SetDownloadsScreen(repository: VaultioRepository) {
-    val sets by repository.allSets.collectAsState(initial = emptyList())
-    val scope = rememberCoroutineScope()
-    var refreshing by remember { mutableStateOf(false) }
+fun SetDownloadsScreen(
+    viewModel: SetDownloadsViewModel,
+    onNavigateBack: () -> Unit
+) {
+    val state by viewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    val downloadedSets = sets.filter { it.isDownloaded }
-    val remainingSets = sets.filter { !it.isDownloaded }
-    
-    // Estimate storage (very rough estimate: ~1.5KB per card entity)
-    val totalCardsDownloaded = downloadedSets.sumOf { it.totalCards }
-    val estimatedSizeMB = (totalCardsDownloaded * 1.5 / 1024.0)
-
-    // Auto-refresh if we have sets but they are missing logos (stale data fix)
-    LaunchedEffect(sets) {
-        if (sets.isNotEmpty() && sets.take(10).all { it.logo == null || !it.logo.contains("http") }) {
-            repository.refreshSets()
+    LaunchedEffect(viewModel.sideEffects) {
+        viewModel.sideEffects.collect { effect ->
+            when (effect) {
+                is SetDownloadsEffect.ShowError -> {
+                    snackbarHostState.showSnackbar(
+                        message = effect.message,
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
         }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                    }
+                },
                 title = {
                     Column {
                         Text("Set Downloads")
                         Text(
-                            String.format(Locale.getDefault(), "~%.2f MB used", estimatedSizeMB),
+                            String.format(Locale.getDefault(), "~%.2f MB used", state.estimatedSizeMB),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
                 actions = {
-                    if (refreshing) {
+                    if (state.isRefreshing || state.isLoading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp).padding(end = 16.dp),
+                            modifier = Modifier
+                                .size(24.dp)
+                                .padding(end = 16.dp),
                             strokeWidth = 2.dp
                         )
                     } else {
-                        IconButton(onClick = {
-                            scope.launch {
-                                refreshing = true
-                                repository.refreshSets()
-                                refreshing = false
-                            }
-                        }) {
+                        IconButton(onClick = { viewModel.onEvent(SetDownloadsEvent.RefreshSets) }) {
                             Icon(Icons.Rounded.Refresh, contentDescription = "Refresh Sets")
                         }
                     }
@@ -92,13 +136,9 @@ fun SetDownloadsScreen(repository: VaultioRepository) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = {
-                        scope.launch {
-                            remainingSets.forEach { repository.downloadSet(it.id) }
-                        }
-                    },
+                    onClick = { viewModel.onEvent(SetDownloadsEvent.DownloadAll) },
                     modifier = Modifier.weight(1f),
-                    enabled = remainingSets.isNotEmpty(),
+                    enabled = state.remainingSets.isNotEmpty() && !state.isLoading,
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
                     Icon(Icons.Rounded.Download, null, Modifier.size(18.dp))
@@ -107,13 +147,9 @@ fun SetDownloadsScreen(repository: VaultioRepository) {
                 }
                 
                 OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            downloadedSets.forEach { repository.deleteDownloadedSet(it.id) }
-                        }
-                    },
+                    onClick = { viewModel.onEvent(SetDownloadsEvent.DeleteAll) },
                     modifier = Modifier.weight(1f),
-                    enabled = downloadedSets.isNotEmpty(),
+                    enabled = state.downloadedSets.isNotEmpty() && !state.isLoading,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
@@ -125,7 +161,7 @@ fun SetDownloadsScreen(repository: VaultioRepository) {
 
             // Storage Visualization
             LinearProgressIndicator(
-                progress = { (downloadedSets.size.toFloat() / sets.size.coerceAtLeast(1).toFloat()) },
+                progress = { state.downloadProgress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -133,7 +169,7 @@ fun SetDownloadsScreen(repository: VaultioRepository) {
                     .clip(CircleShape),
             )
             Text(
-                text = "${downloadedSets.size} of ${sets.size} sets available offline",
+                text = "${state.downloadedSets.size} of ${state.sets.size} sets available offline",
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -141,37 +177,23 @@ fun SetDownloadsScreen(repository: VaultioRepository) {
 
             HorizontalDivider()
 
-            if (sets.isEmpty()) {
+            if (state.sets.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (refreshing) {
+                    if (state.isRefreshing) {
                         CircularProgressIndicator()
                     } else {
-                        Button(onClick = {
-                            scope.launch {
-                                refreshing = true
-                                repository.refreshSets()
-                                refreshing = false
-                            }
-                        }) {
+                        Button(onClick = { viewModel.onEvent(SetDownloadsEvent.RefreshSets) }) {
                             Text("Fetch Sets")
                         }
                     }
                 }
             } else {
                 LazyColumn(modifier = Modifier.navigationBarsPadding()) {
-                    items(sets, key = { it.id }) { set ->
+                    items(state.sets, key = { it.id }) { set ->
                         SetItem(
                             set = set,
-                            onDownload = {
-                                scope.launch {
-                                    repository.downloadSet(set.id)
-                                }
-                            },
-                            onDelete = {
-                                scope.launch {
-                                    repository.deleteDownloadedSet(set.id)
-                                }
-                            }
+                            onDownload = { viewModel.onEvent(SetDownloadsEvent.DownloadSet(set.id)) },
+                            onDelete = { viewModel.onEvent(SetDownloadsEvent.DeleteSet(set.id)) }
                         )
                     }
                 }
@@ -186,7 +208,7 @@ fun SetItem(
     onDownload: () -> Unit,
     onDelete: () -> Unit
 ) {
-    // TCGDex predictable asset URL fallback
+    // TCGDex predictable asset URL fallback - Always prefer logo for Set Downloads view
     val imageUrl = remember(set.logo, set.symbol, set.id) {
         set.logo ?: set.symbol ?: "https://assets.tcgdex.net/en/sets/${set.id}/logo.png"
     }

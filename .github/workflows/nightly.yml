@@ -1,0 +1,78 @@
+name: Nightly
+
+on:
+  schedule:
+    # Weekly Monday 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+jobs:
+  nightly:
+    name: nightly
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if no new commits since last nightly tag
+        id: skip
+        run: |
+          if git rev-parse nightly >/dev/null 2>&1; then
+            if [ "$(git rev-parse HEAD)" = "$(git rev-parse nightly)" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "No new commits since last nightly tag."
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Android
+        if: steps.skip.outputs.skip != 'true'
+        uses: ./.github/actions/setup-android
+
+      - name: Decode upload keystore
+        if: steps.skip.outputs.skip != 'true'
+        env:
+          VAULTIO_KEYSTORE_BASE64: ${{ secrets.VAULTIO_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$VAULTIO_KEYSTORE_BASE64" ]; then
+            echo "Missing secret VAULTIO_KEYSTORE_BASE64"
+            exit 1
+          fi
+          echo "$VAULTIO_KEYSTORE_BASE64" | base64 -d > vaultio-upload.jks
+          test -s vaultio-upload.jks
+
+      - name: Assemble nightly APK
+        if: steps.skip.outputs.skip != 'true'
+        env:
+          VAULTIO_KEYSTORE_PATH: vaultio-upload.jks
+          VAULTIO_KEYSTORE_PASSWORD: ${{ secrets.VAULTIO_KEYSTORE_PASSWORD }}
+          VAULTIO_KEY_ALIAS: ${{ secrets.VAULTIO_KEY_ALIAS }}
+          VAULTIO_KEY_PASSWORD: ${{ secrets.VAULTIO_KEY_PASSWORD }}
+        run: ./gradlew assembleNightly --console=plain
+
+      - name: Publish nightly GitHub Release
+        if: steps.skip.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release delete nightly --yes --cleanup-tag
+          fi
+          gh release create nightly \
+            "app/build/outputs/apk/nightly/app-nightly.apk" \
+            --title "Nightly" \
+            --prerelease \
+            --notes "Rolling nightly build from \`${GITHUB_SHA}\` on \`${GITHUB_REF_NAME}\`. Minified release-like APK (\`com.mrhayami.vaultio.nightly\`)." \
+            --target "${GITHUB_SHA}"

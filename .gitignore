@@ -7,9 +7,23 @@
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+/.idea/copilot.data.migration.ask2agent.xml
+/.idea/misc.xml
+/.idea/deploymentTargetSelector.xml
 .DS_Store
 /build
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+
+# Signing / secrets (never commit)
+*.jks
+*.keystore
+keystore.properties
+
+# Local agent / skill docs (keep on disk, not in VCS)
+.agent/
+.skills/
+AGENTS.md
+context-map.md

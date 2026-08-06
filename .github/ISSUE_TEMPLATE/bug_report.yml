@@ -1,0 +1,105 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The more detail you include, the faster we can reproduce and fix it.
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings → about / version string, or the APK build (e.g. 1.2.7-debug).
+      placeholder: "1.2.7-debug"
+    validations:
+      required: true
+  - type: dropdown
+    id: build-type
+    attributes:
+      label: Build type
+      options:
+        - debug
+        - nightly
+        - release
+        - unknown / sideload
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Manufacturer and model (e.g. Google Pixel 8).
+      placeholder: Google Pixel 8
+    validations:
+      required: true
+  - type: input
+    id: android-version
+    attributes:
+      label: Android version
+      placeholder: "15"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Scanner
+        - Collection
+        - Wishlist
+        - Pricing / market data
+        - Set downloads / catalog
+        - Stats
+        - AI grading
+        - Settings / theme
+        - Navigation / onboarding
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Logcat snippets, crash stacks, or screenshots/recordings. Redact API keys.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for duplicates
+          required: true
+        - label: I did not include secrets (API keys, tokens) in this report
+          required: true
