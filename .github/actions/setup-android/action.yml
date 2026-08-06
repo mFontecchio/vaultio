@@ -21,3 +21,7 @@ runs:
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
+
+    - name: Ensure Gradle wrapper is executable
+      shell: bash
+      run: chmod +x gradlew
