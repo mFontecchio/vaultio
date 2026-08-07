@@ -1,0 +1,33 @@
+# Dependabot version updates for Vaultio
+version: 2
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      android-lifecycle:
+        patterns:
+          - "androidx.lifecycle*"
+      compose:
+        patterns:
+          - "androidx.compose*"
+          - "androidx.activity:activity-compose*"
+      networking:
+        patterns:
+          - "com.squareup.retrofit2*"
+          - "com.squareup.okhttp3*"
+          - "com.squareup.moshi*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
