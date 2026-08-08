@@ -26,8 +26,8 @@ jobs:
       - name: Skip if no new commits since last nightly tag
         id: skip
         run: |
-          if git rev-parse nightly >/dev/null 2>&1; then
-            if [ "$(git rev-parse HEAD)" = "$(git rev-parse nightly)" ]; then
+          if git rev-parse refs/tags/nightly >/dev/null 2>&1; then
+            if [ "$(git rev-parse HEAD)" = "$(git rev-parse 'refs/tags/nightly^{}')" ]; then
               echo "skip=true" >> "$GITHUB_OUTPUT"
               echo "No new commits since last nightly tag."
             else
@@ -62,6 +62,15 @@ jobs:
           VAULTIO_KEY_PASSWORD: ${{ secrets.VAULTIO_KEY_PASSWORD }}
         run: ./gradlew assembleNightly --console=plain
 
+      - name: Stage nightly APK
+        if: steps.skip.outputs.skip != 'true'
+        run: |
+          mkdir -p dist
+          src="app/build/outputs/apk/nightly/app-nightly.apk"
+          test -s "$src"
+          cp "$src" dist/vaultio-nightly.apk
+          test -s dist/vaultio-nightly.apk
+
       - name: Publish nightly GitHub Release
         if: steps.skip.outputs.skip != 'true'
         env:
@@ -71,7 +80,7 @@ jobs:
             gh release delete nightly --yes --cleanup-tag
           fi
           gh release create nightly \
-            "app/build/outputs/apk/nightly/app-nightly.apk" \
+            "dist/vaultio-nightly.apk" \
             --title "Nightly" \
             --prerelease \
             --notes "Rolling nightly build from \`${GITHUB_SHA}\` on \`${GITHUB_REF_NAME}\`. Minified release-like APK (\`com.mrhayami.vaultio.nightly\`)." \

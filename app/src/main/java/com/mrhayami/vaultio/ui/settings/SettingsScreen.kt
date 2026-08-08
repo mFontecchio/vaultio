@@ -19,6 +19,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.rounded.Api
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -32,10 +37,12 @@ import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,18 +72,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mrhayami.vaultio.BuildConfig
+import com.mrhayami.vaultio.VaultioApplication
 import com.mrhayami.vaultio.data.DarkThemeConfig
 import com.mrhayami.vaultio.data.ThemeBrand
 import com.mrhayami.vaultio.data.UserPreferencesRepository
+import com.mrhayami.vaultio.data.repository.AppUpdateRepository
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.theme.EnergyDarkness
 import com.mrhayami.vaultio.ui.theme.EnergyDragon
@@ -95,19 +106,52 @@ import com.mrhayami.vaultio.ui.theme.VaultioTheme
 fun SettingsScreen(
     repository: VaultioRepository,
     userPreferencesRepository: UserPreferencesRepository,
+    appUpdateRepository: AppUpdateRepository,
     onNavigateToDownloads: () -> Unit,
-    viewModel: SettingsViewModel = viewModel(
-        factory = SettingsViewModelFactory(repository, userPreferencesRepository),
-    ),
 ) {
+    val context = LocalContext.current
+    val application = context.applicationContext as VaultioApplication
+    val viewModel: SettingsViewModel = viewModel(
+        factory = SettingsViewModelFactory(
+            repository,
+            userPreferencesRepository,
+            appUpdateRepository,
+            application
+        ),
+    )
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* optional; install path works without notifications */ }
+    val unknownSourcesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        viewModel.onEvent(SettingsEvent.ResumeInstallAfterUnknownSources)
+    }
 
     LaunchedEffect(Unit) {
         viewModel.sideEffects.collect { effect ->
             when (effect) {
                 is SettingsEffect.ShowMessage -> {
                     snackbarHostState.showSnackbar(effect.message)
+                }
+                SettingsEffect.RequestNotificationPermission -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val granted = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (!granted) {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                }
+                SettingsEffect.OpenUnknownSourcesSettings -> {
+                    unknownSourcesLauncher.launch(appUpdateRepository.unknownSourcesSettingsIntent())
+                }
+                is SettingsEffect.LaunchInstall -> {
+                    context.startActivity(effect.intent)
                 }
             }
         }
@@ -163,6 +207,13 @@ fun SettingsScreenContent(
             offlineSetsCount = uiState.offlineSetsCount,
             onClearCache = { onEvent(SettingsEvent.ClearImageCache) },
             onNavigateToDownloads = onNavigateToDownloads
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        AboutSection(
+            uiState = uiState,
+            onEvent = onEvent
         )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -439,16 +490,117 @@ private fun StorageSection(
 }
 
 @Composable
-private fun DeveloperSection(
-    onResetSettings: () -> Unit
+private fun AboutSection(
+    uiState: SettingsUiState,
+    onEvent: (SettingsEvent) -> Unit
 ) {
-    SettingsSection(title = "Developer") {
+    SettingsSection(title = "About") {
         ListItem(
             headlineContent = { Text("App Version") },
             supportingContent = { Text("${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})") },
             leadingContent = { Icon(Icons.Rounded.Info, contentDescription = null) }
         )
 
+        when {
+            uiState.isPlayInstall -> {
+                ListItem(
+                    headlineContent = { Text("Updates") },
+                    supportingContent = {
+                        Text("Installed from Google Play. Updates are delivered by Play Store.")
+                    },
+                    leadingContent = { Icon(Icons.Rounded.SystemUpdate, contentDescription = null) }
+                )
+            }
+            !uiState.updaterSupported -> {
+                ListItem(
+                    headlineContent = { Text("Updates") },
+                    supportingContent = {
+                        Text("In-app updates are available for release and nightly builds.")
+                    },
+                    leadingContent = { Icon(Icons.Rounded.SystemUpdate, contentDescription = null) }
+                )
+            }
+            else -> {
+                ListItem(
+                    headlineContent = { Text("Automatically check & download updates") },
+                    supportingContent = {
+                        Text("Uses GitHub Releases. Android still asks you to confirm install.")
+                    },
+                    leadingContent = { Icon(Icons.Rounded.SystemUpdate, contentDescription = null) },
+                    trailingContent = {
+                        Switch(
+                            checked = uiState.autoUpdateEnabled,
+                            onCheckedChange = { onEvent(SettingsEvent.SetAutoUpdateEnabled(it)) }
+                        )
+                    }
+                )
+
+                val busy = uiState.updateCheckState is UpdateCheckUiState.Checking ||
+                    uiState.updateCheckState is UpdateCheckUiState.Downloading
+
+                TextButton(
+                    onClick = { onEvent(SettingsEvent.CheckForUpdates) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Check for updates")
+                }
+
+                UpdateStatusRow(uiState = uiState)
+
+                if (uiState.updateCheckState is UpdateCheckUiState.ReadyToInstall ||
+                    uiState.updateCheckState is UpdateCheckUiState.Available
+                ) {
+                    Button(
+                        onClick = { onEvent(SettingsEvent.InstallUpdate) },
+                        enabled = uiState.updateCheckState is UpdateCheckUiState.ReadyToInstall,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Install update")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateStatusRow(uiState: SettingsUiState) {
+    val text = when (val state = uiState.updateCheckState) {
+        UpdateCheckUiState.Idle -> "Tap check to look for a newer GitHub build."
+        UpdateCheckUiState.Checking -> "Checking for updates…"
+        UpdateCheckUiState.UpToDate -> "You're up to date."
+        is UpdateCheckUiState.Available -> "Update available: ${state.tagName}"
+        is UpdateCheckUiState.Downloading -> {
+            val pct = state.progress?.let { "${(it * 100).toInt()}%" } ?: "…"
+            "Downloading $pct"
+        }
+        is UpdateCheckUiState.ReadyToInstall -> "Ready to install ${state.tagName}"
+        is UpdateCheckUiState.Error -> state.message
+    }
+
+    ListItem(
+        headlineContent = { Text("Update status") },
+        supportingContent = { Text(text) }
+    )
+
+    val downloading = uiState.updateCheckState as? UpdateCheckUiState.Downloading
+    if (downloading != null) {
+        LinearProgressIndicator(
+            progress = { downloading.progress ?: 0f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun DeveloperSection(
+    onResetSettings: () -> Unit
+) {
+    SettingsSection(title = "Developer") {
         TextButton(
             onClick = onResetSettings,
             modifier = Modifier.fillMaxWidth(),

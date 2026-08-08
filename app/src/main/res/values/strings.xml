@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">Vaultio</string>
+    <string name="update_notification_channel_name">App updates</string>
+    <string name="update_notification_channel_description">Alerts when a GitHub update is ready to install</string>
+    <string name="update_notification_title">Vaultio update ready</string>
+    <string name="update_notification_text">Version %1$s is downloaded. Tap to install.</string>
+    <string name="update_notification_action_install">Install</string>
 </resources>

@@ -64,14 +64,23 @@ flow; Scanner and Grading are stills. Source `.webm` clips are also resized to *
 
 ## Get the app
 
-| Build | Where |
-|---|---|
-| **Release** | [GitHub Releases](https://github.com/mFontecchio/vaultio/releases) for tags `v*` (e.g. `v1.2.7`) |
-| **Nightly** | Rolling [Nightly](https://github.com/mFontecchio/vaultio/releases/tag/nightly) prerelease |
-| **Debug** | [Actions → CI](https://github.com/mFontecchio/vaultio/actions/workflows/ci.yml) artifacts (`app-debug`) |
+| Build | Where | Asset |
+|---|---|---|
+| **Release** | [GitHub Releases](https://github.com/mFontecchio/vaultio/releases) for tags `v*` (e.g. `v1.2.7`) | `vaultio-release.apk` |
+| **Nightly** | Rolling [Nightly](https://github.com/mFontecchio/vaultio/releases/tag/nightly) prerelease | `vaultio-nightly.apk` |
+| **Debug** | [Actions → CI](https://github.com/mFontecchio/vaultio/actions/workflows/ci.yml) artifacts (`vaultio-debug`) | `vaultio-debug.apk` |
 
 CI runs unit tests and `assembleDebug` on pulls and pushes to the default branch. Pushing a `v*` tag
 builds a signed release APK. The Nightly workflow (schedule + manual) publishes a signed nightly APK.
+
+### In-app updates
+
+GitHub-distributed **release** and **nightly** builds can check GitHub Releases from **Settings → About**
+(optional automatic check & download; Android still requires you to confirm install). Google Play
+installs update through Play Store instead. Debug builds have no in-app update channel.
+
+Sideloading may show Android “unknown sources” or Play Protect prompts — that is expected and outside
+the app’s control.
 
 ---
 

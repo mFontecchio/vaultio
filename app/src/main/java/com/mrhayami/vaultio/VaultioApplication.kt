@@ -1,21 +1,32 @@
 package com.mrhayami.vaultio
 
 import android.app.Application
+import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import coil.imageLoader
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.VaultioDatabase
+import com.mrhayami.vaultio.data.remote.GitHubReleasesApi
 import com.mrhayami.vaultio.data.remote.JustTcgApi
 import com.mrhayami.vaultio.data.remote.TcgDexApi
+import com.mrhayami.vaultio.data.repository.AppUpdateRepository
 import com.mrhayami.vaultio.data.repository.GeminiNanoClientImpl
 import com.mrhayami.vaultio.data.repository.GradingRepository
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import com.mrhayami.vaultio.data.update.UpdateNotificationHelper
+import com.mrhayami.vaultio.data.workers.AppUpdateWorker
 import com.mrhayami.vaultio.data.workers.CollectionSnapshotWorker
 import com.mrhayami.vaultio.data.workers.PriceUpdateWorker
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -27,6 +38,9 @@ class VaultioApplication : Application() {
     lateinit var repository: VaultioRepository
     lateinit var gradingRepository: GradingRepository
     lateinit var userPreferencesRepository: UserPreferencesRepository
+    lateinit var appUpdateRepository: AppUpdateRepository
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
@@ -69,6 +83,14 @@ class VaultioApplication : Application() {
 
         val justTcgApi = justTcgRetrofit.create(JustTcgApi::class.java)
 
+        val gitHubRetrofit = Retrofit.Builder()
+            .baseUrl("https://api.github.com/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+        val gitHubReleasesApi = gitHubRetrofit.create(GitHubReleasesApi::class.java)
+
         repository = VaultioRepository(
             context = this,
             setDao = database.setDao(),
@@ -92,8 +114,42 @@ class VaultioApplication : Application() {
             geminiNanoClient = GeminiNanoClientImpl()
         )
 
+        appUpdateRepository = AppUpdateRepository(
+            context = this,
+            gitHubReleasesApi = gitHubReleasesApi,
+            okHttpClient = okHttpClient,
+            userPreferencesRepository = userPreferencesRepository
+        )
+
+        UpdateNotificationHelper.ensureChannel(this)
+
         scheduleDailySnapshot()
         scheduleDailyPriceUpdate()
+        applicationScope.launch {
+            if (userPreferencesRepository.autoUpdateEnabled.first()) {
+                scheduleAppUpdateChecks()
+            }
+        }
+    }
+
+    fun scheduleAppUpdateChecks() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        val workRequest = PeriodicWorkRequestBuilder<AppUpdateWorker>(24, TimeUnit.HOURS)
+            .setConstraints(constraints)
+            .addTag("app_update")
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            AppUpdateRepository.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
+    }
+
+    fun cancelAppUpdateChecks() {
+        WorkManager.getInstance(this).cancelUniqueWork(AppUpdateRepository.WORK_NAME)
     }
 
     private fun scheduleDailySnapshot() {
