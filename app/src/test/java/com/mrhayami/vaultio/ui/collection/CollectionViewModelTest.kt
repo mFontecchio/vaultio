@@ -1,5 +1,7 @@
 package com.mrhayami.vaultio.ui.collection
 
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderCardCrossRef
@@ -16,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -30,6 +33,7 @@ class CollectionViewModelTest {
     private val repository = mockk<VaultioRepository>(relaxed = true)
     private val userPreferencesRepository = mockk<UserPreferencesRepository>(relaxed = true)
     private val testDispatcher = StandardTestDispatcher()
+    private val viewModelStore = ViewModelStore()
 
     private lateinit var viewModel: CollectionViewModel
 
@@ -54,30 +58,40 @@ class CollectionViewModelTest {
         every { repository.allPrices } returns MutableStateFlow(emptyList<PriceEntity>())
         every { repository.allVintagePrices } returns MutableStateFlow(emptyList<VintagePriceEntity>())
         every { repository.allWishlistCards } returns MutableStateFlow(emptyList<WishlistCardWithDetails>())
+        every {
+            repository.getFilteredUserCards(any(), any(), any(), any(), any())
+        } returns MutableStateFlow(emptyList())
 
         coEvery { repository.getApiUsageDetails() } returns null
 
-        viewModel = CollectionViewModel(repository, userPreferencesRepository)
+        viewModel = ViewModelProvider(
+            viewModelStore,
+            CollectionViewModelFactory(repository, userPreferencesRepository)
+        )[CollectionViewModel::class.java]
     }
 
     @After
     fun tearDown() {
+        // Cancel viewModelScope collectors before resetMain. Several init combines use
+        // flowOn(Dispatchers.Default); those workers can still touch Main concurrently
+        // with resetMain and throw IllegalStateException.
+        viewModelStore.clear()
         Dispatchers.resetMain()
     }
 
     @Test
-    fun `initial state is correct`() = runTest {
-        testDispatcher.scheduler.advanceUntilIdle()
+    fun `initial state is correct`() = runTest(testDispatcher) {
+        advanceUntilIdle()
         assertEquals(ViewMode.GRID, viewModel.state.value.viewMode)
         assertEquals(false, viewModel.state.value.isSearchBarVisible)
     }
 
     @Test
-    fun `OnToggleSearchBar event updates state`() = runTest {
-        testDispatcher.scheduler.advanceUntilIdle()
+    fun `OnToggleSearchBar event updates state`() = runTest(testDispatcher) {
+        advanceUntilIdle()
 
         viewModel.onEvent(CollectionEvent.OnToggleSearchBar)
-        testDispatcher.scheduler.advanceUntilIdle()
+        advanceUntilIdle()
 
         assertEquals(true, viewModel.state.value.isSearchBarVisible)
     }
