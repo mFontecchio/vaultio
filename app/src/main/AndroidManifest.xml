@@ -32,6 +32,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".data.update.UpdateInstallActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:taskAffinity="" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

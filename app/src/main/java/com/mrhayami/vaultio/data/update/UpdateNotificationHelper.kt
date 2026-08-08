@@ -27,12 +27,15 @@ object UpdateNotificationHelper {
         manager.createNotificationChannel(channel)
     }
 
-    fun notifyUpdateReady(context: Context, tagName: String, installIntent: Intent) {
+    fun notifyUpdateReady(context: Context, tagName: String) {
         ensureChannel(context)
+        val launchIntent = Intent(context, UpdateInstallActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
         val pendingIntent = PendingIntent.getActivity(
             context,
             NOTIFICATION_ID,
-            installIntent,
+            launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -52,7 +55,7 @@ object UpdateNotificationHelper {
         try {
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
         } catch (_: SecurityException) {
-            // POST_NOTIFICATIONS denied — Settings UI still shows Install.
+            // POST_NOTIFICATIONS denied - Settings UI still shows Install.
         }
     }
 }

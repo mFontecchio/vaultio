@@ -47,12 +47,12 @@ class AppUpdateWorker(
                             Result.retry()
                         }
                     }
-                    val installIntent = updateRepository.createInstallIntent()
-                        ?: return Result.failure()
+                    if (!updateRepository.hasVerifiedPendingApk()) {
+                        return Result.failure()
+                    }
                     UpdateNotificationHelper.notifyUpdateReady(
                         context = applicationContext,
-                        tagName = check.update.tagName,
-                        installIntent = installIntent
+                        tagName = check.update.tagName
                     )
                     updateRepository.markNotified(check.update.releaseId, check.update.assetId)
                     Result.success()
