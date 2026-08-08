@@ -6,8 +6,7 @@ import android.graphics.Rect
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.google.mlkit.vision.text.TextRecognizer
 import com.mrhayami.vaultio.data.PHash
 
 data class DetectedLine(
@@ -19,10 +18,10 @@ data class DetectedLine(
 
 class CameraAnalyzer(
     private val viewportAspectRatio: Float,
+    private val recognizer: TextRecognizer?,
     private val onLinesDetected: (List<DetectedLine>, Long?, Boolean) -> Unit
 ) : ImageAnalysis.Analyzer {
 
-    private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private var lastScanTime = 0L
     private val scanIntervalMs = 120L
 
@@ -31,6 +30,12 @@ class CameraAnalyzer(
 
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     override fun analyze(imageProxy: ImageProxy) {
+        val client = recognizer
+        if (client == null) {
+            imageProxy.close()
+            return
+        }
+
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastScanTime < scanIntervalMs) {
             imageProxy.close()
@@ -46,14 +51,9 @@ class CameraAnalyzer(
 
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
-        // Calculate crop rect in the ORIGINAL image coordinates (pre-rotation)
-        // Wait, ScannerGeometry.getCropRect expects rotated dimensions.
-        // Let's stick to the current logic but optimize the allocations.
-        
         val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
         val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
 
-        // bitmap is no longer needed after rotation if we created a new one
         if (rotated != bitmap) bitmap.recycle()
 
         val cropRect = ScannerGeometry.getCropRect(
@@ -93,22 +93,20 @@ class CameraAnalyzer(
             newCropped
         }
 
-        // Compute perceptual hash for disambiguation
         val pHash = try {
             PHash.computeHash(cropped)
         } catch (e: Exception) {
             null
         }
 
-        // Detect glare for UI feedback
         val isGlareDetected = ScannerUtils.detectGlare(cropped)
 
         val enhanced = ScannerUtils.enhanceImage(cropped, reusableEnhanced)
         reusableEnhanced = enhanced
-        
+
         val image = InputImage.fromBitmap(enhanced, 0)
 
-        recognizer.process(image)
+        client.process(image)
             .addOnSuccessListener { visionText ->
                 lastScanTime = System.currentTimeMillis()
                 val lines = visionText.textBlocks.flatMap { block ->
@@ -125,7 +123,6 @@ class CameraAnalyzer(
             }
             .addOnFailureListener { e -> e.printStackTrace() }
             .addOnCompleteListener {
-                // If rotated was a separate bitmap, we should probably recycle it here or manage it
                 if (rotated != cropped && !rotated.isRecycled) rotated.recycle()
                 imageProxy.close()
             }

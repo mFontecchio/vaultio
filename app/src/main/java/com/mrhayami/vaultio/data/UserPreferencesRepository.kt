@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mrhayami.vaultio.ui.collection.GridSettings
@@ -60,6 +61,14 @@ class UserPreferencesRepository(context: Context) {
         val BULK_SCAN_PRINTING = stringPreferencesKey("bulk_scan_printing")
         val BULK_SCAN_FINISH = stringPreferencesKey("bulk_scan_finish")
         val BULK_SCAN_FOLDER_IDS = stringPreferencesKey("bulk_scan_folder_ids")
+
+        val AUTO_UPDATE_ENABLED = booleanPreferencesKey("auto_update_enabled")
+        val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
+        val LAST_ACCEPTED_RELEASE_ID = longPreferencesKey("last_accepted_release_id")
+        val LAST_ACCEPTED_ASSET_ID = longPreferencesKey("last_accepted_asset_id")
+        val LAST_NOTIFIED_RELEASE_ID = longPreferencesKey("last_notified_release_id")
+        val LAST_NOTIFIED_ASSET_ID = longPreferencesKey("last_notified_asset_id")
+        val UPDATE_ETAG = stringPreferencesKey("update_etag")
     }
 
     val viewMode: Flow<ViewMode> = dataStore.data.map {
@@ -247,6 +256,70 @@ class UserPreferencesRepository(context: Context) {
     suspend fun setBulkScanFolderIds(ids: List<Long>) {
         dataStore.edit {
             it[PreferencesKeys.BULK_SCAN_FOLDER_IDS] = ids.joinToString(",")
+        }
+    }
+
+    val autoUpdateEnabled: Flow<Boolean> = dataStore.data.map {
+        it[PreferencesKeys.AUTO_UPDATE_ENABLED] ?: false
+    }
+
+    suspend fun setAutoUpdateEnabled(enabled: Boolean) {
+        dataStore.edit {
+            it[PreferencesKeys.AUTO_UPDATE_ENABLED] = enabled
+        }
+    }
+
+    val lastUpdateCheck: Flow<Long> = dataStore.data.map {
+        it[PreferencesKeys.LAST_UPDATE_CHECK] ?: 0L
+    }
+
+    suspend fun setLastUpdateCheck(timestamp: Long) {
+        dataStore.edit {
+            it[PreferencesKeys.LAST_UPDATE_CHECK] = timestamp
+        }
+    }
+
+    val lastAcceptedReleaseId: Flow<Long> = dataStore.data.map {
+        it[PreferencesKeys.LAST_ACCEPTED_RELEASE_ID] ?: 0L
+    }
+
+    val lastAcceptedAssetId: Flow<Long> = dataStore.data.map {
+        it[PreferencesKeys.LAST_ACCEPTED_ASSET_ID] ?: 0L
+    }
+
+    suspend fun setLastAcceptedReleaseIdentity(releaseId: Long, assetId: Long) {
+        dataStore.edit {
+            it[PreferencesKeys.LAST_ACCEPTED_RELEASE_ID] = releaseId
+            it[PreferencesKeys.LAST_ACCEPTED_ASSET_ID] = assetId
+        }
+    }
+
+    val lastNotifiedReleaseId: Flow<Long> = dataStore.data.map {
+        it[PreferencesKeys.LAST_NOTIFIED_RELEASE_ID] ?: 0L
+    }
+
+    val lastNotifiedAssetId: Flow<Long> = dataStore.data.map {
+        it[PreferencesKeys.LAST_NOTIFIED_ASSET_ID] ?: 0L
+    }
+
+    suspend fun setLastNotifiedReleaseIdentity(releaseId: Long, assetId: Long) {
+        dataStore.edit {
+            it[PreferencesKeys.LAST_NOTIFIED_RELEASE_ID] = releaseId
+            it[PreferencesKeys.LAST_NOTIFIED_ASSET_ID] = assetId
+        }
+    }
+
+    val updateEtag: Flow<String?> = dataStore.data.map {
+        it[PreferencesKeys.UPDATE_ETAG]
+    }
+
+    suspend fun setUpdateEtag(etag: String?) {
+        dataStore.edit {
+            if (etag.isNullOrBlank()) {
+                it.remove(PreferencesKeys.UPDATE_ETAG)
+            } else {
+                it[PreferencesKeys.UPDATE_ETAG] = etag
+            }
         }
     }
 }

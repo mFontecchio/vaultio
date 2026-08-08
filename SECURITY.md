@@ -9,8 +9,8 @@ receive backports.
 
 Please **do not** open a public issue for security reports.
 
-1. Use [GitHub Security Advisories](https://github.com/mFontecchio/vaultio/security/advisories/new)
-   for this repository (preferred), or
+1. Use [private vulnerability reporting](https://github.com/mFontecchio/vaultio/security/advisories/new)
+   on this repository (preferred), or
 2. Contact the maintainer privately via the email on their GitHub profile.
 
 Include steps to reproduce, affected build types/versions, and impact. We will acknowledge reports

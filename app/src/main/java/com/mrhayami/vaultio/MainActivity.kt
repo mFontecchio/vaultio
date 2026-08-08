@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
         val repository = app.repository
         val gradingRepository = app.gradingRepository
         val userPreferencesRepository = app.userPreferencesRepository
+        val appUpdateRepository = app.appUpdateRepository
         
         setContent {
             val themeBrand by userPreferencesRepository.themeBrand.collectAsState(initial = ThemeBrand.DEFAULT)
@@ -188,6 +189,7 @@ class MainActivity : ComponentActivity() {
                                 SettingsScreen(
                                     repository = repository,
                                     userPreferencesRepository = userPreferencesRepository,
+                                    appUpdateRepository = appUpdateRepository,
                                     onNavigateToDownloads = { navController.navigate(Screen.SetDownloads.route) }
                                 )
                             }
@@ -209,6 +211,9 @@ class MainActivity : ComponentActivity() {
                                             gradingRepository.pendingCardToGrade = pendingCard
                                         }
                                         navController.navigate("grading/$id")
+                                    },
+                                    onNavigateToDownloads = {
+                                        navController.navigate(Screen.SetDownloads.route)
                                     }
                                 )
                             }

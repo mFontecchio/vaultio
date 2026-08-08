@@ -61,7 +61,10 @@ data class ScannerUiState(
     val exposureIndex: Int = 0,
     val exposureRange: IntRange = 0..0,
     val isExposureSupported: Boolean = false,
-    val focusPoint: Offset? = null
+    val focusPoint: Offset? = null,
+    val recognizerUnavailable: Boolean = false,
+    val isCatalogEmpty: Boolean = false,
+    val showEmptyCatalogHint: Boolean = false
 ) {
     val isBulkMode: Boolean get() = activeMode == ScannerMode.BULK
     val isGradingMode: Boolean get() = activeMode == ScannerMode.GRADING
@@ -75,6 +78,8 @@ sealed interface ScannerEffect {
         val capturedImage: Bitmap? = null,
         val pendingCard: TcgDexCard? = null
     ) : ScannerEffect
+
+    data object NavigateToSetDownloads : ScannerEffect
 }
 
 sealed interface ScannerEvent {
@@ -129,6 +134,10 @@ sealed interface ScannerEvent {
         val finish: String,
         val folderIds: List<Long>
     ) : ScannerEvent
+
+    data object RecognizerUnavailable : ScannerEvent
+    data object DismissEmptyCatalogHint : ScannerEvent
+    data object OpenSetDownloads : ScannerEvent
 }
 
 class ScannerViewModel(
@@ -170,9 +179,24 @@ class ScannerViewModel(
     private var searchJob: Job? = null
     private var lastMatchedNumber: String? = null
     private var activeCaptureForGrading: Bitmap? = null
+    private var emptyCatalogHintDismissed = false
 
     // Ring buffer storing the last 5 frame detections for multi-frame consensus.
     private val detectionHistory = ArrayDeque<FrameDetection>()
+
+    init {
+        viewModelScope.launch(defaultDispatcher) {
+            repository.observeCatalogCardCount().collect { count ->
+                val empty = count == 0
+                _uiState.update {
+                    it.copy(
+                        isCatalogEmpty = empty,
+                        showEmptyCatalogHint = empty && !emptyCatalogHintDismissed
+                    )
+                }
+            }
+        }
+    }
 
     // Pokemon Card Layout Analysis: Regex to capture varied collector number formats:
     // 1. "Number / Total" (e.g. 123 / 191) - Primary format
@@ -318,6 +342,17 @@ class ScannerViewModel(
             }
 
             ScannerEvent.ClearFocus -> _uiState.update { it.copy(focusPoint = null) }
+            ScannerEvent.RecognizerUnavailable ->
+                _uiState.update { it.copy(recognizerUnavailable = true) }
+            ScannerEvent.DismissEmptyCatalogHint -> {
+                emptyCatalogHintDismissed = true
+                _uiState.update { it.copy(showEmptyCatalogHint = false) }
+            }
+            ScannerEvent.OpenSetDownloads -> {
+                viewModelScope.launch {
+                    _effect.send(ScannerEffect.NavigateToSetDownloads)
+                }
+            }
         }
     }
 

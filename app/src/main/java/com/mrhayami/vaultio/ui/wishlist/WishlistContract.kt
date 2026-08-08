@@ -1,6 +1,5 @@
 package com.mrhayami.vaultio.ui.wishlist
 
-import androidx.compose.ui.geometry.Offset
 import com.mrhayami.vaultio.data.local.WishlistCardWithDetails
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 
@@ -28,10 +27,9 @@ sealed class WishlistEvent {
     ) : WishlistEvent()
 
     data class RemoveFromWishlist(val id: Long) : WishlistEvent()
-    data class MoveToCollection(val id: Long, val position: Offset) : WishlistEvent()
+    data class MoveToCollection(val id: Long) : WishlistEvent()
 }
 
 sealed class WishlistEffect {
     data class ShowToast(val message: String) : WishlistEffect()
-    data class ShowFanfare(val position: Offset) : WishlistEffect()
 }

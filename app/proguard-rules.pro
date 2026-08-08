@@ -19,3 +19,12 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# ML Kit discovers registrars via reflection (Firebase Components).
+# Transitive firebase-components:16.1.0 omits the interface keep that 18+ ships.
+-dontwarn com.google.firebase.components.Component$Instantiation
+-dontwarn com.google.firebase.components.Component$ComponentType
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    public <init>();
+}
+-keep,allowshrinking interface com.google.firebase.components.ComponentRegistrar

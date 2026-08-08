@@ -99,6 +99,9 @@ interface CardDao {
     
     @Query("SELECT COUNT(*) FROM cards")
     suspend fun getCardCount(): Int
+
+    @Query("SELECT COUNT(*) FROM cards")
+    fun observeCardCount(): Flow<Int>
 }
 
 @Dao

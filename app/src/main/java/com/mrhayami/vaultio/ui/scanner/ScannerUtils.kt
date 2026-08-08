@@ -6,13 +6,10 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.mrhayami.vaultio.data.PHash
 import kotlinx.coroutines.tasks.await
 
 object ScannerUtils {
-    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
     fun enhanceImage(src: Bitmap, dest: Bitmap? = null): Bitmap {
         val contrast = 1.4f
@@ -78,11 +75,16 @@ object ScannerUtils {
             null
         }
 
+        val client = when (val state = TextRecognizerProvider.getOrCreate()) {
+            is TextRecognizerState.Available -> state.client
+            TextRecognizerState.Unavailable -> return emptyList<String>() to pHash
+        }
+
         val enhanced = enhanceImage(bitmap)
         val image = InputImage.fromBitmap(enhanced, 0)
 
         return try {
-            val visionText = recognizer.process(image).await()
+            val visionText = client.process(image).await()
             val lines = visionText.textBlocks.flatMap { block ->
                 block.lines.map { it.text }
             }

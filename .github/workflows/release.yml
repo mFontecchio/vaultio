@@ -42,11 +42,22 @@ jobs:
           VAULTIO_KEY_PASSWORD: ${{ secrets.VAULTIO_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --console=plain
 
+      - name: Stage release artifacts
+        run: |
+          mkdir -p dist
+          src="app/build/outputs/apk/release/app-release.apk"
+          test -s "$src"
+          cp "$src" dist/vaultio-release.apk
+          test -s dist/vaultio-release.apk
+          if [ -f app/build/outputs/mapping/release/mapping.txt ]; then
+            cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            app/build/outputs/apk/release/app-release.apk
-            app/build/outputs/mapping/release/mapping.txt
+            dist/vaultio-release.apk
+            dist/mapping.txt
           generate_release_notes: true
           fail_on_unmatched_files: false
