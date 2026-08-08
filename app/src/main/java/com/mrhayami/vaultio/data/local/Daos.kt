@@ -102,6 +102,14 @@ interface CardDao {
 
     @Query("SELECT COUNT(*) FROM cards")
     fun observeCardCount(): Flow<Int>
+
+    /** Distinct owned catalog cards still missing National Dex metadata. */
+    @Query("""
+        SELECT DISTINCT c.id FROM cards c
+        INNER JOIN user_cards uc ON uc.cardId = c.id
+        WHERE c.dexId IS NULL
+    """)
+    suspend fun getOwnedCardIdsMissingDex(): List<String>
 }
 
 @Dao
