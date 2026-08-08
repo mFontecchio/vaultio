@@ -59,6 +59,7 @@ import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
+import kotlinx.coroutines.launch
 
 /**
  * ADVANCED TCG HOLOFOIL SHADER
@@ -608,26 +609,50 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGustsOfWind(pro
     }
 }
 
+private data class FanfareParticle(
+    val velocity: Offset,
+    val isDiamond: Boolean,
+    val colorIndex: Int
+)
+
 @Composable
 fun MicroCaptureFanfare(
     center: Offset,
     modifier: Modifier = Modifier,
     onAnimationFinished: () -> Unit = {}
 ) {
+    val primary = MaterialTheme.colorScheme.primary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+
     val progress = remember { Animatable(0f) }
+    val iconScale = remember { Animatable(0.35f) }
     val particles = remember {
         val random = Random(System.currentTimeMillis())
-        List(30) {
+        List(18) { i ->
             val angle = random.nextFloat() * 2 * PI.toFloat()
-            val speed = random.nextFloat() * 400f + 100f
-            Offset(cos(angle) * speed, sin(angle) * speed)
+            val speed = random.nextFloat() * 280f + 80f
+            FanfareParticle(
+                velocity = Offset(cos(angle) * speed, sin(angle) * speed),
+                isDiamond = i % 3 == 0,
+                colorIndex = i % 3
+            )
         }
     }
+    val diamondPath = remember { Path() }
 
     LaunchedEffect(Unit) {
+        launch {
+            iconScale.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
+        }
         progress.animateTo(
             targetValue = 1f,
-            animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+            animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing)
         )
         onAnimationFinished()
     }
@@ -638,40 +663,78 @@ fun MicroCaptureFanfare(
             .drawBehind {
                 val t = progress.value
 
-                // 1. Concentric Expanding Rings
-                val ringCount = 2
+                // Soft radial glow behind the icon
+                val glowT = when {
+                    t < 0.25f -> t / 0.25f
+                    t < 0.55f -> 1f
+                    else -> (1f - (t - 0.55f) / 0.45f).coerceAtLeast(0f)
+                }
+                if (glowT > 0f) {
+                    val glowRadius = 36.dp.toPx() * (0.65f + 0.45f * glowT)
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                primary.copy(alpha = 0.32f * glowT),
+                                primary.copy(alpha = 0.08f * glowT),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = glowRadius
+                        ),
+                        radius = glowRadius,
+                        center = center
+                    )
+                }
+
+                // Soft primary-tinted expanding rings
+                val ringCount = 3
                 repeat(ringCount) { i ->
-                    val ringT = (t * 1.5f - (i * 0.2f)).coerceIn(0f, 1f)
+                    val ringT = (t * 1.15f - (i * 0.12f)).coerceIn(0f, 1f)
                     if (ringT > 0f) {
-                        val radius = ringT * 80.dp.toPx()
-                        val alpha = (1f - ringT).pow(2.5f)
+                        val radius = ringT * 96.dp.toPx()
+                        val alpha = (1f - ringT).pow(1.8f)
+                        val strokeWidth = (2.2f - i * 0.35f).dp.toPx()
                         drawCircle(
-                            color = Color.White.copy(alpha = alpha * 0.8f),
+                            color = when (i) {
+                                0 -> primary.copy(alpha = alpha * 0.55f)
+                                1 -> primary.copy(alpha = alpha * 0.35f)
+                                else -> Color.White.copy(alpha = alpha * 0.4f)
+                            },
                             radius = radius,
                             center = center,
-                            style = Stroke(width = 2.dp.toPx())
+                            style = Stroke(width = strokeWidth)
                         )
                     }
                 }
 
-                // 2. Radiating Multicolor Sparkles
-                particles.forEachIndexed { index, velocity ->
-                    val particleT = (t * 1.2f).coerceIn(0f, 1f)
-                    if (particleT > 0f) {
-                        val pos = center + velocity * particleT
-                        val alpha = (1f - particleT).pow(2)
-                        val particleSize = (1f - particleT) * 4.dp.toPx()
+                // Decelerating theme-aware sparkles
+                particles.forEach { particle ->
+                    val particleT = (t * 1.05f).coerceIn(0f, 1f)
+                    if (particleT <= 0f) return@forEach
 
-                        val color = when (index % 5) {
-                            0 -> Color(0xFF00E676) // Green
-                            1 -> Color(0xFFFFD600) // Gold
-                            2 -> Color(0xFF00B0FF) // Cyan
-                            3 -> Color(0xFFFF4081) // Pink
-                            else -> Color.White
-                        }
+                    val easeOut = 1f - (1f - particleT).pow(2.2f)
+                    val pos = center + particle.velocity * easeOut
+                    val alpha = (1f - particleT).pow(1.6f)
+                    val particleSize = (1f - particleT * 0.85f) * 3.5.dp.toPx()
 
+                    val color = when (particle.colorIndex) {
+                        0 -> primary
+                        1 -> tertiary
+                        else -> Color.White
+                    }.copy(alpha = alpha * 0.9f)
+
+                    if (particle.isDiamond) {
+                        val half = particleSize
+                        diamondPath.reset()
+                        diamondPath.moveTo(pos.x, pos.y - half)
+                        diamondPath.lineTo(pos.x + half * 0.65f, pos.y)
+                        diamondPath.lineTo(pos.x, pos.y + half)
+                        diamondPath.lineTo(pos.x - half * 0.65f, pos.y)
+                        diamondPath.close()
+                        drawPath(path = diamondPath, color = color)
+                    } else {
                         drawCircle(
-                            color = color.copy(alpha = alpha),
+                            color = color,
                             radius = particleSize,
                             center = pos
                         )
@@ -680,17 +743,10 @@ fun MicroCaptureFanfare(
             }
     ) {
         val t = progress.value
-
-        val ballScale = when {
-            t < 0.2f -> (t / 0.2f) * 1.05f
-            t < 0.4f -> 1.05f + sin((t - 0.2f) * 30f) * 0.02f
-            else -> 1.05f
-        }
-
         val ballAlpha = when {
-            t < 0.1f -> t / 0.1f
-            t < 0.7f -> 1f
-            else -> 1f - ((t - 0.7f) / 0.3f)
+            t < 0.08f -> t / 0.08f
+            t < 0.62f -> 1f
+            else -> (1f - ((t - 0.62f) / 0.38f)).coerceAtLeast(0f)
         }
 
         if (ballAlpha > 0f) {
@@ -702,11 +758,11 @@ fun MicroCaptureFanfare(
                     .graphicsLayer {
                         translationX = center.x - size.width / 2
                         translationY = center.y - size.height / 2
-                        scaleX = ballScale
-                        scaleY = ballScale
+                        scaleX = iconScale.value
+                        scaleY = iconScale.value
                         alpha = ballAlpha
                     },
-                tint = MaterialTheme.colorScheme.primary
+                tint = primary
             )
         }
     }

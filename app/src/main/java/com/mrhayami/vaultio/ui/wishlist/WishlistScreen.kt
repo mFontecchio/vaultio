@@ -1,6 +1,11 @@
 package com.mrhayami.vaultio.ui.wishlist
 
 import android.widget.Toast
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,10 +51,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -68,7 +76,7 @@ import com.mrhayami.vaultio.ui.components.MicroCaptureFanfare
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun WishlistScreen(
     repository: VaultioRepository,
@@ -77,6 +85,7 @@ fun WishlistScreen(
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var showAddModal by remember { mutableStateOf(false) }
     var fanfarePosition by remember { mutableStateOf<Offset?>(null) }
 
@@ -88,8 +97,6 @@ fun WishlistScreen(
                     effect.message,
                     Toast.LENGTH_SHORT
                 ).show()
-
-                is WishlistEffect.ShowFanfare -> fanfarePosition = effect.position
             }
         }
     }
@@ -155,16 +162,19 @@ fun WishlistScreen(
                 items(uiState.wishlistItems, key = { it.details.wishlistCard.id }) { item ->
                     WishlistItem(
                         item = item,
-                        onDelete = { viewModel.onEvent(WishlistEvent.RemoveFromWishlist(item.details.wishlistCard.id)) },
+                        onDelete = {
+                            viewModel.onEvent(
+                                WishlistEvent.RemoveFromWishlist(item.details.wishlistCard.id)
+                            )
+                        },
                         onMoveToCollection = { pos ->
+                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                             fanfarePosition = pos
                             viewModel.onEvent(
-                                WishlistEvent.MoveToCollection(
-                                    item.details.wishlistCard.id,
-                                    pos
-                                )
+                                WishlistEvent.MoveToCollection(item.details.wishlistCard.id)
                             )
-                        }
+                        },
+                        modifier = Modifier.animateItem()
                     )
                 }
             }
@@ -228,12 +238,20 @@ fun WishlistScreen(
 fun WishlistItem(
     item: WishlistItemUiModel,
     onDelete: () -> Unit,
-    onMoveToCollection: (Offset) -> Unit
+    onMoveToCollection: (Offset) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var buttonPosition by remember { mutableStateOf(Offset.Zero) }
-    
+    val catchInteractionSource = remember { MutableInteractionSource() }
+    val isCatchPressed by catchInteractionSource.collectIsPressedAsState()
+    val catchScale by animateFloatAsState(
+        targetValue = if (isCatchPressed) 0.92f else 1f,
+        animationSpec = spring(),
+        label = "catchPressScale"
+    )
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
@@ -296,13 +314,19 @@ fun WishlistItem(
                 Row {
                     IconButton(
                         onClick = { onMoveToCollection(buttonPosition) },
-                        modifier = Modifier.onGloballyPositioned { layoutCoordinates ->
-                            val windowPos = layoutCoordinates.positionInWindow()
-                            buttonPosition = Offset(
-                                windowPos.x + layoutCoordinates.size.width / 2f,
-                                windowPos.y + layoutCoordinates.size.height / 2f
-                            )
-                        }
+                        interactionSource = catchInteractionSource,
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = catchScale
+                                scaleY = catchScale
+                            }
+                            .onGloballyPositioned { layoutCoordinates ->
+                                val windowPos = layoutCoordinates.positionInWindow()
+                                buttonPosition = Offset(
+                                    windowPos.x + layoutCoordinates.size.width / 2f,
+                                    windowPos.y + layoutCoordinates.size.height / 2f
+                                )
+                            }
                     ) {
                         Icon(
                             Icons.Rounded.CatchingPokemon,
