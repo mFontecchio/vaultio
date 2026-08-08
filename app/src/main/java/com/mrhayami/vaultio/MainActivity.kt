@@ -209,6 +209,9 @@ class MainActivity : ComponentActivity() {
                                             gradingRepository.pendingCardToGrade = pendingCard
                                         }
                                         navController.navigate("grading/$id")
+                                    },
+                                    onNavigateToDownloads = {
+                                        navController.navigate(Screen.SetDownloads.route)
                                     }
                                 )
                             }

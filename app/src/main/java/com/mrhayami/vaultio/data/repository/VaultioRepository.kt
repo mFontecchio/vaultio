@@ -297,6 +297,8 @@ class VaultioRepository(
 
     private fun String.isPokemonCategory() = this == "Pokemon" || this == "Pokémon"
 
+    fun observeCatalogCardCount(): Flow<Int> = cardDao.observeCardCount()
+
     suspend fun searchLocalCards(localId: String): List<CardEntity> = cardDao.getCardsByLocalId(localId)
 
     suspend fun searchLocalCardsWithTotal(localId: String, total: Int): List<CardEntity> = 

@@ -73,6 +73,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.FlashOff
 import androidx.compose.material.icons.rounded.FlashOn
 import androidx.compose.material.icons.rounded.GridView
@@ -172,6 +173,7 @@ fun ScannerScreen(
     targetUserCardId: Long = -1L,
     onNavigateBack: () -> Unit,
     onNavigateToGrading: (Long, Bitmap, com.mrhayami.vaultio.data.remote.TcgDexCard?) -> Unit,
+    onNavigateToDownloads: () -> Unit = {},
     viewModel: ScannerViewModel = viewModel(factory = ScannerViewModelFactory(repository))
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -204,6 +206,7 @@ fun ScannerScreen(
                         )
                     }
                 }
+                ScannerEffect.NavigateToSetDownloads -> onNavigateToDownloads()
             }
         }
     }
@@ -318,7 +321,10 @@ fun ScannerContent(
                         onExposureStateChanged = { range, current, supported ->
                             onEventStable(ScannerEvent.SetExposureState(range, current, supported))
                         },
-                        onTap = { onEventStable(ScannerEvent.TapToFocus(it)) }
+                        onTap = { onEventStable(ScannerEvent.TapToFocus(it)) },
+                        onRecognizerUnavailable = {
+                            onEventStable(ScannerEvent.RecognizerUnavailable)
+                        }
                     )
                     
                     if (uiState.isPageScanMode) {
@@ -335,7 +341,7 @@ fun ScannerContent(
 
                     // Glare Warning
                     AnimatedVisibility(
-                        visible = uiState.isGlareDetected,
+                        visible = uiState.isGlareDetected && !uiState.recognizerUnavailable,
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically(),
                         modifier = Modifier
@@ -362,6 +368,84 @@ fun ScannerContent(
                                     "Glare Detected",
                                     style = MaterialTheme.typography.labelLarge
                                 )
+                            }
+                        }
+                    }
+
+                    // OCR unavailable (ML Kit init failure)
+                    AnimatedVisibility(
+                        visible = uiState.recognizerUnavailable,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 100.dp)
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            shape = RoundedCornerShape(24.dp),
+                            tonalElevation = 4.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    "Text recognition unavailable",
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+                    }
+
+                    // Empty catalog hint
+                    AnimatedVisibility(
+                        visible = uiState.showEmptyCatalogHint && !uiState.recognizerUnavailable,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 100.dp)
+                    ) {
+                        Surface(
+                            onClick = { onEventStable(ScannerEvent.OpenSetDownloads) },
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            shape = RoundedCornerShape(24.dp),
+                            tonalElevation = 4.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    "Download sets for offline matching",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    modifier = Modifier.padding(end = 4.dp)
+                                )
+                                IconButton(
+                                    onClick = { onEventStable(ScannerEvent.DismissEmptyCatalogHint) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Close,
+                                        contentDescription = "Dismiss",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -1296,7 +1380,8 @@ fun CameraPreview(
     onLinesDetected: (List<DetectedLine>, Long?, Boolean) -> Unit,
     onPhotoCaptured: (Bitmap) -> Unit = {},
     onExposureStateChanged: (IntRange, Int, Boolean) -> Unit = { _, _, _ -> },
-    onTap: (Offset) -> Unit = {}
+    onTap: (Offset) -> Unit = {},
+    onRecognizerUnavailable: () -> Unit = {}
 ) {
     if (LocalInspectionMode.current) {
         Box(
@@ -1324,6 +1409,13 @@ fun CameraPreview(
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
     var showFlash by remember { mutableStateOf(false) }
     var cameraControl by remember { mutableStateOf<CameraControl?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            TextRecognizerProvider.close()
+            executor.shutdown()
+        }
+    }
 
     LaunchedEffect(isTorchEnabled, cameraControl) {
         cameraControl?.enableTorch(isTorchEnabled)
@@ -1421,12 +1513,6 @@ fun CameraPreview(
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            executor.shutdown()
-        }
-    }
-
     val resolutionSelector = remember {
         ResolutionSelector.Builder()
             .setResolutionStrategy(
@@ -1466,7 +1552,15 @@ fun CameraPreview(
                         dm.widthPixels.toFloat() / dm.heightPixels.toFloat()
                     }
                 }
-                it.setAnalyzer(executor, CameraAnalyzer(ar, onLinesDetected))
+                val recognizerState = TextRecognizerProvider.getOrCreate()
+                val client = when (recognizerState) {
+                    is TextRecognizerState.Available -> recognizerState.client
+                    TextRecognizerState.Unavailable -> {
+                        onRecognizerUnavailable()
+                        null
+                    }
+                }
+                it.setAnalyzer(executor, CameraAnalyzer(ar, client, onLinesDetected))
             }
 
         val capture = ImageCapture.Builder()

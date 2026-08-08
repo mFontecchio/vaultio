@@ -48,17 +48,18 @@ shipping your collection to the cloud.
 
 ## Screenshots
 
-> Drop device captures into `docs/images/` using the filenames below. Until then, images may show as
-> broken links on GitHub — that is expected.
+Phone-aspect captures under `docs/images/` (shared **~9:20** ratio, displayed at the same width).
+Collection and Stats are short GIFs so the README can show view switching and the full stats
+flow; Scanner and Grading are stills. Source `.webm` clips are also resized to **540×1202**.
 
 | Collection | Scanner |
 |:---:|:---:|
-| ![Collection](docs/images/screenshot-collection.png) | ![Scanner](docs/images/screenshot-scanner.png) |
+| <img src="docs/images/screenshot-collection.gif" alt="Collection views" width="220" /> | <img src="docs/images/screenshot-scanner.png" alt="Scanner" width="220" /> |
 | *List / grid / Pokédex* | *Mode-first live scan* |
 
 | Stats | Grading |
 |:---:|:---:|
-| ![Stats](docs/images/screenshot-stats.png) | ![Grading](docs/images/screenshot-grading.png) |
+| <img src="docs/images/screenshot-stats.gif" alt="Stats" width="220" /> | <img src="docs/images/screenshot-grading.png" alt="Grading" width="220" /> |
 | *Value history & charts* | *On-device AI estimates* |
 
 ## Get the app
