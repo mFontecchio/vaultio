@@ -78,7 +78,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -97,6 +96,8 @@ import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.energyEffect
 import com.mrhayami.vaultio.ui.components.holoEffect
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import com.mrhayami.vaultio.ui.components.shimmerEffect
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
@@ -841,10 +842,10 @@ fun CardDetailContent(
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
 private fun CardDetailPreview() {
-    MaterialTheme {
+    VaultioPreview {
         val mockId = "swsh1-1"
         CardDetailContent(
             uiState = CardDetailUiState(

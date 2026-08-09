@@ -65,6 +65,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.ui.components.ConfirmDestructiveDialog
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -278,3 +280,45 @@ fun SetItem(
 @Composable
 fun rememberVectorPainter(image: androidx.compose.ui.graphics.vector.ImageVector) = 
     androidx.compose.ui.graphics.vector.rememberVectorPainter(image)
+
+@VaultioPreviews
+@Composable
+private fun SetItemNotDownloadedPreview() {
+    VaultioPreview {
+        SetItem(
+            set = SetEntity(
+                id = "swsh4",
+                name = "Vivid Voltage",
+                series = "Sword & Shield",
+                logo = null,
+                symbol = null,
+                totalCards = 185,
+                releaseDate = "2020/11/13",
+                isDownloaded = false,
+            ),
+            onDownload = {},
+            onDelete = {},
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun SetItemDownloadedPreview() {
+    VaultioPreview {
+        SetItem(
+            set = SetEntity(
+                id = "swsh4",
+                name = "Vivid Voltage",
+                series = "Sword & Shield",
+                logo = null,
+                symbol = null,
+                totalCards = 185,
+                releaseDate = "2020/11/13",
+                isDownloaded = true,
+            ),
+            onDownload = {},
+            onDelete = {},
+        )
+    }
+}

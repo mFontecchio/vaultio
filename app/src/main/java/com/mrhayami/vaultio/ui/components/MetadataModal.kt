@@ -61,6 +61,8 @@ import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -359,10 +361,10 @@ fun DropdownSelector(
     }
 }
 
-@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun MetadataModalPreview() {
-    MaterialTheme {
+private fun MetadataModalPreview() {
+    VaultioPreview {
         MetadataModal(
             card = TcgDexCard(
                 id = "swsh1-1",

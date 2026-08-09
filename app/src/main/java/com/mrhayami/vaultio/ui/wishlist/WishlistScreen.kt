@@ -60,7 +60,6 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -76,7 +75,8 @@ import com.mrhayami.vaultio.ui.collection.components.AddCardModal
 import com.mrhayami.vaultio.ui.components.ConfirmDestructiveDialog
 import com.mrhayami.vaultio.ui.components.EmptyState
 import com.mrhayami.vaultio.ui.components.MicroCaptureFanfare
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -413,9 +413,9 @@ fun WishlistItem(
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun WishlistItemPreview() {
+private fun WishlistItemPreview() {
     val sampleDetails = WishlistCardWithDetails(
         wishlistCard = WishlistCardEntity(
             id = 1,
@@ -451,11 +451,27 @@ fun WishlistItemPreview() {
         price = 12.50
     )
 
-    VaultioTheme {
+    VaultioPreview {
         WishlistItem(
             item = sampleItem,
             onDelete = {},
             onMoveToCollection = {}
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun WishlistEmptyStatePreview() {
+    VaultioPreview {
+        EmptyState(
+            title = "Your wishlist is empty",
+            message = "Add cards you want so you can track them and move them into your collection.",
+            icon = Icons.Rounded.FavoriteBorder,
+            primaryLabel = "Add cards",
+            onPrimaryClick = {},
+            secondaryLabel = "Open scanner",
+            onSecondaryClick = {}
         )
     }
 }

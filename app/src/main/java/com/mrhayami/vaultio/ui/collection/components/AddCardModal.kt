@@ -42,7 +42,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.PricingUtils
@@ -51,7 +50,8 @@ import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.ui.collection.CollectionEvent
 import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.MetadataModal
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -204,10 +204,10 @@ fun AddCardModal(
     }
 }
 
-@Preview(showBackground = true, name = "Add Card Modal")
+@VaultioPreviews
 @Composable
 private fun AddCardModalPreview() {
-    VaultioTheme {
+    VaultioPreview {
         AddCardModal(
             searchResults = listOf(
                 TcgDexCard(

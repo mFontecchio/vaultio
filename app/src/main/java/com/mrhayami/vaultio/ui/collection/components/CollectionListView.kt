@@ -27,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.local.CardEntity
@@ -40,7 +39,8 @@ import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.EntranceType
 import com.mrhayami.vaultio.ui.components.shimmerEffect
 import com.mrhayami.vaultio.ui.components.staggeredEntrance
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -170,10 +170,10 @@ fun CollectionListView(
     }
 }
 
-@Preview(showBackground = true, name = "List View")
+@VaultioPreviews
 @Composable
-fun CollectionListViewPreview() {
-    VaultioTheme {
+private fun CollectionListViewPreview() {
+    VaultioPreview {
         CollectionListView(
             userCards = listOf(
                 CardUiModel(
@@ -208,10 +208,10 @@ fun CollectionListViewPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "Compact View")
+@VaultioPreviews
 @Composable
-fun CollectionListViewCompactPreview() {
-    VaultioTheme {
+private fun CollectionListViewCompactPreview() {
+    VaultioPreview {
         CollectionListView(
             userCards = listOf(
                 CardUiModel(
@@ -239,10 +239,10 @@ fun CollectionListViewCompactPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "Selection Mode")
+@VaultioPreviews
 @Composable
-fun CollectionListViewSelectionPreview() {
-    VaultioTheme {
+private fun CollectionListViewSelectionPreview() {
+    VaultioPreview {
         CollectionListView(
             userCards = listOf(
                 CardUiModel(

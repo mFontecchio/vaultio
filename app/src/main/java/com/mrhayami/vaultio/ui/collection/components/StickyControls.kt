@@ -30,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.ui.collection.CollectionEvent
@@ -38,6 +37,8 @@ import com.mrhayami.vaultio.ui.collection.FilterSettings
 import com.mrhayami.vaultio.ui.collection.SortMode
 import com.mrhayami.vaultio.ui.collection.ViewMode
 import com.mrhayami.vaultio.ui.collection.getIconFromName
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import java.util.Locale
 
 @Composable
@@ -170,10 +171,10 @@ fun StickyControls(
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
 private fun StickyControlsPreview() {
-    MaterialTheme {
+    VaultioPreview {
         StickyControls(
             viewMode = ViewMode.GRID,
             sortMode = SortMode.DATE_ADDED,

@@ -66,14 +66,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.local.CardGradeEntity
 import com.mrhayami.vaultio.data.repository.GeminiNanoClient
 import com.mrhayami.vaultio.ui.components.MetadataModal
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import java.util.Locale
@@ -691,60 +691,64 @@ fun rememberMarkdownText(text: String): AnnotatedString {
 }
 
 
-@Preview
+@VaultioPreviews
 @Composable
 private fun GradePreview() {
-    DigitalGradeSlab(
-        grade = CardGradeEntity(
-            id = 0,
-            userCardId = 1234,
-            overallScore = 9.2,
-            centeringScore = 8.5,
-            cornersScore = 9.0,
-            edgesScore = 9.5,
-            surfaceScore = 9.0,
-            reasoning = "Perfect",
-            timestamp = System.currentTimeMillis()
-        ),
-        image = null
-    )
-}
-
-@Preview
-@Composable
-private fun GradingScreenPreview() {
-    GradingScreen(
-        state = GradingViewState(),
-        userCardId = 1234,
-        onEvent = {},
-        sideEffects = flowOf(),
-        onNavigateBack = {}
-    )
-}
-
-@Preview
-@Composable
-private fun GradeSubScorePreview() {
-    GradeSubScore("Centering", 8.5)
-}
-
-@Preview
-@Composable
-private fun MarkdownTextPreview() {
-    VaultioTheme {
-        Surface {
-            val text = "This is **bold** text and this is regular text with **more bold**."
-            val annotated = rememberMarkdownText(text)
-            Text(
-                text = annotated,
-                modifier = Modifier.padding(16.dp),
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
+    VaultioPreview {
+        DigitalGradeSlab(
+            grade = CardGradeEntity(
+                id = 0,
+                userCardId = 1234,
+                overallScore = 9.2,
+                centeringScore = 8.5,
+                cornersScore = 9.0,
+                edgesScore = 9.5,
+                surfaceScore = 9.0,
+                reasoning = "Perfect",
+                timestamp = System.currentTimeMillis()
+            ),
+            image = null
+        )
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
+@Composable
+private fun GradingScreenPreview() {
+    VaultioPreview {
+        GradingScreen(
+            state = GradingViewState(),
+            userCardId = 1234,
+            onEvent = {},
+            sideEffects = flowOf(),
+            onNavigateBack = {}
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun GradeSubScorePreview() {
+    VaultioPreview {
+        GradeSubScore("Centering", 8.5)
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun MarkdownTextPreview() {
+    VaultioPreview {
+        val text = "This is **bold** text and this is regular text with **more bold**."
+        val annotated = rememberMarkdownText(text)
+        Text(
+            text = annotated,
+            modifier = Modifier.padding(16.dp),
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@VaultioPreviews
 @Composable
 private fun GradedCardScreenPreview() {
     val longReasoning = """
@@ -760,7 +764,7 @@ private fun GradedCardScreenPreview() {
         strong overall evaluation of 9.2.
     """.trimIndent()
 
-    VaultioTheme {
+    VaultioPreview {
         GradingScreen(
             state = GradingViewState(
                 gradeResult = CardGradeEntity(
@@ -785,10 +789,10 @@ private fun GradedCardScreenPreview() {
     }
 }
 
-@Preview
+@VaultioPreviews
 @Composable
 private fun ModelStatusIndicatorPreview() {
-    VaultioTheme {
+    VaultioPreview {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -813,20 +817,22 @@ private fun ModelStatusIndicatorPreview() {
     }
 }
 
-@Preview
+@VaultioPreviews
 @Composable
 private fun GradeDetailedBreakdownPreview() {
-    GradeDetailedBreakdown(
-        grade = CardGradeEntity(
-            id = 0,
-            userCardId = 1234,
-            overallScore = 9.2,
-            centeringScore = 8.5,
-            cornersScore = 9.0,
-            edgesScore = 9.5,
-            surfaceScore = 9.0,
-            reasoning = "Perfect",
-            timestamp = System.currentTimeMillis()
-        ),
-    )
+    VaultioPreview {
+        GradeDetailedBreakdown(
+            grade = CardGradeEntity(
+                id = 0,
+                userCardId = 1234,
+                overallScore = 9.2,
+                centeringScore = 8.5,
+                cornersScore = 9.0,
+                edgesScore = 9.5,
+                surfaceScore = 9.0,
+                reasoning = "Perfect",
+                timestamp = System.currentTimeMillis()
+            ),
+        )
+    }
 }

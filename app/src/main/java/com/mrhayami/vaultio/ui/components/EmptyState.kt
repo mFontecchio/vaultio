@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @Composable
 fun EmptyState(
@@ -68,5 +73,33 @@ fun EmptyState(
                 Text(secondaryLabel)
             }
         }
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun EmptyStateWithActionsPreview() {
+    VaultioPreview {
+        EmptyState(
+            title = "Your collection is empty",
+            message = "Scan cards or add them manually to start building your collection.",
+            icon = Icons.Rounded.QrCodeScanner,
+            primaryLabel = "Scan cards",
+            onPrimaryClick = {},
+            secondaryLabel = "Add manually",
+            onSecondaryClick = {},
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun EmptyStateMessageOnlyPreview() {
+    VaultioPreview {
+        EmptyState(
+            title = "Nothing here yet",
+            message = "Check back later for updates.",
+            icon = Icons.Rounded.Info,
+        )
     }
 }

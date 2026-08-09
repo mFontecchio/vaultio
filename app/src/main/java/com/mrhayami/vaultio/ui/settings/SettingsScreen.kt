@@ -57,7 +57,6 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -77,7 +76,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -99,7 +97,8 @@ import com.mrhayami.vaultio.ui.theme.EnergyLightning
 import com.mrhayami.vaultio.ui.theme.EnergyMetal
 import com.mrhayami.vaultio.ui.theme.EnergyPsychic
 import com.mrhayami.vaultio.ui.theme.EnergyWater
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -879,29 +878,27 @@ private fun formatLastSynced(timestamp: Long): String {
     }
 }
 
-@Preview
+@VaultioPreviews
 @Composable
-fun SettingsScreenPreview() {
-    VaultioTheme {
-        Surface {
-            SettingsScreenContent(
-                uiState = SettingsUiState(
-                    themeBrand = ThemeBrand.DEFAULT,
-                    darkThemeConfig = DarkThemeConfig.FOLLOW_SYSTEM,
-                    justTcgApiKey = "mock_api_key",
-                    dailyUsed = 42,
-                    dailyLimit = 100,
-                    dailyRemaining = 58,
-                    planUsed = 150,
-                    planLimit = 1000,
-                    planRemaining = 850,
-                    planName = "Basic",
-                    offlineSetsCount = 5,
-                    isRefreshing = false
-                ),
-                onEvent = {},
-                onNavigateToDownloads = {}
-            )
-        }
+private fun SettingsScreenPreview() {
+    VaultioPreview {
+        SettingsScreenContent(
+            uiState = SettingsUiState(
+                themeBrand = ThemeBrand.DEFAULT,
+                darkThemeConfig = DarkThemeConfig.FOLLOW_SYSTEM,
+                justTcgApiKey = "mock_api_key",
+                dailyUsed = 42,
+                dailyLimit = 100,
+                dailyRemaining = 58,
+                planUsed = 150,
+                planLimit = 1000,
+                planRemaining = 850,
+                planName = "Basic",
+                offlineSetsCount = 5,
+                isRefreshing = false
+            ),
+            onEvent = {},
+            onNavigateToDownloads = {}
+        )
     }
 }

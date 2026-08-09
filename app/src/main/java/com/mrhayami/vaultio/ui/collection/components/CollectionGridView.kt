@@ -22,7 +22,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -30,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.local.CardEntity
@@ -43,7 +41,8 @@ import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.EntranceType
 import com.mrhayami.vaultio.ui.components.shimmerEffect
 import com.mrhayami.vaultio.ui.components.staggeredEntrance
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -155,95 +154,91 @@ fun CollectionGridView(
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
 private fun CollectionGridViewPreview() {
-    VaultioTheme {
-        Surface(color = MaterialTheme.colorScheme.background) {
-            CollectionGridView(
-                userCards = listOf(
-                    CardUiModel(
-                        mockCardWithDetails(
-                            1L,
-                            "Pikachu",
-                            "https://images.pokemontcg.io/swsh1/1"
-                        ), 1.99
-                    ),
-                    CardUiModel(
-                        mockCardWithDetails(
-                            2L,
-                            "Charizard",
-                            "https://images.pokemontcg.io/swsh4/25"
-                        ), 299.99
-                    ),
-                    CardUiModel(
-                        mockCardWithDetails(
-                            3L,
-                            "Mewtwo",
-                            "https://images.pokemontcg.io/base1/10"
-                        ), 49.99
-                    ),
-                    CardUiModel(
-                        mockCardWithDetails(
-                            4L,
-                            "Blastoise",
-                            "https://images.pokemontcg.io/swsh4/1"
-                        ), 89.99
-                    )
+    VaultioPreview {
+        CollectionGridView(
+            userCards = listOf(
+                CardUiModel(
+                    mockCardWithDetails(
+                        1L,
+                        "Pikachu",
+                        "https://images.pokemontcg.io/swsh1/1"
+                    ), 1.99
                 ),
-                selectedIds = emptySet(),
-                isSelectionMode = false,
-                settings = GridSettings(columns = 2, showBadges = true),
-                onCardClick = {},
-                onCardLongClick = {}
-            )
-        }
+                CardUiModel(
+                    mockCardWithDetails(
+                        2L,
+                        "Charizard",
+                        "https://images.pokemontcg.io/swsh4/25"
+                    ), 299.99
+                ),
+                CardUiModel(
+                    mockCardWithDetails(
+                        3L,
+                        "Mewtwo",
+                        "https://images.pokemontcg.io/base1/10"
+                    ), 49.99
+                ),
+                CardUiModel(
+                    mockCardWithDetails(
+                        4L,
+                        "Blastoise",
+                        "https://images.pokemontcg.io/swsh4/1"
+                    ), 89.99
+                )
+            ),
+            selectedIds = emptySet(),
+            isSelectionMode = false,
+            settings = GridSettings(columns = 2, showBadges = true),
+            onCardClick = {},
+            onCardLongClick = {}
+        )
     }
 }
 
-@Preview(showBackground = true, name = "Selection Mode")
+@VaultioPreviews
 @Composable
 private fun CollectionGridViewSelectionPreview() {
-    VaultioTheme {
-        Surface(color = MaterialTheme.colorScheme.background) {
-            CollectionGridView(
-                userCards = listOf(
-                    CardUiModel(
-                        mockCardWithDetails(
-                            1L,
-                            "Pikachu",
-                            "https://images.pokemontcg.io/swsh1/1"
-                        ), 1.99
-                    ),
-                    CardUiModel(
-                        mockCardWithDetails(
-                            2L,
-                            "Charizard",
-                            "https://images.pokemontcg.io/swsh4/25"
-                        ), 299.99
-                    ),
-                    CardUiModel(
-                        mockCardWithDetails(
-                            3L,
-                            "Mewtwo",
-                            "https://images.pokemontcg.io/base1/10"
-                        ), 49.99
-                    ),
-                    CardUiModel(
-                        mockCardWithDetails(
-                            4L,
-                            "Blastoise",
-                            "https://images.pokemontcg.io/swsh4/1"
-                        ), 89.99
-                    )
+    VaultioPreview {
+        CollectionGridView(
+            userCards = listOf(
+                CardUiModel(
+                    mockCardWithDetails(
+                        1L,
+                        "Pikachu",
+                        "https://images.pokemontcg.io/swsh1/1"
+                    ), 1.99
                 ),
-                selectedIds = setOf(1L, 3L),
-                isSelectionMode = true,
-                settings = GridSettings(columns = 2, showBadges = true),
-                onCardClick = {},
-                onCardLongClick = {}
-            )
-        }
+                CardUiModel(
+                    mockCardWithDetails(
+                        2L,
+                        "Charizard",
+                        "https://images.pokemontcg.io/swsh4/25"
+                    ), 299.99
+                ),
+                CardUiModel(
+                    mockCardWithDetails(
+                        3L,
+                        "Mewtwo",
+                        "https://images.pokemontcg.io/base1/10"
+                    ), 49.99
+                ),
+                CardUiModel(
+                    mockCardWithDetails(
+                        4L,
+                        "Blastoise",
+                        "https://images.pokemontcg.io/swsh4/1"
+                    ), 89.99
+                )
+            ),
+            selectedIds = setOf(1L, 3L),
+            isSelectionMode = true,
+            settings = GridSettings(columns = 2, showBadges = true),
+            onCardClick = {},
+            onCardLongClick = {}
+        )
     }
 }
 

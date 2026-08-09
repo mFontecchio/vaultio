@@ -118,7 +118,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -141,6 +140,8 @@ import com.mrhayami.vaultio.ui.collection.components.StickyControls
 import com.mrhayami.vaultio.ui.collection.components.ViewSettingsSheet
 import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.EmptyState
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import kotlinx.coroutines.launch
 
 @Composable
@@ -997,10 +998,10 @@ private fun mockCardWithDetails(id: String, name: String) = CardUiModel(
     price = 123.00
 )
 
-@Preview(showBackground = true, name = "Collection Content Populated")
+@VaultioPreviews
 @Composable
 private fun CollectionContentPreview() {
-    MaterialTheme {
+    VaultioPreview {
         CollectionContent(
             uiState = CollectionUiState(
                 userCards = kotlinx.collections.immutable.persistentListOf(
@@ -1017,6 +1018,22 @@ private fun CollectionContentPreview() {
                     )
                 ),
                 totalValue = 420.69,
+                isLoading = false
+            ),
+            onEvent = {},
+            onNavigateToScanner = {},
+            onNavigateToCardDetail = {},
+            importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {}
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun CollectionContentEmptyPreview() {
+    VaultioPreview {
+        CollectionContent(
+            uiState = CollectionUiState(
                 isLoading = false
             ),
             onEvent = {},

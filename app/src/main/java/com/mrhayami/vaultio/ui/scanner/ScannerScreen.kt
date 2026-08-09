@@ -144,7 +144,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -163,7 +162,8 @@ import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.DropdownSelector
 import com.mrhayami.vaultio.ui.components.MetadataModal
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
@@ -2242,10 +2242,10 @@ fun ScannerOverlay(
 }
 
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun CandidateItemPreview() {
-    VaultioTheme {
+private fun CandidateItemPreview() {
+    VaultioPreview {
         CandidateItem(
             card = TcgDexCard(
                 id = "swsh1-1",
@@ -2261,21 +2261,29 @@ fun CandidateItemPreview() {
 }
 
 
-@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@VaultioPreviews
 @Composable
-fun ScannerOverlayPreview() {
-    VaultioTheme {
-        Box(modifier = Modifier.fillMaxSize()) {
+private fun ScannerOverlayPreview() {
+    VaultioPreview {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
             ScannerOverlay(isSearching = true, isPriceCheckMode = false)
         }
     }
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@VaultioPreviews
 @Composable
-fun ScannerOverlayFocusPreview() {
-    VaultioTheme {
-        Box(modifier = Modifier.fillMaxSize()) {
+private fun ScannerOverlayFocusPreview() {
+    VaultioPreview {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
             ScannerOverlay(
                 isSearching = true,
                 focusPoint = Offset(500f, 1000f)
@@ -2285,10 +2293,10 @@ fun ScannerOverlayFocusPreview() {
 }
 
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun ScannerContentPermissionPreview() {
-    VaultioTheme {
+private fun ScannerContentPermissionPreview() {
+    VaultioPreview {
         ScannerContent(
             uiState = ScannerUiState(hasCameraPermission = false),
             onEvent = {},
@@ -2300,10 +2308,10 @@ fun ScannerContentPermissionPreview() {
 }
 
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun ScannerContentSearchingPreview() {
-    VaultioTheme {
+private fun ScannerContentSearchingPreview() {
+    VaultioPreview {
         ScannerContent(
             uiState = ScannerUiState(
                 hasCameraPermission = true,
@@ -2320,10 +2328,10 @@ fun ScannerContentSearchingPreview() {
 }
 
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun ScannerContentAutoSelectedPreview() {
-    VaultioTheme {
+private fun ScannerContentAutoSelectedPreview() {
+    VaultioPreview {
         ScannerContent(
             uiState = ScannerUiState(
                 hasCameraPermission = true,
@@ -2345,30 +2353,28 @@ fun ScannerContentAutoSelectedPreview() {
 }
 
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun BulkSettingsPreview() {
-    VaultioTheme {
-        Surface {
-            BulkSettingsSheet(
-                uiState = ScannerUiState(
-                    bulkDefaults = BulkScanDefaults(
-                        condition = "Near Mint",
-                        finish = PricingUtils.FINISH_HOLOFOIL
-                    )
-                ),
-                onEvent = {},
-                onDismiss = {}
-            )
-        }
+private fun BulkSettingsPreview() {
+    VaultioPreview {
+        BulkSettingsSheet(
+            uiState = ScannerUiState(
+                bulkDefaults = BulkScanDefaults(
+                    condition = "Near Mint",
+                    finish = PricingUtils.FINISH_HOLOFOIL
+                )
+            ),
+            onEvent = {},
+            onDismiss = {}
+        )
     }
 }
 
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun BulkHUDPreview() {
-    VaultioTheme {
+private fun BulkHUDPreview() {
+    VaultioPreview {
         Box(modifier = Modifier.fillMaxSize()) {
             BulkModeHUD(
                 uiState = ScannerUiState(
@@ -2394,85 +2400,89 @@ fun BulkHUDPreview() {
 }
 
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun SkippedReviewPreview() {
-    VaultioTheme {
-        Surface {
-            SkippedReviewSheet(
-                uiState = ScannerUiState(
-                    skippedCards = persistentListOf(
-                        TcgDexCard("1", "1", "Pikachu", null, "Rare", "Pokemon"),
-                        TcgDexCard("2", "2", "Bulbasaur", null, "Common", "Pokemon")
+private fun SkippedReviewPreview() {
+    VaultioPreview {
+        SkippedReviewSheet(
+            uiState = ScannerUiState(
+                skippedCards = persistentListOf(
+                    TcgDexCard("1", "1", "Pikachu", null, "Rare", "Pokemon"),
+                    TcgDexCard("2", "2", "Bulbasaur", null, "Common", "Pokemon")
+                )
+            ),
+            onEvent = {},
+            onDismiss = {}
+        )
+    }
+}
+
+
+@VaultioPreviews
+@Composable
+private fun PageScanReviewPreview() {
+    VaultioPreview {
+        PageScanReviewContent(
+            uiState = ScannerUiState(
+                activeMode = ScannerMode.PAGE,
+                pageScanMode = PageScanMode.REVIEWING,
+                pageScanCells = List(9) { i ->
+                    PageScanCell(
+                        id = i,
+                        row = i / 3,
+                        col = i % 3,
+                        matchedCard = if (i % 2 == 0) TcgDexCard(
+                            id = "$i",
+                            localId = "$i",
+                            name = "Card $i",
+                            image = null,
+                            rarity = "Common",
+                            category = "Pokemon"
+                        ) else null,
+                        status = if (i % 2 == 0) PageScanCellStatus.MATCHED else PageScanCellStatus.NOT_FOUND
                     )
-                ),
-                onEvent = {},
-                onDismiss = {}
-            )
-        }
+                }
+            ),
+            onEvent = {}
+        )
     }
 }
 
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun PageScanReviewPreview() {
-    VaultioTheme {
-        Surface {
-            PageScanReviewContent(
-                uiState = ScannerUiState(
-                    activeMode = ScannerMode.PAGE,
-                    pageScanMode = PageScanMode.REVIEWING,
-                    pageScanCells = List(9) { i ->
-                        PageScanCell(
-                            id = i,
-                            row = i / 3,
-                            col = i % 3,
-                            matchedCard = if (i % 2 == 0) TcgDexCard(
-                                id = "$i",
-                                localId = "$i",
-                                name = "Card $i",
-                                image = null,
-                                rarity = "Common",
-                                category = "Pokemon"
-                            ) else null,
-                            status = if (i % 2 == 0) PageScanCellStatus.MATCHED else PageScanCellStatus.NOT_FOUND
-                        )
-                    }
-                ),
-                onEvent = {}
-            )
-        }
-    }
-}
-
-
-@Preview(showBackground = true, backgroundColor = 0xFF000000)
-@Composable
-fun PageScanOverlayIdlePreview() {
-    VaultioTheme {
-        Box(modifier = Modifier.fillMaxSize()) {
+private fun PageScanOverlayIdlePreview() {
+    VaultioPreview {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
             PageScanOverlay(isProcessing = false)
         }
     }
 }
 
 
-@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@VaultioPreviews
 @Composable
-fun PageScanOverlayProcessingPreview() {
-    VaultioTheme {
-        Box(modifier = Modifier.fillMaxSize()) {
+private fun PageScanOverlayProcessingPreview() {
+    VaultioPreview {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
             PageScanOverlay(isProcessing = true)
         }
     }
 }
 
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun ScannerContentBulkModePreview() {
-    VaultioTheme {
+private fun ScannerContentBulkModePreview() {
+    VaultioPreview {
         ScannerContent(
             uiState = ScannerUiState(
                 hasCameraPermission = true,
@@ -2831,39 +2841,37 @@ fun PriceRow(
 }
 
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun PriceRowPreview() {
-    VaultioTheme {
-        Surface {
-            Column(modifier = Modifier.padding(16.dp)) {
-                PriceRow(
-                    label = "Holo • Near Mint",
-                    marketPrice = 12.50,
-                    lowPrice = 10.00,
-                    highPrice = 15.00
-                )
-                PriceRow(
-                    label = "Normal • Lightly Played",
-                    marketPrice = 5.25,
-                    lowPrice = 4.50,
-                    highPrice = 6.00
-                )
-                PriceRow(
-                    label = "Secret Rare • Mint",
-                    marketPrice = null,
-                    lowPrice = null,
-                    highPrice = null
-                )
-            }
+private fun PriceRowPreview() {
+    VaultioPreview {
+        Column(modifier = Modifier.padding(16.dp)) {
+            PriceRow(
+                label = "Holo • Near Mint",
+                marketPrice = 12.50,
+                lowPrice = 10.00,
+                highPrice = 15.00
+            )
+            PriceRow(
+                label = "Normal • Lightly Played",
+                marketPrice = 5.25,
+                lowPrice = 4.50,
+                highPrice = 6.00
+            )
+            PriceRow(
+                label = "Secret Rare • Mint",
+                marketPrice = null,
+                lowPrice = null,
+                highPrice = null
+            )
         }
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun ScannerModeFabPreview() {
-    VaultioTheme {
+private fun ScannerModeFabPreview() {
+    VaultioPreview {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -2878,10 +2886,10 @@ fun ScannerModeFabPreview() {
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun PriceCheckHUDPreview() {
-    VaultioTheme {
+private fun PriceCheckHUDPreview() {
+    VaultioPreview {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -2923,6 +2931,44 @@ fun PriceCheckHUDPreview() {
                     isFetching = false
                 ),
                 onReset = {}
+            )
+        }
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun ScannerIdleOverlayPreview() {
+    VaultioPreview {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            ScannerIdleOverlay(onModeSelected = {})
+        }
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun ModeButtonPreview() {
+    VaultioPreview {
+        Row(
+            modifier = Modifier
+                .background(Color.Black)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            ModeButton(
+                selected = true,
+                icon = Icons.Rounded.Search,
+                onClick = {}
+            )
+            ModeButton(
+                selected = false,
+                icon = Icons.Rounded.Payments,
+                onClick = {}
             )
         }
     }

@@ -46,6 +46,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.mrhayami.vaultio.data.local.CardEntity
+import com.mrhayami.vaultio.data.local.CardWithDetails
+import com.mrhayami.vaultio.data.local.SetEntity
+import com.mrhayami.vaultio.data.local.UserCardEntity
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.PI
@@ -378,4 +384,126 @@ fun SectionTitle(title: String, modifier: Modifier = Modifier) {
 fun formatCurrency(amount: Double): String {
     val format = NumberFormat.getCurrencyInstance(Locale.US)
     return format.format(amount)
+}
+
+@VaultioPreviews
+@Composable
+private fun SummaryCardsPreview() {
+    VaultioPreview {
+        SummaryCards(totalValue = 2450.75, cardCount = 142)
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun DonutChartPreview() {
+    VaultioPreview {
+        val data = mapOf(
+            "Common" to 50,
+            "Uncommon" to 30,
+            "Rare" to 20,
+            "Ultra Rare" to 10,
+        ).toList()
+        val colors = listOf(
+            MaterialTheme.colorScheme.primary,
+            MaterialTheme.colorScheme.secondary,
+            MaterialTheme.colorScheme.tertiary,
+            MaterialTheme.colorScheme.error,
+        )
+        DonutChart(
+            data = data,
+            colors = colors,
+            modifier = Modifier
+                .size(200.dp)
+                .padding(16.dp),
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun RadarChartPreview() {
+    VaultioPreview {
+        RadarChart(
+            data = mapOf(
+                "Fire" to 25,
+                "Water" to 20,
+                "Grass" to 30,
+                "Lightning" to 15,
+                "Psychic" to 10,
+            ).toList(),
+            modifier = Modifier
+                .size(280.dp)
+                .padding(24.dp),
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun MostValuableCardItemPreview() {
+    VaultioPreview {
+        val mockCard = CardEntity(
+            id = "swsh4-1",
+            localId = "1",
+            name = "Charizard VMAX",
+            image = null,
+            setId = "swsh4",
+            rarity = "Rare Holo VMAX",
+            category = "Pokémon",
+            types = "Fire",
+            dexId = "6",
+        )
+        val mockSet = SetEntity(
+            id = "swsh4",
+            name = "Vivid Voltage",
+            series = "Sword & Shield",
+            logo = null,
+            symbol = null,
+            totalCards = 185,
+            officialCards = 185,
+            releaseDate = "2020/11/13",
+        )
+        val mockUserCard = UserCardEntity(
+            id = 1,
+            cardId = "swsh4-1",
+            quantity = 2,
+        )
+        MostValuableCardItem(
+            cardWithValue = CardWithValue(
+                details = CardWithDetails(
+                    userCard = mockUserCard,
+                    card = mockCard,
+                    set = mockSet,
+                ),
+                value = 150.50,
+            ),
+            onClick = {},
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun SetCompletionItemPreview() {
+    VaultioPreview {
+        SetCompletionItem(
+            info = SetCompletionInfo(
+                setId = "swsh4",
+                setName = "Vivid Voltage",
+                logo = null,
+                collectedCount = 45,
+                totalCount = 185,
+                completionPercentage = 24.3f,
+            ),
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun SectionTitlePreview() {
+    VaultioPreview {
+        SectionTitle(title = "Top 5 Most Valuable Cards")
+    }
 }

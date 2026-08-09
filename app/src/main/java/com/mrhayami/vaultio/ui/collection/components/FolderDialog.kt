@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.ui.collection.getIconFromName
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @Composable
 fun FolderDialog(
@@ -161,4 +163,33 @@ fun FolderDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@VaultioPreviews
+@Composable
+private fun FolderDialogNewPreview() {
+    VaultioPreview {
+        FolderDialog(
+            folder = FolderEntity(id = 0L, name = ""),
+            onDismiss = {},
+            onConfirm = { _, _, _ -> }
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun FolderDialogEditPreview() {
+    VaultioPreview {
+        FolderDialog(
+            folder = FolderEntity(
+                id = 1L,
+                name = "Favorites",
+                icon = "star",
+                color = Color(0xFFF08030).toArgb().toLong().toString()
+            ),
+            onDismiss = {},
+            onConfirm = { _, _, _ -> }
+        )
+    }
 }

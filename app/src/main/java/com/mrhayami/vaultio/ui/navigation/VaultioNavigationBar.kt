@@ -14,11 +14,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @Composable
 fun VaultioNavigationBar(
@@ -78,10 +78,10 @@ private fun RowScope.NavItem(
     )
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
 private fun VaultioNavigationBarPreview() {
-    VaultioTheme {
+    VaultioPreview {
         VaultioNavigationBar(
             currentDestination = NavDestination("").apply { route = Screen.Collection.route },
             onNavigate = {}

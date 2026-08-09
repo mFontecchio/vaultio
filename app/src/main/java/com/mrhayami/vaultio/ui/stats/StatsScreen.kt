@@ -1,6 +1,5 @@
 package com.mrhayami.vaultio.ui.stats
 
-import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,7 +26,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -37,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.CardWithDetails
@@ -45,7 +42,8 @@ import com.mrhayami.vaultio.data.local.CollectionSnapshotEntity
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.ui.components.EmptyState
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
@@ -374,8 +372,7 @@ private fun LazyListScope.setCompletionSection(completion: List<SetCompletionInf
     }
 }
 
-@Preview(showBackground = true, name = "Light Mode")
-@Preview(showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES, name = "Dark Mode")
+@VaultioPreviews
 @Composable
 private fun StatsScreenPreview() {
     val mockSnapshots = listOf(
@@ -479,14 +476,20 @@ private fun StatsScreenPreview() {
         )
     )
 
-    VaultioTheme {
-        Surface(color = MaterialTheme.colorScheme.background) {
-            StatsScreen(
-                state = mockState,
-                onEvent = {},
-                sideEffects = emptyFlow(),
-                onNavigation = {}
-            )
-        }
+    VaultioPreview {
+        StatsScreen(
+            state = mockState,
+            onEvent = {},
+            sideEffects = emptyFlow(),
+            onNavigation = {}
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun EmptyStatsContentPreview() {
+    VaultioPreview {
+        EmptyStatsContent(onNavigateToScanner = {})
     }
 }

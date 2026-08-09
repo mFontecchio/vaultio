@@ -48,10 +48,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.mrhayami.vaultio.data.UserPreferencesRepository
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import kotlinx.coroutines.launch
 
 private const val PAGE_COUNT = 5
@@ -268,10 +268,10 @@ private fun ScannerModesPage() {
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun WalkthroughContentPreview() {
-    VaultioTheme {
+private fun WalkthroughContentPreview() {
+    VaultioPreview {
         WalkthroughContent(onFinish = {})
     }
 }

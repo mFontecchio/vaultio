@@ -31,6 +31,8 @@ import com.mrhayami.vaultio.ui.collection.CollectionEvent
 import com.mrhayami.vaultio.ui.collection.FilterSettings
 import com.mrhayami.vaultio.ui.collection.SortDirection
 import com.mrhayami.vaultio.ui.collection.SortMode
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -187,5 +189,21 @@ fun SortFilterSheet(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun SortFilterSheetPreview() {
+    VaultioPreview {
+        SortFilterSheet(
+            sortMode = SortMode.NAME,
+            sortDirection = SortDirection.ASCENDING,
+            filterSettings = FilterSettings(),
+            availableRarities = listOf("Rare Holo", "Common", "Uncommon"),
+            availableCategories = listOf("Pokémon", "Trainer", "Energy"),
+            availableTypes = listOf("Fire", "Water", "Grass"),
+            onEvent = {}
+        )
     }
 }
