@@ -182,6 +182,8 @@ fun SettingsScreenContent(
     var showThemeBrandDialog by remember { mutableStateOf(value = false) }
     var showDarkConfigDialog by remember { mutableStateOf(value = false) }
     var showApiKeyDialog by remember { mutableStateOf(value = false) }
+    var showClearCacheConfirm by remember { mutableStateOf(value = false) }
+    var showResetConfirm by remember { mutableStateOf(value = false) }
 
     Column(
         modifier = modifier
@@ -205,7 +207,7 @@ fun SettingsScreenContent(
 
         StorageSection(
             offlineSetsCount = uiState.offlineSetsCount,
-            onClearCache = { onEvent(SettingsEvent.ClearImageCache) },
+            onClearCache = { showClearCacheConfirm = true },
             onNavigateToDownloads = onNavigateToDownloads
         )
 
@@ -219,7 +221,7 @@ fun SettingsScreenContent(
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
         DeveloperSection(
-            onResetSettings = { onEvent(SettingsEvent.ResetSettings) }
+            onResetSettings = { showResetConfirm = true }
         )
     }
 
@@ -244,6 +246,26 @@ fun SettingsScreenContent(
             currentKey = uiState.justTcgApiKey,
             onSaveKey = { onEvent(SettingsEvent.SetJustTcgApiKey(it)) },
             onDismiss = { showApiKeyDialog = false }
+        )
+    }
+
+    if (showClearCacheConfirm) {
+        com.mrhayami.vaultio.ui.components.ConfirmDestructiveDialog(
+            title = "Clear image cache?",
+            message = "This frees device storage used for cached card images. You can download images again later.",
+            confirmLabel = "Clear cache",
+            onConfirm = { onEvent(SettingsEvent.ClearImageCache) },
+            onDismiss = { showClearCacheConfirm = false }
+        )
+    }
+
+    if (showResetConfirm) {
+        com.mrhayami.vaultio.ui.components.ConfirmDestructiveDialog(
+            title = "Reset all settings?",
+            message = "This restores default preferences (theme, API key preferences, and related options). Your collection is not deleted.",
+            confirmLabel = "Reset",
+            onConfirm = { onEvent(SettingsEvent.ResetSettings) },
+            onDismiss = { showResetConfirm = false }
         )
     }
 }
@@ -377,6 +399,8 @@ private fun MarketDataSection(
     onEvent: (SettingsEvent) -> Unit,
     onShowApiKeyDialog: () -> Unit
 ) {
+    var usageExpanded by remember { mutableStateOf(false) }
+
     SettingsSection(title = "Market Data") {
         ListItem(
             headlineContent = { Text("JustTCG API Key") },
@@ -388,80 +412,99 @@ private fun MarketDataSection(
         )
 
         ListItem(
-            headlineContent = { Text("JustTCG API Usage") },
+            headlineContent = { Text("API usage details") },
             supportingContent = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Plan: ${uiState.planName}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            "Synced: ${formatLastSynced(uiState.lastSyncedAt)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Daily Usage", style = MaterialTheme.typography.labelSmall)
-                    LinearProgressIndicator(
-                        progress = { if (uiState.dailyLimit > 0) (uiState.dailyUsed.toFloat() / uiState.dailyLimit.toFloat()).coerceIn(0f, 1f) else 0f },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        color = if (uiState.dailyRemaining <= 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                    )
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("${uiState.dailyUsed} / ${uiState.dailyLimit} used", style = MaterialTheme.typography.bodySmall)
-                        Text("${uiState.dailyRemaining} remaining", style = MaterialTheme.typography.bodySmall)
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Plan Usage", style = MaterialTheme.typography.labelSmall)
-                    LinearProgressIndicator(
-                        progress = { if (uiState.planLimit > 0) (uiState.planUsed.toFloat() / uiState.planLimit.toFloat()).coerceIn(0f, 1f) else 0f },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        color = if (uiState.planRemaining <= 50) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
-                    )
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("${uiState.planUsed} / ${uiState.planLimit} used", style = MaterialTheme.typography.bodySmall)
-                        Text("${uiState.planRemaining} remaining", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
+                Text(
+                    if (usageExpanded) "Hide JustTCG quotas and sync info" else "Show JustTCG quotas and sync info"
+                )
             },
             leadingContent = { Icon(Icons.Rounded.Api, contentDescription = null) },
             trailingContent = {
-                if (uiState.isRefreshing) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                } else {
-                    IconButton(
-                        onClick = { onEvent(SettingsEvent.RefreshApiUsage) },
-                        enabled = uiState.justTcgApiKey.isNotEmpty()
+                Icon(
+                    if (usageExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                    contentDescription = if (usageExpanded) "Collapse" else "Expand"
+                )
+            },
+            modifier = Modifier.clickable { usageExpanded = !usageExpanded }
+        )
+
+        if (usageExpanded) {
+            ListItem(
+                headlineContent = { Text("JustTCG API Usage") },
+                supportingContent = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
                     ) {
-                        Icon(
-                            Icons.Rounded.Refresh,
-                            contentDescription = "Refresh API usage",
-                            tint = if (uiState.justTcgApiKey.isNotEmpty())
-                                MaterialTheme.colorScheme.primary
-                            else
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Plan: ${uiState.planName}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                "Synced: ${formatLastSynced(uiState.lastSyncedAt)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Daily Usage", style = MaterialTheme.typography.labelSmall)
+                        LinearProgressIndicator(
+                            progress = { if (uiState.dailyLimit > 0) (uiState.dailyUsed.toFloat() / uiState.dailyLimit.toFloat()).coerceIn(0f, 1f) else 0f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            color = if (uiState.dailyRemaining <= 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                         )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${uiState.dailyUsed} / ${uiState.dailyLimit} used", style = MaterialTheme.typography.bodySmall)
+                            Text("${uiState.dailyRemaining} remaining", style = MaterialTheme.typography.bodySmall)
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Plan Usage", style = MaterialTheme.typography.labelSmall)
+                        LinearProgressIndicator(
+                            progress = { if (uiState.planLimit > 0) (uiState.planUsed.toFloat() / uiState.planLimit.toFloat()).coerceIn(0f, 1f) else 0f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            color = if (uiState.planRemaining <= 50) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+                        )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${uiState.planUsed} / ${uiState.planLimit} used", style = MaterialTheme.typography.bodySmall)
+                            Text("${uiState.planRemaining} remaining", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                },
+                leadingContent = { Icon(Icons.Rounded.Api, contentDescription = null) },
+                trailingContent = {
+                    if (uiState.isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    } else {
+                        IconButton(
+                            onClick = { onEvent(SettingsEvent.RefreshApiUsage) },
+                            enabled = uiState.justTcgApiKey.isNotEmpty()
+                        ) {
+                            Icon(
+                                Icons.Rounded.Refresh,
+                                contentDescription = "Refresh API usage",
+                                tint = if (uiState.justTcgApiKey.isNotEmpty())
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            )
+                        }
                     }
                 }
-            }
-        )
+            )
+        }
     }
 }
 

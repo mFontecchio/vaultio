@@ -102,6 +102,8 @@ class VaultioRepository(
 
     suspend fun getUserCardByIdSync(userCardId: Long): CardWithDetails? = userCardDao.getUserCardByIdSync(userCardId)
 
+    suspend fun getLastUserCardByCardId(cardId: String) = userCardDao.getLastUserCardByCardId(cardId)
+
     fun getPricesForCard(cardId: String): Flow<List<PriceEntity>> = priceDao.getPricesForCard(cardId)
 
     fun getVintagePricesForCard(cardId: String): Flow<List<VintagePriceEntity>> = priceDao.getVintagePricesForCard(cardId)

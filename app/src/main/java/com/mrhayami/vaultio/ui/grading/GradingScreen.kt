@@ -24,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,9 +36,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -58,6 +64,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -81,7 +88,9 @@ fun GradingScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
     var showMetadataModal by remember { mutableStateOf(false) }
+    var showConditionConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         sideEffects.collect { effect ->
@@ -95,6 +104,19 @@ fun GradingScreen(
                 }
             }
         }
+    }
+
+    LaunchedEffect(state.errorMessage) {
+        val message = state.errorMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+    }
+
+    fun mappedConditionForScore(score: Double): String = when {
+        score >= 8.5 -> PricingUtils.CONDITION_NM
+        score >= 7.0 -> PricingUtils.CONDITION_LP
+        score >= 5.0 -> PricingUtils.CONDITION_MP
+        score >= 3.0 -> PricingUtils.CONDITION_HP
+        else -> PricingUtils.CONDITION_DMG
     }
 
     Scaffold(
@@ -111,6 +133,7 @@ fun GradingScreen(
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.surface
     ) { padding ->
         Box(
@@ -155,8 +178,26 @@ fun GradingScreen(
                     Text(
                         "Our AI will evaluate centering, corners, and surface.",
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(16.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        textAlign = TextAlign.Center
                     )
+                    Text(
+                        "This is an on-device AI estimate — not a PSA, CGC, or BGS grade. Lighting and photo quality can affect results.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                        textAlign = TextAlign.Center
+                    )
+
+                    state.errorMessage?.let { error ->
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
 
                     // Model Status Info
                     ModelStatusIndicator(
@@ -181,7 +222,7 @@ fun GradingScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(horizontal = 16.dp),
                         enabled = !state.isAnalyzing && state.capturedImage != null && state.modelStatus is GeminiNanoClient.ModelStatus.Ready
                     ) {
                         if (state.isAnalyzing) {
@@ -196,6 +237,17 @@ fun GradingScreen(
                             Text("Analyze Condition")
                         }
                     }
+
+                    OutlinedButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text("Retake Photo")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             } else {
                 // The "Digital Slab" Results View
@@ -232,41 +284,105 @@ fun GradingScreen(
 
                     GradeDetailedBreakdown(state.gradeResult)
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "This is an on-device AI estimate — not a PSA, CGC, or BGS grade. Lighting and photo quality can affect results.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                        textAlign = TextAlign.Center
+                    )
+
+                    state.errorMessage?.let { error ->
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = {
                             if (userCardId == -1L && state.pendingCard != null) {
                                 showMetadataModal = true
+                            } else if (userCardId != -1L) {
+                                showConditionConfirm = true
                             } else {
                                 onEvent(GradingEvent.SaveGrade(userCardId))
                             }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 32.dp, vertical = 16.dp)
+                            .padding(horizontal = 32.dp)
                             .height(56.dp)
                     ) {
                         Text(if (userCardId == -1L) "Save to Collection" else "Save Grade")
                     }
+
+                    OutlinedButton(
+                        onClick = { onEvent(GradingEvent.Reset) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 32.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Re-analyze")
+                    }
+
+                    TextButton(onClick = onNavigateBack) {
+                        Text("Retake Photo")
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
 
+        if (showConditionConfirm && state.gradeResult != null && userCardId != -1L) {
+            val mappedCondition = mappedConditionForScore(state.gradeResult.overallScore)
+            AlertDialog(
+                onDismissRequest = { showConditionConfirm = false },
+                title = { Text("Update condition?") },
+                text = {
+                    Text(
+                        "Saving this grade will update the card's condition to $mappedCondition based on the AI score."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showConditionConfirm = false
+                            onEvent(GradingEvent.SaveGrade(userCardId))
+                        }
+                    ) {
+                        Text("Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConditionConfirm = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
         if (showMetadataModal && state.pendingCard != null && state.gradeResult != null) {
-            val score = state.gradeResult.overallScore
-            val mappedCondition = when {
-                score >= 8.5 -> PricingUtils.CONDITION_NM
-                score >= 7.0 -> PricingUtils.CONDITION_LP
-                score >= 5.0 -> PricingUtils.CONDITION_MP
-                score >= 3.0 -> PricingUtils.CONDITION_HP
-                else -> PricingUtils.CONDITION_DMG
-            }
+            val mappedCondition = mappedConditionForScore(state.gradeResult.overallScore)
 
             ModalBottomSheet(
                 onDismissRequest = { showMetadataModal = false },
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
             ) {
+                Text(
+                    text = "Suggested condition from AI score: $mappedCondition. You can change it below before saving.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    textAlign = TextAlign.Center
+                )
                 MetadataModal(
                     card = state.pendingCard,
                     folders = state.folders,
@@ -308,7 +424,7 @@ fun ModelStatusIndicator(
                         is GeminiNanoClient.ModelStatus.Error -> MaterialTheme.colorScheme.error
                     }
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = when (status) {
                         is GeminiNanoClient.ModelStatus.Ready -> "AI Model Ready"
@@ -323,7 +439,7 @@ fun ModelStatusIndicator(
 
             when (status) {
                 is GeminiNanoClient.ModelStatus.Downloading -> {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     LinearProgressIndicator(
                         progress = { status.progress },
                         modifier = Modifier.fillMaxWidth()
@@ -336,7 +452,7 @@ fun ModelStatusIndicator(
                 }
 
                 is GeminiNanoClient.ModelStatus.Unavailable -> {
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         "Tap to check for updates or download model (requires ~1GB).",
                         style = MaterialTheme.typography.bodySmall

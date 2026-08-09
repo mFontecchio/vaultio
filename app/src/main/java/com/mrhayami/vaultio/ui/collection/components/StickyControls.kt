@@ -64,10 +64,16 @@ fun StickyControls(
             verticalAlignment = Alignment.CenterVertically
         ) {
             item {
+                val activeFilterCount = filterSettings.activeFilterCount
                 FilterChip(
-                    selected = filterSettings != FilterSettings() || sortMode != SortMode.DATE_ADDED,
+                    selected = activeFilterCount > 0 || sortMode != SortMode.DATE_ADDED,
                     onClick = onSortClick,
-                    label = { Text("Sort & Filter") },
+                    label = {
+                        Text(
+                            if (activeFilterCount > 0) "Sort & Filter ($activeFilterCount)"
+                            else "Sort & Filter"
+                        )
+                    },
                     leadingIcon = {
                         Icon(
                             Icons.AutoMirrored.Rounded.Sort,

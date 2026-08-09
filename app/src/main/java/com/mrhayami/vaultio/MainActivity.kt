@@ -72,6 +72,7 @@ class MainActivity : ComponentActivity() {
                 val currentRoute = navBackStackEntry?.destination?.route
                 val showBottomBar = listOf(
                     Screen.Collection,
+                    Screen.Wishlist,
                     Screen.Stats,
                     Screen.Settings
                 ).any { it.route == currentRoute }
@@ -129,14 +130,23 @@ class MainActivity : ComponentActivity() {
                                                 id.toString()
                                             )
                                         )
-                                    },
-                                    onNavigateToWishlist = { navController.navigate(Screen.Wishlist.route) }
+                                    }
                                 ) 
                             }
                             composable(Screen.Wishlist.route) {
                                 WishlistScreen(
                                     repository = repository,
-                                    onNavigateBack = { navController.popBackStack() }
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToScanner = { navController.navigate(Screen.Scanner.route) },
+                                    onNavigateToCardDetail = { id ->
+                                        navController.navigate(
+                                            Screen.CardDetail.route.replace(
+                                                "{userCardId}",
+                                                id.toString()
+                                            )
+                                        )
+                                    },
+                                    hideBackButton = true,
                                 )
                             }
                             composable(Screen.Stats.route) {
@@ -156,6 +166,7 @@ class MainActivity : ComponentActivity() {
                                     state = state,
                                     onEvent = viewModel::onEvent,
                                     sideEffects = viewModel.sideEffects,
+                                    onNavigateToScanner = { navController.navigate(Screen.Scanner.route) },
                                     onNavigation = { effect ->
                                         when (effect) {
                                             com.mrhayami.vaultio.ui.stats.StatsEffect.Navigation.GoBack -> navController.popBackStack()

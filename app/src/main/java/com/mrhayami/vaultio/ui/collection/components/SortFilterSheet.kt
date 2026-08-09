@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.ui.collection.CollectionEvent
 import com.mrhayami.vaultio.ui.collection.FilterSettings
 import com.mrhayami.vaultio.ui.collection.SortDirection
@@ -153,12 +154,11 @@ fun SortFilterSheet(
         ) {
             val conditions = remember {
                 listOf(
-                    "Mint",
-                    "Near Mint",
-                    "Lightly Played",
-                    "Moderately Played",
-                    "Heavily Played",
-                    "Damaged"
+                    PricingUtils.CONDITION_NM,
+                    PricingUtils.CONDITION_LP,
+                    PricingUtils.CONDITION_MP,
+                    PricingUtils.CONDITION_HP,
+                    PricingUtils.CONDITION_DMG
                 )
             }
             conditions.forEach { cond ->

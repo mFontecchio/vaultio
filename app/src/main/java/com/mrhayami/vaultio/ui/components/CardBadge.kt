@@ -68,16 +68,18 @@ fun CardAttributeBadges(
     modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        val colors = MaterialTheme.colorScheme
+
         // Finish Badges
         when (finish) {
             PricingUtils.FINISH_HOLOFOIL -> {
-                CardBadge("F", Color(0xFF6200EE), Modifier.padding(end = 2.dp))
+                CardBadge("F", colors.primary, Modifier.padding(end = 2.dp))
             }
             PricingUtils.FINISH_REVERSE_HOLO -> {
-                CardBadge("F", Color(0xFF03DAC6), Modifier.padding(end = 2.dp), isRotated = true)
+                CardBadge("F", colors.tertiary, Modifier.padding(end = 2.dp), isRotated = true)
             }
             PricingUtils.FINISH_TEXTURED -> {
-                CardBadge("T", Color(0xFFFF0266), Modifier.padding(end = 2.dp))
+                CardBadge("T", colors.error, Modifier.padding(end = 2.dp))
             }
             PricingUtils.FINISH_GOLD -> {
                 CardBadge("G", Color(0xFFFFD700), Modifier.padding(end = 2.dp))
@@ -87,13 +89,13 @@ fun CardAttributeBadges(
         // Printing Badges
         when (printing) {
             PricingUtils.PRINTING_1ST_EDITION -> {
-                CardBadge("1st", Color(0xFFE91E63), Modifier.padding(end = 2.dp))
+                CardBadge("1st", colors.secondary, Modifier.padding(end = 2.dp))
             }
             PricingUtils.PRINTING_SHADOWLESS -> {
-                CardBadge("SHDW", Color(0xFF607D8B), Modifier.padding(end = 2.dp))
+                CardBadge("SHDW", colors.onSurfaceVariant, Modifier.padding(end = 2.dp))
             }
             PricingUtils.PRINTING_PROMO -> {
-                CardBadge("P", Color(0xFF4CAF50), Modifier.padding(end = 2.dp))
+                CardBadge("P", colors.tertiary, Modifier.padding(end = 2.dp))
             }
         }
     }

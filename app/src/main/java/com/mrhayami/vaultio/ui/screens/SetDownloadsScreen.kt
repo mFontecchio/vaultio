@@ -52,7 +52,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.data.local.SetEntity
+import com.mrhayami.vaultio.ui.components.ConfirmDestructiveDialog
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,6 +75,7 @@ fun SetDownloadsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showDeleteAllConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(viewModel.sideEffects) {
         viewModel.sideEffects.collect { effect ->
@@ -117,6 +121,15 @@ fun SetDownloadsScreen(
                         IconButton(onClick = { viewModel.onEvent(SetDownloadsEvent.RefreshSets) }) {
                             Icon(Icons.Rounded.Refresh, contentDescription = "Refresh Sets")
                         }
+                        if (state.downloadedSets.isNotEmpty()) {
+                            IconButton(onClick = { showDeleteAllConfirm = true }) {
+                                Icon(
+                                    Icons.Rounded.DeleteSweep,
+                                    contentDescription = "Delete all downloaded sets",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
                     }
                 },
                 windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Top)
@@ -128,35 +141,16 @@ fun SetDownloadsScreen(
                 .padding(padding)
                 .consumeWindowInsets(padding)
         ) {
-            // Bulk Actions
-            Row(
+            Button(
+                onClick = { viewModel.onEvent(SetDownloadsEvent.DownloadAll) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                enabled = state.remainingSets.isNotEmpty() && !state.isLoading
             ) {
-                Button(
-                    onClick = { viewModel.onEvent(SetDownloadsEvent.DownloadAll) },
-                    modifier = Modifier.weight(1f),
-                    enabled = state.remainingSets.isNotEmpty() && !state.isLoading,
-                    contentPadding = PaddingValues(horizontal = 8.dp)
-                ) {
-                    Icon(Icons.Rounded.Download, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Download All", fontSize = 12.sp)
-                }
-                
-                OutlinedButton(
-                    onClick = { viewModel.onEvent(SetDownloadsEvent.DeleteAll) },
-                    modifier = Modifier.weight(1f),
-                    enabled = state.downloadedSets.isNotEmpty() && !state.isLoading,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    contentPadding = PaddingValues(horizontal = 8.dp)
-                ) {
-                    Icon(Icons.Rounded.DeleteSweep, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Delete All", fontSize = 12.sp)
-                }
+                Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Download All")
             }
 
             // Storage Visualization
@@ -200,6 +194,16 @@ fun SetDownloadsScreen(
             }
         }
     }
+
+    if (showDeleteAllConfirm) {
+        ConfirmDestructiveDialog(
+            title = "Delete all downloaded sets?",
+            message = "This removes offline set data from this device. You can download sets again later.",
+            confirmLabel = "Delete all",
+            onConfirm = { viewModel.onEvent(SetDownloadsEvent.DeleteAll) },
+            onDismiss = { showDeleteAllConfirm = false }
+        )
+    }
 }
 
 @Composable
@@ -235,7 +239,7 @@ fun SetItem(
             ) {
                 AsyncImage(
                     model = imageUrl,
-                    contentDescription = null,
+                    contentDescription = "${set.name} logo",
                     modifier = Modifier.padding(4.dp),
                     error = rememberVectorPainter(Icons.Rounded.ImageNotSupported)
                 )
@@ -247,7 +251,7 @@ fun SetItem(
                     Icon(
                         Icons.Rounded.CheckCircle, 
                         contentDescription = "Downloaded", 
-                        tint = Color(0xFF4CAF50),
+                        tint = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.size(20.dp)
                     )
                     IconButton(onClick = onDelete) {

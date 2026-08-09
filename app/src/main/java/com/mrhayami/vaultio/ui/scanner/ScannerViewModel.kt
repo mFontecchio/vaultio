@@ -141,6 +141,7 @@ sealed interface ScannerEvent {
     data object RecognizerUnavailable : ScannerEvent
     data object DismissEmptyCatalogHint : ScannerEvent
     data object OpenSetDownloads : ScannerEvent
+    data object ClearErrorMessage : ScannerEvent
 }
 
 class ScannerViewModel(
@@ -262,18 +263,23 @@ class ScannerViewModel(
             )
 
             is ScannerEvent.SaveAndGrade -> {
-                viewModelScope.launch(defaultDispatcher) {
-                    _effect.send(
-                        ScannerEffect.NavigateToGrading(
-                            -1L,
-                            activeCaptureForGrading,
-                            event.card
+                val bmp = activeCaptureForGrading
+                if (bmp == null) {
+                    _uiState.update {
+                        it.copy(errorMessage = "Capture a photo first to grade this card.")
+                    }
+                } else {
+                    viewModelScope.launch(defaultDispatcher) {
+                        _effect.send(
+                            ScannerEffect.NavigateToGrading(-1L, bmp, event.card)
                         )
-                    )
+                        activeCaptureForGrading = null
+                    }
                 }
             }
             ScannerEvent.ConsumeSaveSuccess -> consumeSaveSuccess()
             ScannerEvent.ClearDetectedNumber -> clearDetectedNumber()
+            ScannerEvent.ClearErrorMessage -> _uiState.update { it.copy(errorMessage = null) }
             is ScannerEvent.PermissionResult -> _uiState.update { it.copy(hasCameraPermission = event.granted) }
             ScannerEvent.ToggleTorch -> _uiState.update { it.copy(isTorchEnabled = !it.isTorchEnabled) }
             is ScannerEvent.SelectMode -> {
@@ -742,16 +748,20 @@ class ScannerViewModel(
                 } else {
                     finalCandidates.firstOrNull()
                 }
+                val status = when {
+                    bestMatch == null -> PageScanCellStatus.NOT_FOUND
+                    finalCandidates.size > 1 -> PageScanCellStatus.AMBIGUOUS
+                    else -> PageScanCellStatus.MATCHED
+                }
 
                 _uiState.update { state ->
                     state.copy(pageScanCells = state.pageScanCells.map {
                         if (it.id == cell.id) {
                             it.copy(
                                 matchedCard = bestMatch,
-                                status = if (bestMatch != null) {
-                                    if (finalCandidates.size > 1 && name == null) PageScanCellStatus.AMBIGUOUS
-                                    else PageScanCellStatus.MATCHED
-                                } else PageScanCellStatus.NOT_FOUND
+                                candidates = finalCandidates,
+                                status = status,
+                                isConfirmed = status == PageScanCellStatus.MATCHED
                             )
                         } else it
                     })

@@ -1,7 +1,10 @@
 package com.mrhayami.vaultio.ui.scanner
 
 import android.Manifest
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
+import android.provider.Settings
 import android.util.Size
 import android.widget.Toast
 import androidx.camera.core.CameraControl
@@ -100,8 +103,11 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -149,6 +155,7 @@ import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.local.PriceEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
@@ -181,6 +188,7 @@ fun ScannerScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(targetUserCardId) {
         viewModel.onEvent(ScannerEvent.SetTargetUserCard(targetUserCardId))
@@ -196,16 +204,14 @@ fun ScannerScreen(
         viewModel.effect.collect { effect ->
             when (effect) {
                 is ScannerEffect.NavigateToGrading -> {
-                    effect.capturedImage?.let { bmp ->
+                    val bmp = effect.capturedImage
+                    if (bmp != null) {
                         onNavigateToGrading(effect.userCardId, bmp, effect.pendingCard)
-                    } ?: run {
-                        // If no image was captured (e.g. they clicked "Grade" HUD button instead of camera button)
-                        // Make a fallback or block it? Let's just create a dummy so it doesn't crash since parameter changed
-                        onNavigateToGrading(
-                            effect.userCardId,
-                            Bitmap.createBitmap(800, 1200, Bitmap.Config.ARGB_8888),
-                            effect.pendingCard
+                    } else {
+                        viewModel.onEvent(
+                            ScannerEvent.ClearErrorMessage
                         )
+                        snackbarHostState.showSnackbar("Capture a photo before grading.")
                     }
                 }
                 ScannerEffect.NavigateToSetDownloads -> onNavigateToDownloads()
@@ -224,18 +230,42 @@ fun ScannerScreen(
         }
     }
 
+    LaunchedEffect(uiState.errorMessage) {
+        val message = uiState.errorMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.onEvent(ScannerEvent.ClearErrorMessage)
+    }
+
     var showBulkSettings by remember { mutableStateOf(false) }
     var showSkippedReview by remember { mutableStateOf(false) }
-    
+
     val onEventStable = remember(viewModel) { { event: ScannerEvent -> viewModel.onEvent(event) } }
-    
-    ScannerContent(
-        uiState = uiState,
-        onEvent = onEventStable,
-        onNavigateBack = onNavigateBack,
-        onShowBulkSettings = { showBulkSettings = true },
-        onShowSkippedReview = { showSkippedReview = true }
-    )
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = Color.Transparent
+    ) { padding ->
+        ScannerContent(
+            uiState = uiState,
+            onEvent = onEventStable,
+            onNavigateBack = onNavigateBack,
+            onShowBulkSettings = { showBulkSettings = true },
+            onShowSkippedReview = { showSkippedReview = true },
+            onRequestCameraPermission = {
+                if (!cameraPermissionState.status.isGranted &&
+                    !cameraPermissionState.status.shouldShowRationale
+                ) {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    }
+                    context.startActivity(intent)
+                } else {
+                    cameraPermissionState.launchPermissionRequest()
+                }
+            },
+            modifier = Modifier.padding(padding)
+        )
+    }
 
     if (showBulkSettings) {
         ModalBottomSheet(
@@ -273,6 +303,7 @@ fun ScannerContent(
     onNavigateBack: () -> Unit,
     onShowBulkSettings: () -> Unit,
     onShowSkippedReview: () -> Unit,
+    onRequestCameraPermission: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val onEventStable = remember(onEvent) { onEvent }
@@ -581,12 +612,14 @@ fun ScannerContent(
                         )
                     }
 
-                    IconButton(
-                        onClick = onShowBulkSettings,
-                        colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(Icons.Rounded.Settings, contentDescription = "Bulk Settings", tint = Color.White)
+                    if (uiState.isBulkMode) {
+                        IconButton(
+                            onClick = onShowBulkSettings,
+                            colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Rounded.Settings, contentDescription = "Bulk Settings", tint = Color.White)
+                        }
                     }
                 }
             }
@@ -728,69 +761,19 @@ fun ScannerContent(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    if (uiState.isGradingMode) {
-                                        Button(
-                                            onClick = {
-                                                onEvent(
-                                                    ScannerEvent.SaveAndGrade(
-                                                        card = card,
-                                                        quantity = 1,
-                                                        condition = PricingUtils.CONDITION_NM,
-                                                        printing = PricingUtils.PRINTING_UNLIMITED,
-                                                        finish = PricingUtils.FINISH_NORMAL,
-                                                        folderIds = emptyList()
-                                                    )
-                                                )
-                                            },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(40.dp),
-                                            shape = RoundedCornerShape(12.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = Color(0xFF00E676),
-                                                contentColor = Color.Black
-                                            )
-                                        ) {
-                                            Icon(
-                                                Icons.Rounded.AutoFixHigh,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                "Grade",
-                                                style = MaterialTheme.typography.labelLarge
-                                            )
-                                        }
-
-                                        OutlinedButton(
-                                            onClick = { onEvent(ScannerEvent.ResumeScanning) },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(40.dp),
-                                            shape = RoundedCornerShape(12.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp)
-                                        ) {
-                                            Text(
-                                                "Cancel",
-                                                style = MaterialTheme.typography.labelLarge
-                                            )
-                                        }
-                                    } else {
-                                        Button(
-                                            onClick = { onEvent(ScannerEvent.CardSelected(card)) },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(40.dp),
-                                            shape = RoundedCornerShape(12.dp),
-                                            contentPadding = PaddingValues(horizontal = 16.dp)
-                                        ) {
-                                            Text(
-                                                "Add Details",
-                                                style = MaterialTheme.typography.labelLarge
-                                            )
-                                        }
+                                    Button(
+                                        onClick = { onEvent(ScannerEvent.CardSelected(card)) },
+                                        enabled = !uiState.isSaving,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(40.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        contentPadding = PaddingValues(horizontal = 16.dp)
+                                    ) {
+                                        Text(
+                                            "Add Details",
+                                            style = MaterialTheme.typography.labelLarge
+                                        )
                                     }
                                 }
                             }
@@ -833,7 +816,7 @@ fun ScannerContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Found ${uiState.autoSelectedCard?.name}. Press capture to grade.",
+                            text = "Found ${uiState.autoSelectedCard?.name}. Capturing for grading…",
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold
@@ -915,7 +898,7 @@ fun ScannerContent(
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Camera permission is required to scan cards.")
                     Spacer(modifier = Modifier.height(24.dp))
-                    Button(onClick = { onEvent(ScannerEvent.PermissionResult(true)) }) { // Mock granting for preview
+                    Button(onClick = onRequestCameraPermission) {
                         Text("Grant Permission")
                     }
                 }
@@ -1802,11 +1785,15 @@ fun PageScanOverlay(isProcessing: Boolean) {
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PageScanReviewContent(
     uiState: ScannerUiState,
     onEvent: (ScannerEvent) -> Unit
 ) {
+    var pickerCellId by remember { mutableStateOf<Int?>(null) }
+    val pickerCell = uiState.pageScanCells.firstOrNull { it.id == pickerCellId }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1831,11 +1818,18 @@ fun PageScanReviewContent(
             }
         }
 
+        Text(
+            "Tap a cell to confirm or pick another match. Ambiguous cells are excluded until confirmed.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        )
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = 16.dp), // Align with 95% width overlay
+                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1843,7 +1837,16 @@ fun PageScanReviewContent(
                 items = uiState.pageScanCells,
                 key = { it.id }
             ) { cell ->
-                PageCellReviewItem(cell = cell, onEvent = onEvent)
+                PageCellReviewItem(
+                    cell = cell,
+                    onToggleConfirm = {
+                        if (cell.isConfirmed) onEvent(ScannerEvent.RejectPageCell(cell.id))
+                        else if (cell.matchedCard != null) {
+                            onEvent(ScannerEvent.ConfirmPageCell(cell.id, cell.matchedCard))
+                        }
+                    },
+                    onOpenPicker = { pickerCellId = cell.id }
+                )
             }
         }
 
@@ -1869,10 +1872,47 @@ fun PageScanReviewContent(
                     onClick = { onEvent(ScannerEvent.SaveAllPageResults) },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
-                    enabled = uiState.pageScanCells.any { it.isConfirmed && it.matchedCard != null }
+                    enabled = uiState.pageScanCells.any { it.isConfirmed && it.matchedCard != null } &&
+                        !uiState.isSaving
                 ) {
                     val count = uiState.pageScanCells.count { it.isConfirmed && it.matchedCard != null }
                     Text("Save $count Cards")
+                }
+            }
+        }
+    }
+
+    if (pickerCell != null) {
+        ModalBottomSheet(onDismissRequest = { pickerCellId = null }) {
+            Text(
+                "Select Match",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(24.dp)
+            )
+            val options = pickerCell.candidates.ifEmpty {
+                listOfNotNull(pickerCell.matchedCard)
+            }
+            if (options.isEmpty()) {
+                Text(
+                    "No candidates for this cell.",
+                    modifier = Modifier.padding(24.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    items(options, key = { it.id }) { card ->
+                        CandidateItem(
+                            card = card,
+                            onClick = {
+                                onEvent(ScannerEvent.ConfirmPageCell(pickerCell.id, card))
+                                pickerCellId = null
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -1883,23 +1923,37 @@ fun PageScanReviewContent(
 @Composable
 fun PageCellReviewItem(
     cell: PageScanCell,
-    onEvent: (ScannerEvent) -> Unit
+    onToggleConfirm: () -> Unit,
+    onOpenPicker: () -> Unit
 ) {
     val isConfirmed = cell.isConfirmed && cell.matchedCard != null
-    
+    val statusLabel = when (cell.status) {
+        PageScanCellStatus.MATCHED -> "Matched"
+        PageScanCellStatus.AMBIGUOUS -> "Ambiguous"
+        PageScanCellStatus.NOT_FOUND -> "No match"
+        PageScanCellStatus.ERROR -> "Error"
+        PageScanCellStatus.SCANNING -> "Scanning…"
+        PageScanCellStatus.IDLE -> "Pending"
+    }
+
     Card(
         modifier = Modifier
-            .aspectRatio(0.715f) // Standard card aspect ratio
+            .aspectRatio(0.715f)
             .clickable {
-                if (cell.isConfirmed) onEvent(ScannerEvent.RejectPageCell(cell.id))
-                else onEvent(ScannerEvent.ConfirmPageCell(cell.id, cell.matchedCard))
+                when {
+                    cell.candidates.size > 1 || cell.status == PageScanCellStatus.AMBIGUOUS -> onOpenPicker()
+                    cell.matchedCard != null -> onToggleConfirm()
+                    else -> onOpenPicker()
+                }
             },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isConfirmed) MaterialTheme.colorScheme.primaryContainer 
-                             else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (isConfirmed) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant
         ),
-        border = if (isConfirmed) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+        border = if (isConfirmed) {
+            androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        } else null
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (cell.matchedCard != null) {
@@ -1923,7 +1977,6 @@ fun PageCellReviewItem(
                 )
             }
 
-            // Overlay Info
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -1943,13 +1996,13 @@ fun PageCellReviewItem(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = cell.status.name,
+                    text = statusLabel,
                     style = MaterialTheme.typography.labelSmall,
-                    color = when(cell.status) {
-                        PageScanCellStatus.MATCHED -> Color.Green
-                        PageScanCellStatus.AMBIGUOUS -> Color.Yellow
-                        else -> Color.Red
-                    }.copy(alpha = 0.8f)
+                    color = when (cell.status) {
+                        PageScanCellStatus.MATCHED -> MaterialTheme.colorScheme.tertiary
+                        PageScanCellStatus.AMBIGUOUS -> MaterialTheme.colorScheme.secondary
+                        else -> MaterialTheme.colorScheme.error
+                    }.copy(alpha = 0.9f)
                 )
             }
 
@@ -1966,7 +2019,7 @@ fun PageCellReviewItem(
                 Icon(
                     Icons.Rounded.CheckCircle,
                     contentDescription = null,
-                    tint = Color.Green,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(4.dp)
@@ -2549,24 +2602,57 @@ fun ScannerIdleOverlay(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Button(
-                    onClick = { onModeSelected(ScannerMode.SEARCH) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Search")
+                    Button(
+                        onClick = { onModeSelected(ScannerMode.SEARCH) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Search")
+                    }
+                    Button(
+                        onClick = { onModeSelected(ScannerMode.PRICE_CHECK) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary
+                        )
+                    ) {
+                        Text("Price Check")
+                    }
                 }
-                Button(
-                    onClick = { onModeSelected(ScannerMode.PRICE_CHECK) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Price Check")
+                    OutlinedButton(
+                        onClick = { onModeSelected(ScannerMode.BULK) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                    ) {
+                        Text("Bulk")
+                    }
+                    OutlinedButton(
+                        onClick = { onModeSelected(ScannerMode.PAGE) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                    ) {
+                        Text("Page")
+                    }
+                    OutlinedButton(
+                        onClick = { onModeSelected(ScannerMode.GRADING) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                    ) {
+                        Text("Grade")
+                    }
                 }
             }
         }

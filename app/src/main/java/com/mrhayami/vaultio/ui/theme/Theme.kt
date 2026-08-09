@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -52,18 +53,19 @@ private val LightColorScheme = lightColorScheme(
 private fun energyScheme(seed: Color, isDark: Boolean): ColorScheme {
     val surfaceColor = if (isDark) Color(0xFF121212) else Color(0xFFFDFDFD)
     val onSurfaceColor = if (isDark) Color.White else Color.Black
-    
+    val onSeed = if (seed.luminance() > 0.55f) Color.Black else Color.White
+
     val primaryContainer = seed.copy(alpha = if (isDark) 0.3f else 0.15f).compositeOver(surfaceColor)
     val secondaryContainer = seed.copy(alpha = if (isDark) 0.2f else 0.1f).compositeOver(surfaceColor)
 
     return if (isDark) {
         darkColorScheme(
             primary = seed,
-            onPrimary = Color.Black,
+            onPrimary = onSeed,
             primaryContainer = primaryContainer,
             onPrimaryContainer = seed,
             secondary = seed,
-            onSecondary = Color.Black,
+            onSecondary = onSeed,
             secondaryContainer = secondaryContainer,
             onSecondaryContainer = seed,
             surface = surfaceColor,
@@ -76,7 +78,7 @@ private fun energyScheme(seed: Color, isDark: Boolean): ColorScheme {
     } else {
         lightColorScheme(
             primary = seed,
-            onPrimary = Color.White,
+            onPrimary = onSeed,
             primaryContainer = primaryContainer,
             onPrimaryContainer = Color(
                 red = seed.red * 0.4f,
@@ -84,7 +86,7 @@ private fun energyScheme(seed: Color, isDark: Boolean): ColorScheme {
                 blue = seed.blue * 0.4f
             ).compositeOver(Color.Black),
             secondary = seed,
-            onSecondary = Color.White,
+            onSecondary = onSeed,
             secondaryContainer = secondaryContainer,
             onSecondaryContainer = Color(
                 red = seed.red * 0.5f,

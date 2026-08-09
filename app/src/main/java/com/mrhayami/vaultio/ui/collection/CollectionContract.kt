@@ -42,7 +42,10 @@ data class FilterSettings(
     val types: ImmutableSet<String> = persistentSetOf(),
     val conditions: ImmutableSet<String> = persistentSetOf(),
     val finishes: ImmutableSet<String> = persistentSetOf()
-)
+) {
+    val activeFilterCount: Int
+        get() = rarities.size + categories.size + types.size + conditions.size + finishes.size
+}
 
 @Immutable
 data class PokedexEntry(
@@ -141,6 +144,14 @@ sealed interface CollectionEvent {
         val printing: String,
         val finish: String,
         val folderIds: List<Long>
+    ) : CollectionEvent
+
+    data class OnAddToWishlist(
+        val card: TcgDexCard,
+        val quantity: Int,
+        val condition: String,
+        val printing: String,
+        val finish: String,
     ) : CollectionEvent
     
     data object OnConsumeSaveSuccess : CollectionEvent

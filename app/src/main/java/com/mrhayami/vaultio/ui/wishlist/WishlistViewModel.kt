@@ -66,6 +66,18 @@ class WishlistViewModel(
 
             is WishlistEvent.RemoveFromWishlist -> removeFromWishlist(event.id)
             is WishlistEvent.MoveToCollection -> moveToCollection(event.id)
+            is WishlistEvent.OpenOwnedCard -> openOwnedCard(event.cardId)
+        }
+    }
+
+    private fun openOwnedCard(cardId: String) {
+        viewModelScope.launch {
+            val owned = repository.getLastUserCardByCardId(cardId)
+            if (owned != null) {
+                emitEffect(WishlistEffect.NavigateToCardDetail(owned.id))
+            } else {
+                emitEffect(WishlistEffect.ShowToast("Add to collection first to view details"))
+            }
         }
     }
 
