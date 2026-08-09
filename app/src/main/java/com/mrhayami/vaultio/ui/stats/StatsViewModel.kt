@@ -9,6 +9,8 @@ import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.common.MviViewModel
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
@@ -99,11 +101,11 @@ class StatsViewModel(
             isLoading = false,
             totalValue = totalValue,
             cardCount = totalCount,
-            snapshots = snapshots,
-            mostValuableCards = mostValuable,
-            distributionByRarity = rarityDist,
-            distributionByType = typeDist,
-            setCompletion = setCompletion
+            snapshots = snapshots.toImmutableList(),
+            mostValuableCards = mostValuable.toImmutableList(),
+            distributionByRarity = rarityDist.toImmutableMap(),
+            distributionByType = typeDist.toImmutableMap(),
+            setCompletion = setCompletion.toImmutableList()
         )
     }
 

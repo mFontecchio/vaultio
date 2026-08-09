@@ -1,18 +1,23 @@
 package com.mrhayami.vaultio.ui.wishlist
 
+import androidx.compose.runtime.Immutable
 import com.mrhayami.vaultio.data.local.WishlistCardWithDetails
 import com.mrhayami.vaultio.data.remote.TcgDexCard
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 
+@Immutable
 data class WishlistItemUiModel(
     val details: WishlistCardWithDetails,
     val price: Double
 )
 
+@Immutable
 data class WishlistUiState(
     val isLoading: Boolean = true,
-    val wishlistItems: List<WishlistItemUiModel> = emptyList(),
+    val wishlistItems: ImmutableList<WishlistItemUiModel> = persistentListOf(),
     val isSearching: Boolean = false,
-    val searchResults: List<TcgDexCard> = emptyList(),
+    val searchResults: ImmutableList<TcgDexCard> = persistentListOf(),
     val totalWishlistValue: Double = 0.0
 )
 

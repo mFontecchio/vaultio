@@ -23,12 +23,15 @@ import androidx.compose.material.icons.rounded.CatchingPokemon
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -368,12 +371,17 @@ fun Modifier.energyEffect(
 ): Modifier = composed {
     if (!show || type == null) return@composed this
 
-    val infiniteTransition = rememberInfiniteTransition(label = "energy")
-    val progress by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(10000, easing = LinearEasing), RepeatMode.Restart),
-        label = "energy_progress"
-    )
+    // Cap redraws to ~30fps; ambient particles don't need display-refresh precision.
+    var progress by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        val periodMs = 10_000L
+        val start = SystemClock.elapsedRealtime()
+        while (isActive) {
+            val elapsed = SystemClock.elapsedRealtime() - start
+            progress = (elapsed % periodMs) / periodMs.toFloat()
+            delay(33L)
+        }
+    }
 
     val normalizedType = type.lowercase()
     val reusablePath = remember { Path() }

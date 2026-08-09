@@ -9,6 +9,8 @@ import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.PriceEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,14 +73,14 @@ class CardDetailViewModel(
                         val cardFolderIds = crossRefs
                             .filter { it.userCardId == userCardId }
                             .map { it.folderId }
-                            .toSet()
+                            .toImmutableSet()
 
                         CardDetailUiState(
                             cardWithDetails = cardWithDetails,
-                            folders = folders,
+                            folders = folders.toImmutableList(),
                             cardFolderIds = cardFolderIds,
-                            prices = prices,
-                            vintagePrices = vintagePrices,
+                            prices = prices.toImmutableList(),
+                            vintagePrices = vintagePrices.toImmutableList(),
                             showEnergyAnimations = showEnergyAnims,
                             showFinishAnimations = showFinishAnims,
                             preferSetLogo = preferLogo,

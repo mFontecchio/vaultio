@@ -157,6 +157,8 @@ import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.DropdownSelector
 import com.mrhayami.vaultio.ui.components.MetadataModal
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.Locale
@@ -1124,11 +1126,18 @@ fun BulkSettingsSheet(
                                 selected = isSelected,
                                 onClick = {
                                     val newIds = if (isSelected) {
-                                        uiState.bulkDefaults.folderIds.filter { it != folder.id }
+                                        uiState.bulkDefaults.folderIds
+                                            .filter { it != folder.id }
+                                            .toImmutableList()
                                     } else {
-                                        uiState.bulkDefaults.folderIds + folder.id
+                                        (uiState.bulkDefaults.folderIds + folder.id)
+                                            .toImmutableList()
                                     }
-                                    onEvent(ScannerEvent.SetBulkDefaults(uiState.bulkDefaults.copy(folderIds = newIds)))
+                                    onEvent(
+                                        ScannerEvent.SetBulkDefaults(
+                                            uiState.bulkDefaults.copy(folderIds = newIds)
+                                        )
+                                    )
                                 },
                                 label = { Text(folder.name) },
                                 shape = CircleShape
@@ -2311,7 +2320,7 @@ fun BulkHUDPreview() {
             BulkModeHUD(
                 uiState = ScannerUiState(
                     activeMode = ScannerMode.BULK,
-                    bulkSessionLog = listOf(
+                    bulkSessionLog = persistentListOf(
                         BulkScanEntry(
                             card = TcgDexCard("1", "1", "Pikachu", null, null, null),
                             status = BulkScanStatus.SAVED,
@@ -2339,7 +2348,7 @@ fun SkippedReviewPreview() {
         Surface {
             SkippedReviewSheet(
                 uiState = ScannerUiState(
-                    skippedCards = listOf(
+                    skippedCards = persistentListOf(
                         TcgDexCard("1", "1", "Pikachu", null, "Rare", "Pokemon"),
                         TcgDexCard("2", "2", "Bulbasaur", null, "Common", "Pokemon")
                     )
@@ -2415,7 +2424,7 @@ fun ScannerContentBulkModePreview() {
             uiState = ScannerUiState(
                 hasCameraPermission = true,
                 activeMode = ScannerMode.BULK,
-                bulkSessionLog = listOf(
+                bulkSessionLog = persistentListOf(
                     BulkScanEntry(
                         card = TcgDexCard("1", "1", "Pikachu", null, null, null),
                         status = BulkScanStatus.SAVED,
@@ -2803,7 +2812,7 @@ fun PriceCheckHUDPreview() {
                         rarity = "Common",
                         category = "Pokemon"
                     ),
-                    prices = listOf(
+                    prices = persistentListOf(
                         PriceEntity(
                             cardId = "swsh1-1",
                             finish = "Holo",

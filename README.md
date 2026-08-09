@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/mFontecchio/vaultio/actions/workflows/ci.yml"><img src="https://github.com/mFontecchio/vaultio/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" /></a>
-  <img src="https://img.shields.io/badge/version-1.2.7-informational" alt="Version 1.2.7" />
+  <img src="https://img.shields.io/badge/version-1.2.8-informational" alt="Version 1.2.8" />
   <img src="https://img.shields.io/badge/API-26%2B-green.svg" alt="Min API 26" />
 </p>
 
@@ -31,7 +31,7 @@ Vaultio keeps your Pokémon TCG collection on your device. Download set catalogs
 with the camera, track prices and value over time, and get privacy-first grading estimates — without
 shipping your collection to the cloud.
 
-**Version:** 1.2.7 · **Min SDK:** 26 · **Target / compile SDK:** 36
+**Version:** 1.2.8 · **Min SDK:** 26 · **Target / compile SDK:** 36
 
 ## Features
 
@@ -66,7 +66,7 @@ flow; Scanner and Grading are stills. Source `.webm` clips are also resized to *
 
 | Build | Where | Asset |
 |---|---|---|
-| **Release** | [GitHub Releases](https://github.com/mFontecchio/vaultio/releases) for tags `v*` (e.g. `v1.2.7`) | `vaultio-release.apk` |
+| **Release** | [GitHub Releases](https://github.com/mFontecchio/vaultio/releases) for tags `v*` (e.g. `v1.2.8`) | `vaultio-release.apk` |
 | **Nightly** | Rolling [Nightly](https://github.com/mFontecchio/vaultio/releases/tag/nightly) prerelease | `vaultio-nightly.apk` |
 | **Debug** | [Actions → CI](https://github.com/mFontecchio/vaultio/actions/workflows/ci.yml) artifacts (`vaultio-debug`) | `vaultio-debug.apk` |
 

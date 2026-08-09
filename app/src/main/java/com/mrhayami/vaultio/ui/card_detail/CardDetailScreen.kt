@@ -98,6 +98,8 @@ import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.energyEffect
 import com.mrhayami.vaultio.ui.components.holoEffect
 import com.mrhayami.vaultio.ui.components.shimmerEffect
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import com.mrhayami.vaultio.ui.theme.EnergyDarkness
 import com.mrhayami.vaultio.ui.theme.EnergyDragon
 import com.mrhayami.vaultio.ui.theme.EnergyFairy
@@ -852,9 +854,9 @@ private fun CardDetailPreview() {
                     card = CardEntity(id = mockId, localId = "1", name = "Charizard", image = "url", setId = "swsh1", rarity = "Rare Holo", category = "Pokemon", types = "Fire", dexId = "6"),
                     set = SetEntity(id = "swsh1", name = "Sword & Shield", series = "Sword & Shield", logo = "url", symbol = "url", totalCards = 202, officialCards = 202, releaseDate = "2020-02-07")
                 ),
-                folders = listOf(FolderEntity(id = 1L, name = "Favorites", icon = "star")),
-                cardFolderIds = setOf(1L),
-                prices = listOf(PriceEntity(cardId = mockId, finish = "Holo", condition = "Near Mint", marketPrice = 45.99, lowPrice = 40.0, midPrice = 45.0, highPrice = 50.0, source = "TCGPlayer", timestamp = System.currentTimeMillis()))
+                folders = persistentListOf(FolderEntity(id = 1L, name = "Favorites", icon = "star")),
+                cardFolderIds = persistentSetOf(1L),
+                prices = persistentListOf(PriceEntity(cardId = mockId, finish = "Holo", condition = "Near Mint", marketPrice = 45.99, lowPrice = 40.0, midPrice = 45.0, highPrice = 50.0, source = "TCGPlayer", timestamp = System.currentTimeMillis()))
             ),
             onNavigateBack = {},
             onEvent = {}

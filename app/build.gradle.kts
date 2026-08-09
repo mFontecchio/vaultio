@@ -38,8 +38,8 @@ android {
         applicationId = "com.mrhayami.vaultio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2.7"
+        versionCode = 4
+        versionName = "1.2.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

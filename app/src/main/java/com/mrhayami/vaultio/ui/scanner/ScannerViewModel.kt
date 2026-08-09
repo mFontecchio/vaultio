@@ -12,6 +12,9 @@ import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,8 +41,8 @@ data class ScannerUiState(
     val detectedNumber: String? = null,
     val detectedTotal: String? = null,
     val detectedName: String? = null,
-    val candidates: List<TcgDexCard> = emptyList(),
-    val folders: List<FolderEntity> = emptyList(),
+    val candidates: ImmutableList<TcgDexCard> = persistentListOf(),
+    val folders: ImmutableList<FolderEntity> = persistentListOf(),
     val isSearching: Boolean = false,
     val isPaused: Boolean = false,
     val autoSelectedCard: TcgDexCard? = null,
@@ -52,8 +55,8 @@ data class ScannerUiState(
     val pageScanMode: PageScanMode = PageScanMode.IDLE,
     val pageScanCells: List<PageScanCell> = emptyList(),
     val bulkDefaults: BulkScanDefaults = BulkScanDefaults(),
-    val bulkSessionLog: List<BulkScanEntry> = emptyList(),
-    val skippedCards: List<TcgDexCard> = emptyList(),
+    val bulkSessionLog: ImmutableList<BulkScanEntry> = persistentListOf(),
+    val skippedCards: ImmutableList<TcgDexCard> = persistentListOf(),
     val priceCheckInfo: PriceCheckInfo? = null,
     val isSaving: Boolean = false,
     val targetUserCardId: Long? = null,
@@ -162,12 +165,12 @@ class ScannerViewModel(
         val folderIds = args[5] as List<Long>
 
         state.copy(
-            folders = folders,
+            folders = folders.toImmutableList(),
             bulkDefaults = state.bulkDefaults.copy(
                 condition = condition,
                 printing = printing,
                 finish = finish,
-                folderIds = folderIds
+                folderIds = folderIds.toImmutableList()
             )
         )
     }.flowOn(defaultDispatcher)
@@ -283,7 +286,7 @@ class ScannerViewModel(
                     detectedNumber = null,
                     detectedTotal = null,
                     detectedName = null,
-                    candidates = emptyList(),
+                    candidates = persistentListOf(),
                     isSearching = false,
                     isPaused = false,
                     autoSelectedCard = null,
@@ -309,7 +312,9 @@ class ScannerViewModel(
                 _uiState.update { it.copy(bulkDefaults = event.defaults) }
             }
             ScannerEvent.UndoLastBulkScan -> undoLastBulkScan()
-            ScannerEvent.ClearBulkSession -> _uiState.update { it.copy(bulkSessionLog = emptyList(), skippedCards = emptyList()) }
+            ScannerEvent.ClearBulkSession -> _uiState.update {
+                it.copy(bulkSessionLog = persistentListOf(), skippedCards = persistentListOf())
+            }
             is ScannerEvent.ConfirmSkippedCard -> {
                 saveScannedCard(
                     event.card,
@@ -320,7 +325,12 @@ class ScannerViewModel(
                     event.folderIds,
                     navigateToGrading = false
                 )
-                _uiState.update { it.copy(skippedCards = it.skippedCards.filter { c -> c.id != event.card.id }) }
+                _uiState.update {
+                    it.copy(
+                        skippedCards = it.skippedCards.filter { c -> c.id != event.card.id }
+                            .toImmutableList()
+                    )
+                }
             }
             is ScannerEvent.AdjustExposure -> _uiState.update { it.copy(exposureIndex = event.index) }
             is ScannerEvent.SetExposureState -> _uiState.update {
@@ -608,11 +618,11 @@ class ScannerViewModel(
                     if (_uiState.value.isBulkMode && finalCandidates.isNotEmpty()) {
                         _uiState.update { state ->
                             state.copy(
-                                bulkSessionLog = state.bulkSessionLog + BulkScanEntry(
+                                bulkSessionLog = (state.bulkSessionLog + BulkScanEntry(
                                     card = finalCandidates.first(),
                                     status = BulkScanStatus.SKIPPED_AMBIGUOUS
-                                ),
-                                skippedCards = state.skippedCards + finalCandidates,
+                                )).toImmutableList(),
+                                skippedCards = (state.skippedCards + finalCandidates).toImmutableList(),
                                 isSearching = false
                             )
                         }
@@ -620,7 +630,7 @@ class ScannerViewModel(
                     } else {
                         _uiState.update {
                             it.copy(
-                                candidates = finalCandidates.take(5),
+                                candidates = finalCandidates.take(5).toImmutableList(),
                                 isSearching = false
                             )
                         }
@@ -640,7 +650,7 @@ class ScannerViewModel(
                 priceCheckInfo = PriceCheckInfo(card = card, isFetching = true),
                 isSearching = false,
                 isPaused = true,
-                candidates = emptyList(),
+                candidates = persistentListOf(),
                 detectedNumber = null,
                 detectedTotal = null,
                 detectedName = null
@@ -654,8 +664,8 @@ class ScannerViewModel(
             _uiState.update {
                 it.copy(
                     priceCheckInfo = it.priceCheckInfo?.copy(
-                        prices = prices,
-                        vintagePrices = vintagePrices,
+                        prices = prices.toImmutableList(),
+                        vintagePrices = vintagePrices.toImmutableList(),
                         isFetching = false
                     )
                 )
@@ -815,7 +825,7 @@ class ScannerViewModel(
                 repository.deleteLastUserCardInstance(lastEntry.card.id)
                 _uiState.update {
                     it.copy(
-                        bulkSessionLog = it.bulkSessionLog.dropLast(1)
+                        bulkSessionLog = it.bulkSessionLog.dropLast(1).toImmutableList()
                     )
                 }
             } catch (e: Exception) {
@@ -917,14 +927,17 @@ class ScannerViewModel(
                                      lastEntry.status != BulkScanStatus.SKIPPED_AMBIGUOUS
 
                     val newLog = if (isSameAsLast && lastEntry != null) {
-                        state.bulkSessionLog.dropLast(1) + lastEntry.copy(
-                            quantity = lastEntry.quantity + 1, 
+                        (state.bulkSessionLog.dropLast(1) + lastEntry.copy(
+                            quantity = lastEntry.quantity + 1,
                             status = BulkScanStatus.DUPLICATE_INCREMENTED
-                        )
+                        )).toImmutableList()
                     } else {
-                        state.bulkSessionLog + BulkScanEntry(card = card, status = BulkScanStatus.SAVED)
+                        (state.bulkSessionLog + BulkScanEntry(
+                            card = card,
+                            status = BulkScanStatus.SAVED
+                        )).toImmutableList()
                     }
-                    
+
                     state.copy(
                         bulkSessionLog = newLog,
                         isSearching = false
@@ -949,7 +962,7 @@ class ScannerViewModel(
             detectedNumber = null,
             detectedTotal = null,
             detectedName = null,
-            candidates = emptyList()
+            candidates = persistentListOf()
         ) }
     }
 
@@ -1009,7 +1022,7 @@ class ScannerViewModel(
             detectedNumber = null,
             detectedTotal = null,
             detectedName = null,
-            candidates = emptyList()
+            candidates = persistentListOf()
         ) }
     }
 }

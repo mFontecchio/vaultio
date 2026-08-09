@@ -104,7 +104,7 @@ fun CollectionGridView(
                     }
                     AsyncImage(
                         model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
-                            .data("${item.details.card.image}/high.webp")
+                            .data("${item.details.card.image}/low.webp")
                             .crossfade(true)
                             .build(),
                         contentDescription = null,
