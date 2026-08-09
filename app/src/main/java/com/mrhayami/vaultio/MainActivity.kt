@@ -1,5 +1,6 @@
 package com.mrhayami.vaultio
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -48,6 +49,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Let app bars / camera draw under the nav bar without a system scrim.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
         val app = application as VaultioApplication
         val repository = app.repository
         val gradingRepository = app.gradingRepository
@@ -65,13 +70,19 @@ class MainActivity : ComponentActivity() {
                 DarkThemeConfig.DARK -> true
             }
 
-            VaultioTheme(themeBrand = themeBrand, darkTheme = useDarkTheme) {
-                val navController = rememberNavController()
-                
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
+            val navController = rememberNavController()
+            val navBackStackEntry by navController.currentBackStackEntryAsState()
+            val currentRoute = navBackStackEntry?.destination?.route
+            val immersiveContent = currentRoute?.startsWith(Screen.Scanner.route) == true
+
+            VaultioTheme(
+                themeBrand = themeBrand,
+                darkTheme = useDarkTheme,
+                immersiveContent = immersiveContent
+            ) {
                 val showBottomBar = listOf(
                     Screen.Collection,
+                    Screen.Wishlist,
                     Screen.Stats,
                     Screen.Settings
                 ).any { it.route == currentRoute }
@@ -117,7 +128,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
                             }
-                            composable(Screen.Collection.route) { 
+                            composable(Screen.Collection.route) {
                                 CollectionScreen(
                                     repository = repository,
                                     userPreferencesRepository = userPreferencesRepository,
@@ -129,14 +140,23 @@ class MainActivity : ComponentActivity() {
                                                 id.toString()
                                             )
                                         )
-                                    },
-                                    onNavigateToWishlist = { navController.navigate(Screen.Wishlist.route) }
-                                ) 
+                                    }
+                                )
                             }
                             composable(Screen.Wishlist.route) {
                                 WishlistScreen(
                                     repository = repository,
-                                    onNavigateBack = { navController.popBackStack() }
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToScanner = { navController.navigate(Screen.Scanner.route) },
+                                    onNavigateToCardDetail = { id ->
+                                        navController.navigate(
+                                            Screen.CardDetail.route.replace(
+                                                "{userCardId}",
+                                                id.toString()
+                                            )
+                                        )
+                                    },
+                                    hideBackButton = true,
                                 )
                             }
                             composable(Screen.Stats.route) {
@@ -156,6 +176,7 @@ class MainActivity : ComponentActivity() {
                                     state = state,
                                     onEvent = viewModel::onEvent,
                                     sideEffects = viewModel.sideEffects,
+                                    onNavigateToScanner = { navController.navigate(Screen.Scanner.route) },
                                     onNavigation = { effect ->
                                         when (effect) {
                                             com.mrhayami.vaultio.ui.stats.StatsEffect.Navigation.GoBack -> navController.popBackStack()

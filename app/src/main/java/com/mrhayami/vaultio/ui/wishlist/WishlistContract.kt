@@ -33,8 +33,10 @@ sealed class WishlistEvent {
 
     data class RemoveFromWishlist(val id: Long) : WishlistEvent()
     data class MoveToCollection(val id: Long) : WishlistEvent()
+    data class OpenOwnedCard(val cardId: String) : WishlistEvent()
 }
 
 sealed class WishlistEffect {
     data class ShowToast(val message: String) : WishlistEffect()
+    data class NavigateToCardDetail(val userCardId: Long) : WishlistEffect()
 }

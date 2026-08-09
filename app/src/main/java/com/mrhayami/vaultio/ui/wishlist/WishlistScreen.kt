@@ -22,18 +22,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CatchingPokemon
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,7 +57,6 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -72,8 +69,12 @@ import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.collection.CollectionEvent
 import com.mrhayami.vaultio.ui.collection.components.AddCardModal
+import com.mrhayami.vaultio.ui.components.AddScanFabMenu
+import com.mrhayami.vaultio.ui.components.ConfirmDestructiveDialog
+import com.mrhayami.vaultio.ui.components.EmptyState
 import com.mrhayami.vaultio.ui.components.MicroCaptureFanfare
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -81,6 +82,10 @@ import java.util.Locale
 fun WishlistScreen(
     repository: VaultioRepository,
     onNavigateBack: () -> Unit,
+    onNavigateToScanner: () -> Unit = {},
+    onNavigateToCardDetail: (Long) -> Unit = {},
+    hideBackButton: Boolean = false,
+    onItemClick: ((WishlistItemUiModel) -> Unit)? = null,
     viewModel: WishlistViewModel = viewModel(factory = WishlistViewModelFactory(repository))
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
@@ -88,6 +93,7 @@ fun WishlistScreen(
     val haptic = LocalHapticFeedback.current
     var showAddModal by remember { mutableStateOf(false) }
     var fanfarePosition by remember { mutableStateOf<Offset?>(null) }
+    var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.sideEffects.collect { effect ->
@@ -97,6 +103,7 @@ fun WishlistScreen(
                     effect.message,
                     Toast.LENGTH_SHORT
                 ).show()
+                is WishlistEffect.NavigateToCardDetail -> onNavigateToCardDetail(effect.userCardId)
             }
         }
     }
@@ -104,50 +111,49 @@ fun WishlistScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Column {
-                        Text("Wishlist", fontWeight = FontWeight.Bold)
-                        Text(
-                            "$${
-                                String.format(
-                                    Locale.US,
-                                    "%.2f",
-                                    uiState.totalWishlistValue
-                                )
-                            } Est. Value",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                },
+                title = { Text("Wishlist") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                    if (!hideBackButton) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
                     }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddModal = true },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Rounded.Add, contentDescription = "Add to Wishlist")
-            }
+            AddScanFabMenu(
+                onAddCard = { showAddModal = true },
+                onScan = onNavigateToScanner,
+                addLabel = "Add"
+            )
         }
     ) { padding ->
         if (uiState.isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 CircularProgressIndicator()
             }
         } else if (uiState.wishlistItems.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Your wishlist is empty.", style = MaterialTheme.typography.bodyLarge)
-            }
+            EmptyState(
+                title = "Your wishlist is empty",
+                message = "Add cards you want so you can track them and move them into your collection.",
+                icon = Icons.Rounded.FavoriteBorder,
+                primaryLabel = "Add cards",
+                onPrimaryClick = { showAddModal = true },
+                secondaryLabel = "Open scanner",
+                onSecondaryClick = onNavigateToScanner,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -159,13 +165,32 @@ fun WishlistScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                item(key = "wishlist_value_header") {
+                    Text(
+                        text = String.format(
+                            Locale.US,
+                            "$%.2f Est. Value",
+                            uiState.totalWishlistValue
+                        ),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
                 items(uiState.wishlistItems, key = { it.details.wishlistCard.id }) { item ->
                     WishlistItem(
                         item = item,
+                        onClick = {
+                            if (onItemClick != null) {
+                                onItemClick(item)
+                            } else {
+                                viewModel.onEvent(
+                                    WishlistEvent.OpenOwnedCard(item.details.wishlistCard.cardId)
+                                )
+                            }
+                        },
                         onDelete = {
-                            viewModel.onEvent(
-                                WishlistEvent.RemoveFromWishlist(item.details.wishlistCard.id)
-                            )
+                            pendingDeleteId = item.details.wishlistCard.id
                         },
                         onMoveToCollection = { pos ->
                             haptic.performHapticFeedback(HapticFeedbackType.Confirm)
@@ -225,6 +250,18 @@ fun WishlistScreen(
             }
         }
 
+        pendingDeleteId?.let { id ->
+            ConfirmDestructiveDialog(
+                title = "Remove from wishlist?",
+                message = "This card will be removed from your wishlist.",
+                confirmLabel = "Remove",
+                onConfirm = {
+                    viewModel.onEvent(WishlistEvent.RemoveFromWishlist(id))
+                },
+                onDismiss = { pendingDeleteId = null }
+            )
+        }
+
         fanfarePosition?.let { pos ->
             MicroCaptureFanfare(
                 center = pos,
@@ -234,11 +271,13 @@ fun WishlistScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WishlistItem(
     item: WishlistItemUiModel,
     onDelete: () -> Unit,
     onMoveToCollection: (Offset) -> Unit,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var buttonPosition by remember { mutableStateOf(Offset.Zero) }
@@ -251,6 +290,7 @@ fun WishlistItem(
     )
 
     Card(
+        onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
@@ -330,7 +370,7 @@ fun WishlistItem(
                     ) {
                         Icon(
                             Icons.Rounded.CatchingPokemon,
-                            contentDescription = "Move to Collection",
+                            contentDescription = "Move to collection",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -369,9 +409,9 @@ fun WishlistItem(
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
-fun WishlistItemPreview() {
+private fun WishlistItemPreview() {
     val sampleDetails = WishlistCardWithDetails(
         wishlistCard = WishlistCardEntity(
             id = 1,
@@ -407,11 +447,27 @@ fun WishlistItemPreview() {
         price = 12.50
     )
 
-    VaultioTheme {
+    VaultioPreview {
         WishlistItem(
             item = sampleItem,
             onDelete = {},
             onMoveToCollection = {}
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun WishlistEmptyStatePreview() {
+    VaultioPreview {
+        EmptyState(
+            title = "Your wishlist is empty",
+            message = "Add cards you want so you can track them and move them into your collection.",
+            icon = Icons.Rounded.FavoriteBorder,
+            primaryLabel = "Add cards",
+            onPrimaryClick = {},
+            secondaryLabel = "Open scanner",
+            onSecondaryClick = {}
         )
     }
 }

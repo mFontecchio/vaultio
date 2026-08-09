@@ -26,8 +26,10 @@ data class PageScanCell(
     val bitmap: Bitmap? = null,
     val ocrResult: String? = null,
     val matchedCard: TcgDexCard? = null,
+    val candidates: List<TcgDexCard> = emptyList(),
     val status: PageScanCellStatus = PageScanCellStatus.IDLE,
-    val isConfirmed: Boolean = true
+    /** Only MATCHED cells start confirmed; ambiguous/missing require explicit user confirm. */
+    val isConfirmed: Boolean = false
 )
 
 data class PageScanResult(

@@ -1,6 +1,5 @@
 package com.mrhayami.vaultio.ui.stats
 
-import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,15 +20,12 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -38,16 +34,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.CollectionSnapshotEntity
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.components.EmptyState
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
@@ -69,6 +65,7 @@ fun StatsScreen(
     onEvent: (StatsEvent) -> Unit,
     sideEffects: Flow<StatsEffect>,
     onNavigation: (StatsEffect.Navigation) -> Unit,
+    onNavigateToScanner: () -> Unit = {},
 ) {
     LaunchedEffect(Unit) {
         onEvent(StatsEvent.OnScreenOpened)
@@ -84,18 +81,14 @@ fun StatsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Collection Statistics") },
-                navigationIcon = {
-                    IconButton(onClick = { onNavigation(StatsEffect.Navigation.GoBack) }) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                    }
-                }
+                title = { Text("Collection Statistics") }
             )
         }
     ) { padding ->
         StatsContent(
             state = state,
             onNavigation = onNavigation,
+            onNavigateToScanner = onNavigateToScanner,
             modifier = Modifier.padding(padding)
         )
     }
@@ -105,6 +98,7 @@ fun StatsScreen(
 private fun StatsContent(
     state: StatsViewState,
     onNavigation: (StatsEffect.Navigation) -> Unit,
+    onNavigateToScanner: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if ((state.isLoading && state.cardCount == 0)) {
@@ -115,7 +109,10 @@ private fun StatsContent(
             CircularProgressIndicator()
         }
     } else if (state.cardCount == 0) {
-        EmptyStatsContent(modifier = modifier)
+        EmptyStatsContent(
+            onNavigateToScanner = onNavigateToScanner,
+            modifier = modifier
+        )
     } else {
         LazyColumn(
             modifier = modifier.fillMaxSize(),
@@ -148,24 +145,18 @@ private fun StatsContent(
 }
 
 @Composable
-private fun EmptyStatsContent(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                "No cards in collection",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "Scan some cards to see statistics!",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
+private fun EmptyStatsContent(
+    onNavigateToScanner: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    EmptyState(
+        title = "No cards in collection",
+        message = "Scan some cards to see statistics!",
+        icon = Icons.Rounded.BarChart,
+        primaryLabel = "Scan cards",
+        onPrimaryClick = onNavigateToScanner,
+        modifier = modifier.fillMaxSize()
+    )
 }
 
 private fun LazyListScope.summarySection(totalValue: Double, cardCount: Int) {
@@ -205,7 +196,11 @@ fun ValueHistoryChart(snapshots: List<CollectionSnapshotEntity>) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = if (diff >= 0) "+${formatCurrency(diff)}" else formatCurrency(diff),
-                    color = if (diff >= 0) Color(0xFF4CAF50) else Color(0xFFF44336),
+                    color = if (diff >= 0) {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.width(8.dp))
@@ -226,6 +221,13 @@ fun ValueHistoryChart(snapshots: List<CollectionSnapshotEntity>) {
                 ),
                 modelProducer = modelProducer,
                 modifier = Modifier.height(200.dp),
+            )
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "History updates daily from collection snapshots.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -370,8 +372,7 @@ private fun LazyListScope.setCompletionSection(completion: List<SetCompletionInf
     }
 }
 
-@Preview(showBackground = true, name = "Light Mode")
-@Preview(showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES, name = "Dark Mode")
+@VaultioPreviews
 @Composable
 private fun StatsScreenPreview() {
     val mockSnapshots = listOf(
@@ -475,14 +476,20 @@ private fun StatsScreenPreview() {
         )
     )
 
-    VaultioTheme {
-        Surface(color = MaterialTheme.colorScheme.background) {
-            StatsScreen(
-                state = mockState,
-                onEvent = {},
-                sideEffects = emptyFlow(),
-                onNavigation = {}
-            )
-        }
+    VaultioPreview {
+        StatsScreen(
+            state = mockState,
+            onEvent = {},
+            sideEffects = emptyFlow(),
+            onNavigation = {}
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun EmptyStatsContentPreview() {
+    VaultioPreview {
+        EmptyStatsContent(onNavigateToScanner = {})
     }
 }

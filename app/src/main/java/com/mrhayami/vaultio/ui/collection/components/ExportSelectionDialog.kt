@@ -28,9 +28,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.ui.collection.getIconFromName
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @Composable
 fun ExportSelectionDialog(
@@ -150,4 +153,35 @@ fun ExportSelectionDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@VaultioPreviews
+@Composable
+private fun ExportSelectionDialogPreview() {
+    VaultioPreview {
+        ExportSelectionDialog(
+            folders = listOf(
+                FolderEntity(
+                    id = 1L,
+                    name = "Favorites",
+                    icon = "star",
+                    color = Color(0xFF78C850).toArgb().toLong().toString()
+                ),
+                FolderEntity(
+                    id = 2L,
+                    name = "Trade Binder",
+                    icon = "label",
+                    color = Color(0xFF6890F0).toArgb().toLong().toString()
+                ),
+                FolderEntity(
+                    id = 3L,
+                    name = "Graded",
+                    icon = "auto_awesome",
+                    color = Color(0xFFF8D030).toArgb().toLong().toString()
+                )
+            ),
+            onDismiss = {},
+            onConfirm = {}
+        )
+    }
 }

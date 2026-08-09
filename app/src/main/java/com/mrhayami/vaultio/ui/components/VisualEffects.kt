@@ -51,10 +51,11 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mrhayami.vaultio.data.PricingUtils
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -776,43 +777,49 @@ fun MicroCaptureFanfare(
     }
 }
 
-@Preview(showBackground = true, name = "Micro Capture Fanfare Preview")
+@VaultioPreviews
 @Composable
 private fun MicroCaptureFanfarePreview() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        MicroCaptureFanfare(
-            center = Offset(500f, 500f)
-        )
-    }
-}
-
-@Preview(showBackground = true, name = "Holo Effect Preview")
-@Composable
-private fun HoloEffectPreview() {
-    Box(
-        modifier = Modifier
-            .padding(32.dp)
-            .size(width = 200.dp, height = 280.dp)
-            .holoEffect(finish = PricingUtils.FINISH_HOLOFOIL),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Holo Card")
-            Text("(Drag to tilt)", style = MaterialTheme.typography.labelSmall)
+    VaultioPreview {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            MicroCaptureFanfare(
+                center = Offset(500f, 500f)
+            )
         }
     }
 }
 
-@Preview(showBackground = true, name = "Energy Effect Preview")
+@VaultioPreviews
+@Composable
+private fun HoloEffectPreview() {
+    VaultioPreview {
+        Box(
+            modifier = Modifier
+                .padding(32.dp)
+                .size(width = 200.dp, height = 280.dp)
+                .holoEffect(finish = PricingUtils.FINISH_HOLOFOIL),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Holo Card")
+                Text("(Drag to tilt)", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@VaultioPreviews
 @Composable
 private fun EnergyEffectPreview() {
-    Box(
-        modifier = Modifier
-            .padding(32.dp)
-            .size(width = 200.dp, height = 280.dp)
-            .energyEffect(type = "fire"),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("Fire Energy")
+    VaultioPreview {
+        Box(
+            modifier = Modifier
+                .padding(32.dp)
+                .size(width = 200.dp, height = 280.dp)
+                .energyEffect(type = "fire"),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Fire Energy")
+        }
     }
 }

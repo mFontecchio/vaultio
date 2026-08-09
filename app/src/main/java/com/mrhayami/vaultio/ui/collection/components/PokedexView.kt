@@ -29,7 +29,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -37,6 +36,8 @@ import com.mrhayami.vaultio.ui.collection.PokedexEntry
 import com.mrhayami.vaultio.ui.collection.PokedexSettings
 import com.mrhayami.vaultio.ui.components.EntranceType
 import com.mrhayami.vaultio.ui.components.staggeredEntrance
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @Composable
 fun PokedexView(
@@ -142,12 +143,12 @@ fun PokedexView(
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
 private fun PokedexViewPreview() {
-    MaterialTheme {
+    VaultioPreview {
         PokedexView(
-            entries = List(8) { 
+            entries = List(8) {
                 PokedexEntry(
                     dexNumber = it + 1,
                     pokemonName = "Pokemon ${it + 1}",

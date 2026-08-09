@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -13,7 +12,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.List
-import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.CatchingPokemon
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material3.FilterChip
@@ -24,27 +22,23 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.ui.collection.CollectionEvent
-import com.mrhayami.vaultio.ui.collection.FilterSettings
-import com.mrhayami.vaultio.ui.collection.SortMode
 import com.mrhayami.vaultio.ui.collection.ViewMode
 import com.mrhayami.vaultio.ui.collection.getIconFromName
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import java.util.Locale
 
 @Composable
 fun StickyControls(
     viewMode: ViewMode,
-    sortMode: SortMode,
-    filterSettings: FilterSettings,
     folders: List<FolderEntity>,
     selectedFolderId: Long?,
     totalQuantity: Int,
@@ -52,7 +46,6 @@ fun StickyControls(
     pokedexCollectedCount: Int,
     pokedexTotalCount: Int,
     onEvent: (CollectionEvent) -> Unit,
-    onSortClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.background(MaterialTheme.colorScheme.surface)) {
@@ -63,30 +56,6 @@ fun StickyControls(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            item {
-                FilterChip(
-                    selected = filterSettings != FilterSettings() || sortMode != SortMode.DATE_ADDED,
-                    onClick = onSortClick,
-                    label = { Text("Sort & Filter") },
-                    leadingIcon = {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.Sort,
-                            null,
-                            Modifier.size(18.dp)
-                        )
-                    },
-                    shape = CircleShape
-                )
-            }
-
-            item {
-                VerticalDivider(
-                    modifier = Modifier
-                        .height(24.dp)
-                        .padding(horizontal = 4.dp)
-                )
-            }
-
             item {
                 FilterChip(
                     selected = selectedFolderId == null,
@@ -164,22 +133,19 @@ fun StickyControls(
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
 private fun StickyControlsPreview() {
-    MaterialTheme {
+    VaultioPreview {
         StickyControls(
             viewMode = ViewMode.GRID,
-            sortMode = SortMode.DATE_ADDED,
-            filterSettings = FilterSettings(),
             folders = emptyList(),
             selectedFolderId = null,
             totalQuantity = 125,
             totalValue = 1250.50,
             pokedexCollectedCount = 100,
             pokedexTotalCount = 1025,
-            onEvent = {},
-            onSortClick = {}
+            onEvent = {}
         )
     }
 }

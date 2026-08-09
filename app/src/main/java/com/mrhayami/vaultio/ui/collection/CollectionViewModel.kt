@@ -13,6 +13,7 @@ import com.mrhayami.vaultio.data.local.PriceEntity
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
+import com.mrhayami.vaultio.data.local.WishlistCardEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.common.MviViewModel
@@ -322,6 +323,13 @@ class CollectionViewModel(
             is CollectionEvent.OnDeleteFolder -> deleteFolder(event.folder)
             is CollectionEvent.OnSearchRemoteCards -> searchRemoteCards(event.query)
             is CollectionEvent.OnAddUserCard -> addUserCard(event.card, event.quantity, event.condition, event.printing, event.finish, event.folderIds)
+            is CollectionEvent.OnAddToWishlist -> addToWishlist(
+                event.card,
+                event.quantity,
+                event.condition,
+                event.printing,
+                event.finish
+            )
             CollectionEvent.OnConsumeSaveSuccess -> consumeSaveSuccess()
             CollectionEvent.OnDownloadNewSets -> downloadNewSets()
             CollectionEvent.OnDismissNewSetsPrompt -> dismissNewSetsPrompt()
@@ -628,6 +636,28 @@ class CollectionViewModel(
         }
     }
 
+    private fun addToWishlist(
+        card: TcgDexCard,
+        quantity: Int,
+        condition: String,
+        printing: String,
+        finish: String,
+    ) {
+        viewModelScope.launch {
+            repository.addCardToWishlist(
+                card,
+                WishlistCardEntity(
+                    cardId = card.id,
+                    quantity = quantity,
+                    condition = condition,
+                    printing = printing,
+                    finish = finish
+                )
+            )
+            emitEffect(CollectionEffect.ShowToast("Added to wishlist"))
+        }
+    }
+
     private fun consumeSaveSuccess() {
         _showSaveSuccess.value = false
     }
@@ -657,8 +687,8 @@ class CollectionViewModel(
     }
 
     private fun selectAll() {
-        val allIds = state.value.userCards.map { it.userCard.id }.toSet()
-        _selectionState.value = allIds
+        val filteredIds = state.value.filteredUserCards.map { it.details.userCard.id }.toSet()
+        _selectionState.value = filteredIds
     }
 
     private fun clearSelection() {

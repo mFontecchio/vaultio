@@ -20,6 +20,8 @@ import com.mrhayami.vaultio.ui.collection.GridSettings
 import com.mrhayami.vaultio.ui.collection.ListSettings
 import com.mrhayami.vaultio.ui.collection.PokedexSettings
 import com.mrhayami.vaultio.ui.collection.ViewMode
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @Composable
 fun ViewSettingsSheet(
@@ -114,4 +116,46 @@ fun SettingsToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -
 @Composable
 fun Spacer(modifier: Modifier) {
     androidx.compose.foundation.layout.Spacer(modifier = modifier)
+}
+
+@VaultioPreviews
+@Composable
+private fun ViewSettingsSheetListPreview() {
+    VaultioPreview {
+        ViewSettingsSheet(
+            viewMode = ViewMode.LIST,
+            listSettings = ListSettings(),
+            gridSettings = GridSettings(),
+            pokedexSettings = PokedexSettings(),
+            onEvent = {}
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun ViewSettingsSheetGridPreview() {
+    VaultioPreview {
+        ViewSettingsSheet(
+            viewMode = ViewMode.GRID,
+            listSettings = ListSettings(),
+            gridSettings = GridSettings(),
+            pokedexSettings = PokedexSettings(),
+            onEvent = {}
+        )
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun ViewSettingsSheetPokedexPreview() {
+    VaultioPreview {
+        ViewSettingsSheet(
+            viewMode = ViewMode.POKEDEX,
+            listSettings = ListSettings(),
+            gridSettings = GridSettings(),
+            pokedexSettings = PokedexSettings(),
+            onEvent = {}
+        )
+    }
 }

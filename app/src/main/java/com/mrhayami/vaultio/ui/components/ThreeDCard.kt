@@ -18,9 +18,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.material3.Text
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 /**
  * A container that provides 3D rotation effects to its content.
@@ -137,17 +138,19 @@ fun ThreeDCard(
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
 @Composable
 private fun ThreeDCardPreview() {
-    ThreeDCard { rx, ry ->
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(text = "3D Card Content")
-                Text(text = "X: ${rx.toInt()}° Y: ${ry.toInt()}°")
+    VaultioPreview {
+        ThreeDCard { rx, ry ->
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "3D Card Content")
+                    Text(text = "X: ${rx.toInt()}° Y: ${ry.toInt()}°")
+                }
             }
         }
     }

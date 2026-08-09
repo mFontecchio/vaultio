@@ -13,7 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -52,18 +52,19 @@ private val LightColorScheme = lightColorScheme(
 private fun energyScheme(seed: Color, isDark: Boolean): ColorScheme {
     val surfaceColor = if (isDark) Color(0xFF121212) else Color(0xFFFDFDFD)
     val onSurfaceColor = if (isDark) Color.White else Color.Black
-    
+    val onSeed = if (seed.luminance() > 0.55f) Color.Black else Color.White
+
     val primaryContainer = seed.copy(alpha = if (isDark) 0.3f else 0.15f).compositeOver(surfaceColor)
     val secondaryContainer = seed.copy(alpha = if (isDark) 0.2f else 0.1f).compositeOver(surfaceColor)
 
     return if (isDark) {
         darkColorScheme(
             primary = seed,
-            onPrimary = Color.Black,
+            onPrimary = onSeed,
             primaryContainer = primaryContainer,
             onPrimaryContainer = seed,
             secondary = seed,
-            onSecondary = Color.Black,
+            onSecondary = onSeed,
             secondaryContainer = secondaryContainer,
             onSecondaryContainer = seed,
             surface = surfaceColor,
@@ -76,7 +77,7 @@ private fun energyScheme(seed: Color, isDark: Boolean): ColorScheme {
     } else {
         lightColorScheme(
             primary = seed,
-            onPrimary = Color.White,
+            onPrimary = onSeed,
             primaryContainer = primaryContainer,
             onPrimaryContainer = Color(
                 red = seed.red * 0.4f,
@@ -84,7 +85,7 @@ private fun energyScheme(seed: Color, isDark: Boolean): ColorScheme {
                 blue = seed.blue * 0.4f
             ).compositeOver(Color.Black),
             secondary = seed,
-            onSecondary = Color.White,
+            onSecondary = onSeed,
             secondaryContainer = secondaryContainer,
             onSecondaryContainer = Color(
                 red = seed.red * 0.5f,
@@ -106,6 +107,11 @@ fun VaultioTheme(
     themeBrand: ThemeBrand = ThemeBrand.DEFAULT,
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
+    /**
+     * Camera / other immersive surfaces: keep system bars transparent and use
+     * light (white) icons so they stay legible over dark preview content.
+     */
+    immersiveContent: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when (themeBrand) {
@@ -134,8 +140,12 @@ fun VaultioTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.surface.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            // Bar colors stay transparent via Activity.enableEdgeToEdge(); only
+            // icon contrast is adjusted here (and for immersive camera routes).
+            val controller = WindowCompat.getInsetsController(window, view)
+            val lightIcons = !immersiveContent && !darkTheme
+            controller.isAppearanceLightStatusBars = lightIcons
+            controller.isAppearanceLightNavigationBars = lightIcons
         }
     }
 

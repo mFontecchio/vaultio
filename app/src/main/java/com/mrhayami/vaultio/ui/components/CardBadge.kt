@@ -1,5 +1,6 @@
 package com.mrhayami.vaultio.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,11 +19,11 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mrhayami.vaultio.data.PricingUtils
-import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import com.mrhayami.vaultio.ui.theme.VaultioPreview
+import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 
 @Composable
 fun CardBadge(
@@ -68,16 +69,18 @@ fun CardAttributeBadges(
     modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        val colors = MaterialTheme.colorScheme
+
         // Finish Badges
         when (finish) {
             PricingUtils.FINISH_HOLOFOIL -> {
-                CardBadge("F", Color(0xFF6200EE), Modifier.padding(end = 2.dp))
+                CardBadge("F", colors.primary, Modifier.padding(end = 2.dp))
             }
             PricingUtils.FINISH_REVERSE_HOLO -> {
-                CardBadge("F", Color(0xFF03DAC6), Modifier.padding(end = 2.dp), isRotated = true)
+                CardBadge("F", colors.tertiary, Modifier.padding(end = 2.dp), isRotated = true)
             }
             PricingUtils.FINISH_TEXTURED -> {
-                CardBadge("T", Color(0xFFFF0266), Modifier.padding(end = 2.dp))
+                CardBadge("T", colors.error, Modifier.padding(end = 2.dp))
             }
             PricingUtils.FINISH_GOLD -> {
                 CardBadge("G", Color(0xFFFFD700), Modifier.padding(end = 2.dp))
@@ -87,25 +90,41 @@ fun CardAttributeBadges(
         // Printing Badges
         when (printing) {
             PricingUtils.PRINTING_1ST_EDITION -> {
-                CardBadge("1st", Color(0xFFE91E63), Modifier.padding(end = 2.dp))
+                CardBadge("1st", colors.secondary, Modifier.padding(end = 2.dp))
             }
             PricingUtils.PRINTING_SHADOWLESS -> {
-                CardBadge("SHDW", Color(0xFF607D8B), Modifier.padding(end = 2.dp))
+                CardBadge("SHDW", colors.onSurfaceVariant, Modifier.padding(end = 2.dp))
             }
             PricingUtils.PRINTING_PROMO -> {
-                CardBadge("P", Color(0xFF4CAF50), Modifier.padding(end = 2.dp))
+                CardBadge("P", colors.tertiary, Modifier.padding(end = 2.dp))
             }
         }
     }
 }
 
-@Preview(showBackground = true)
+@VaultioPreviews
+@Composable
+private fun CardBadgePreview() {
+    VaultioPreview {
+        Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CardBadge(text = "F", containerColor = MaterialTheme.colorScheme.primary)
+            CardBadge(text = "1st", containerColor = MaterialTheme.colorScheme.secondary)
+            CardBadge(
+                text = "F",
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                isRotated = true
+            )
+        }
+    }
+}
+
+@VaultioPreviews
 @Composable
 private fun CardAttributeBadgesPreview() {
-    VaultioTheme {
+    VaultioPreview {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("Refined & Compact Finishes", style = MaterialTheme.typography.titleSmall)
             Row {
@@ -114,7 +133,7 @@ private fun CardAttributeBadgesPreview() {
                 CardAttributeBadges(finish = PricingUtils.FINISH_TEXTURED, printing = "")
                 CardAttributeBadges(finish = PricingUtils.FINISH_GOLD, printing = "")
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
             Text("Refined Printings", style = MaterialTheme.typography.titleSmall)
             Row {
@@ -122,20 +141,20 @@ private fun CardAttributeBadgesPreview() {
                 CardAttributeBadges(finish = "", printing = PricingUtils.PRINTING_SHADOWLESS)
                 CardAttributeBadges(finish = "", printing = PricingUtils.PRINTING_PROMO)
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
             Text("Compact Combinations", style = MaterialTheme.typography.titleSmall)
-            Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 CardAttributeBadges(
-                    finish = PricingUtils.FINISH_HOLOFOIL, 
+                    finish = PricingUtils.FINISH_HOLOFOIL,
                     printing = PricingUtils.PRINTING_1ST_EDITION
                 )
                 CardAttributeBadges(
-                    finish = PricingUtils.FINISH_REVERSE_HOLO, 
+                    finish = PricingUtils.FINISH_REVERSE_HOLO,
                     printing = PricingUtils.PRINTING_SHADOWLESS
                 )
                 CardAttributeBadges(
-                    finish = PricingUtils.FINISH_GOLD, 
+                    finish = PricingUtils.FINISH_GOLD,
                     printing = PricingUtils.PRINTING_PROMO
                 )
             }
