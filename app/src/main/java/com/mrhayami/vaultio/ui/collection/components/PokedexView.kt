@@ -46,6 +46,9 @@ fun PokedexView(
     modifier: Modifier = Modifier
 ) {
     val gridLoadTime = remember { System.currentTimeMillis() }
+    val grayscaleFilter = remember {
+        ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+    }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
@@ -105,9 +108,7 @@ fun PokedexView(
                                 .aspectRatio(1f),
                             contentScale = ContentScale.Fit,
                             alpha = if (isCollected) 1f else 0.3f,
-                            colorFilter = if (isCollected) null else ColorFilter.colorMatrix(
-                                ColorMatrix().apply { setToSaturation(0f) }
-                            )
+                            colorFilter = if (isCollected) null else grayscaleFilter
                         )
                     }
                     Text(

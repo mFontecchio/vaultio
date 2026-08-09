@@ -1,17 +1,23 @@
 package com.mrhayami.vaultio.ui.card_detail
 
+import androidx.compose.runtime.Immutable
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.PriceEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 
 /** Snapshot of what the UI should render. */
+@Immutable
 data class CardDetailUiState(
     val cardWithDetails: CardWithDetails? = null,
-    val folders: List<FolderEntity> = emptyList(),
-    val cardFolderIds: Set<Long> = emptySet(),
-    val prices: List<PriceEntity> = emptyList(),
-    val vintagePrices: List<VintagePriceEntity> = emptyList(),
+    val folders: ImmutableList<FolderEntity> = persistentListOf(),
+    val cardFolderIds: ImmutableSet<Long> = persistentSetOf(),
+    val prices: ImmutableList<PriceEntity> = persistentListOf(),
+    val vintagePrices: ImmutableList<VintagePriceEntity> = persistentListOf(),
     val showEnergyAnimations: Boolean = true,
     val showFinishAnimations: Boolean = true,
     val preferSetLogo: Boolean = true,

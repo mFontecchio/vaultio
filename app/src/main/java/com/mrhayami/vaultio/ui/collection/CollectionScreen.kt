@@ -907,7 +907,7 @@ fun DexDetailContent(dexId: Int, cards: List<CardUiModel>, onCardClick: (Long) -
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                items(cards) { item ->
+                items(cards, key = { it.details.userCard.id }) { item ->
                     Card(
                         onClick = { onCardClick(item.details.userCard.id) },
                         shape = RoundedCornerShape(12.dp),
@@ -915,7 +915,7 @@ fun DexDetailContent(dexId: Int, cards: List<CardUiModel>, onCardClick: (Long) -
                     ) {
                         Box {
                             AsyncImage(
-                                model = "${item.details.card.image}/high.webp",
+                                model = "${item.details.card.image}/low.webp",
                                 contentDescription = null,
                                 modifier = Modifier
                                     .fillMaxWidth()

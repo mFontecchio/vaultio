@@ -353,6 +353,60 @@ class VaultioRepository(
     // endregion
 
     // region Collection Operations
+    /**
+     * Ensures a catalog [CardEntity] exists with resolved dex metadata when possible.
+     * Re-enriches when the row is missing or [CardEntity.dexId] is null (e.g. set-download stubs).
+     * Preserves an existing [CardEntity.pHash] on REPLACE.
+     */
+    suspend fun ensureCatalogCardWithDex(
+        cardId: String,
+        seed: TcgDexCard? = null
+    ) {
+        val existing = cardDao.getCardById(cardId)
+        if (existing?.dexId != null) return
+
+        val setId = cardId.substringBefore("-")
+        val seedOrStub = seed ?: TcgDexCard(
+            id = cardId,
+            localId = existing?.localId ?: cardId.substringAfter("-"),
+            name = existing?.name ?: cardId,
+            image = existing?.image,
+            rarity = existing?.rarity,
+            category = existing?.category,
+            dexId = null,
+            types = existing?.types?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
+        )
+        val fullCard = fetchFullCardDetails(seedOrStub)
+        val (dexIdString, dexIdsJson) = resolveDexIds(fullCard)
+
+        val cardEntity = CardEntity(
+            id = fullCard.id,
+            localId = fullCard.localId,
+            name = fullCard.name,
+            image = fullCard.image ?: existing?.image,
+            setId = setId,
+            rarity = fullCard.rarity ?: existing?.rarity,
+            category = fullCard.category ?: existing?.category,
+            types = fullCard.types?.joinToString(",") ?: existing?.types,
+            dexId = dexIdString,
+            dexIds = dexIdsJson,
+            pokemonName = PokemonUtils.extractPokemonName(fullCard.name)
+                .takeIf { it.isNotBlank() } ?: existing?.pokemonName,
+            tcgPlayerId = extractTcgPlayerId(fullCard.pricing?.tcgplayer?.url)
+                ?: existing?.tcgPlayerId,
+            pHash = existing?.pHash
+        )
+        cardDao.insertCards(listOf(cardEntity))
+    }
+
+    private suspend fun backfillMissingDexIdsForOwnedCards() {
+        val missingIds = cardDao.getOwnedCardIdsMissingDex()
+        for (cardId in missingIds) {
+            runCatching { ensureCatalogCardWithDex(cardId) }
+                .onFailure { Log.e(TAG, "Failed to backfill dex for $cardId", it) }
+        }
+    }
+
     suspend fun addUserCard(
         card: TcgDexCard,
         userCardEntity: UserCardEntity,
@@ -362,28 +416,7 @@ class VaultioRepository(
         val setId = card.id.substringBefore("-")
         ensureSetIsSynced(setId)
 
-        val existingCard = cardDao.getCardById(card.id)
-        
-        if (existingCard?.dexId == null) {
-            val fullCard = fetchFullCardDetails(card)
-            val (dexIdString, dexIdsJson) = resolveDexIds(fullCard)
-
-            val cardEntity = CardEntity(
-                id = fullCard.id,
-                localId = fullCard.localId,
-                name = fullCard.name,
-                image = fullCard.image,
-                setId = setId,
-                rarity = fullCard.rarity,
-                category = fullCard.category,
-                types = fullCard.types?.joinToString(","),
-                dexId = dexIdString,
-                dexIds = dexIdsJson,
-                pokemonName = PokemonUtils.extractPokemonName(fullCard.name),
-                tcgPlayerId = extractTcgPlayerId(fullCard.pricing?.tcgplayer?.url)
-            )
-            cardDao.insertCards(listOf(cardEntity))
-        }
+        ensureCatalogCardWithDex(card.id, seed = card)
 
         val existingUserCard = userCardDao.findExistingUserCard(
             cardId = card.id,
@@ -849,14 +882,7 @@ class VaultioRepository(
             export.userCards.forEach { cardDto ->
                 val setId = cardDto.cardId.substringBefore("-")
                 ensureSetIsSynced(setId)
-                
-                if (cardDao.getCardById(cardDto.cardId) == null) {
-                    val remoteCard = getCardDetail(cardDto.cardId)
-                    if (remoteCard != null) {
-                        val entity = remoteCard.toEntity(setId)
-                        cardDao.insertCards(listOf(entity))
-                    }
-                }
+                ensureCatalogCardWithDex(cardDto.cardId)
 
                 val userCardId = userCardDao.insertUserCard(UserCardEntity(
                     cardId = cardDto.cardId,
@@ -874,6 +900,8 @@ class VaultioRepository(
                     userCardDao.insertFolderCardCrossRefs(crossRefs)
                 }
             }
+
+            backfillMissingDexIdsForOwnedCards()
         }
     }
 
@@ -927,26 +955,7 @@ class VaultioRepository(
         val setId = card.id.substringBefore("-")
         ensureSetIsSynced(setId)
 
-        if (cardDao.getCardById(card.id) == null) {
-            val fullCard = fetchFullCardDetails(card)
-            val (dexIdString, dexIdsJson) = resolveDexIds(fullCard)
-
-            val cardEntity = CardEntity(
-                id = fullCard.id,
-                localId = fullCard.localId,
-                name = fullCard.name,
-                image = fullCard.image,
-                setId = setId,
-                rarity = fullCard.rarity,
-                category = fullCard.category,
-                types = fullCard.types?.joinToString(","),
-                dexId = dexIdString,
-                dexIds = dexIdsJson,
-                pokemonName = PokemonUtils.extractPokemonName(fullCard.name),
-                tcgPlayerId = extractTcgPlayerId(fullCard.pricing?.tcgplayer?.url)
-            )
-            cardDao.insertCards(listOf(cardEntity))
-        }
+        ensureCatalogCardWithDex(card.id, seed = card)
 
         val id = wishlistDao.insertWishlistCard(wishlistCardEntity.copy(cardId = card.id))
         updateCardPrice(card.id)

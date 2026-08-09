@@ -7,6 +7,7 @@ import com.mrhayami.vaultio.data.local.WishlistCardEntity
 import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.common.MviViewModel
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
@@ -44,7 +45,7 @@ class WishlistViewModel(
 
             updateState {
                 copy(
-                    wishlistItems = uiItems,
+                    wishlistItems = uiItems.toImmutableList(),
                     totalWishlistValue = totalValue,
                     isLoading = false
                 )
@@ -72,7 +73,7 @@ class WishlistViewModel(
         viewModelScope.launch {
             updateState { copy(isSearching = true) }
             val results = repository.searchTcgDex(query)
-            updateState { copy(searchResults = results, isSearching = false) }
+            updateState { copy(searchResults = results.toImmutableList(), isSearching = false) }
         }
     }
 

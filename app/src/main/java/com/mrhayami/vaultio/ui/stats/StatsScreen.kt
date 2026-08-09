@@ -48,6 +48,9 @@ import com.mrhayami.vaultio.data.local.CollectionSnapshotEntity
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.ui.theme.VaultioTheme
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
@@ -362,7 +365,7 @@ private fun LazyListScope.mostValuableCardsSection(
 
 private fun LazyListScope.setCompletionSection(completion: List<SetCompletionInfo>) {
     item { SectionTitle("Set Completion") }
-    items(completion) { info ->
+    items(completion, key = { it.setId }) { info ->
         SetCompletionItem(info)
     }
 }
@@ -431,8 +434,8 @@ private fun StatsScreenPreview() {
         isLoading = false,
         totalValue = 2450.75,
         cardCount = 142,
-        snapshots = mockSnapshots,
-        mostValuableCards = listOf(
+        snapshots = mockSnapshots.toImmutableList(),
+        mostValuableCards = persistentListOf(
             CardWithValue(mockCardWithDetails, 150.50),
             CardWithValue(
                 mockCardWithDetails.copy(
@@ -451,21 +454,21 @@ private fun StatsScreenPreview() {
                 ), 450.00
             )
         ),
-        distributionByRarity = mapOf(
+        distributionByRarity = persistentMapOf(
             "Common" to 50,
             "Uncommon" to 30,
             "Rare" to 20,
             "Rare Holo" to 15,
             "Ultra Rare" to 10
         ),
-        distributionByType = mapOf(
+        distributionByType = persistentMapOf(
             "Fire" to 25,
             "Water" to 20,
             "Grass" to 30,
             "Lightning" to 15,
             "Psychic" to 10
         ),
-        setCompletion = listOf(
+        setCompletion = persistentListOf(
             SetCompletionInfo("swsh4", "Vivid Voltage", null, 45, 185, 24.3f),
             SetCompletionInfo("swsh3", "Darkness Ablaze", null, 120, 189, 63.5f),
             SetCompletionInfo("base1", "Base Set", null, 102, 102, 100f)
