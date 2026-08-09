@@ -47,7 +47,7 @@ data class ScannerUiState(
     val isPaused: Boolean = false,
     val autoSelectedCard: TcgDexCard? = null,
     val selectedCard: TcgDexCard? = null,
-    val showSaveSuccess: Boolean = false,
+    val successMessage: String? = null,
     val errorMessage: String? = null,
     val hasCameraPermission: Boolean = false,
     val isTorchEnabled: Boolean = false,
@@ -89,7 +89,7 @@ sealed interface ScannerEvent {
     data class SetTargetUserCard(val userCardId: Long) : ScannerEvent
     data object ResumeScanning : ScannerEvent
     data object ClearDetectedNumber : ScannerEvent
-    data object ConsumeSaveSuccess : ScannerEvent
+    data object ConsumeSuccessMessage : ScannerEvent
     data class CardSelected(val card: TcgDexCard?) : ScannerEvent
     data class PermissionResult(val granted: Boolean) : ScannerEvent
     data object ToggleTorch : ScannerEvent
@@ -128,6 +128,13 @@ sealed interface ScannerEvent {
         val printing: String,
         val finish: String,
         val folderIds: List<Long>
+    ) : ScannerEvent
+    data class AddScannedToWishlist(
+        val card: TcgDexCard,
+        val quantity: Int,
+        val condition: String,
+        val printing: String,
+        val finish: String
     ) : ScannerEvent
     data class SaveAndGrade(
         val card: TcgDexCard,
@@ -261,6 +268,7 @@ class ScannerViewModel(
                 event.printing, event.finish, event.folderIds,
                 navigateToGrading = false
             )
+            is ScannerEvent.AddScannedToWishlist -> addScannedToWishlist(event)
 
             is ScannerEvent.SaveAndGrade -> {
                 val bmp = activeCaptureForGrading
@@ -277,7 +285,7 @@ class ScannerViewModel(
                     }
                 }
             }
-            ScannerEvent.ConsumeSaveSuccess -> consumeSaveSuccess()
+            ScannerEvent.ConsumeSuccessMessage -> consumeSuccessMessage()
             ScannerEvent.ClearDetectedNumber -> clearDetectedNumber()
             ScannerEvent.ClearErrorMessage -> _uiState.update { it.copy(errorMessage = null) }
             is ScannerEvent.PermissionResult -> _uiState.update { it.copy(hasCameraPermission = event.granted) }
@@ -822,7 +830,12 @@ class ScannerViewModel(
                     )
                 }
             }
-            _uiState.update { it.copy(pageScanMode = PageScanMode.IDLE, showSaveSuccess = true) }
+            _uiState.update {
+                it.copy(
+                    pageScanMode = PageScanMode.IDLE,
+                    successMessage = "Card added to collection"
+                )
+            }
         }
     }
 
@@ -976,6 +989,32 @@ class ScannerViewModel(
         ) }
     }
 
+    private fun addScannedToWishlist(event: ScannerEvent.AddScannedToWishlist) {
+        if (_uiState.value.isSaving) return
+        _uiState.update { it.copy(isSaving = true) }
+        viewModelScope.launch(defaultDispatcher) {
+            try {
+                repository.addCardToWishlist(
+                    event.card,
+                    com.mrhayami.vaultio.data.local.WishlistCardEntity(
+                        cardId = event.card.id,
+                        quantity = event.quantity,
+                        condition = event.condition,
+                        printing = event.printing,
+                        finish = event.finish
+                    )
+                )
+                resumeScanning()
+                _uiState.update { it.copy(successMessage = "Added to wishlist") }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _uiState.update { it.copy(errorMessage = "Failed to add to wishlist: ${e.message}") }
+            } finally {
+                _uiState.update { it.copy(isSaving = false) }
+            }
+        }
+    }
+
     private fun saveScannedCard(
         card: TcgDexCard,
         quantity: Int,
@@ -1009,7 +1048,7 @@ class ScannerViewModel(
                     )
                     activeCaptureForGrading = null
                 } else {
-                    _uiState.update { it.copy(showSaveSuccess = true) }
+                    _uiState.update { it.copy(successMessage = "Card added to collection") }
                 }
                 resumeScanning()
             } catch (e: Exception) {
@@ -1021,8 +1060,8 @@ class ScannerViewModel(
         }
     }
 
-    private fun consumeSaveSuccess() {
-        _uiState.update { it.copy(showSaveSuccess = false) }
+    private fun consumeSuccessMessage() {
+        _uiState.update { it.copy(successMessage = null) }
     }
 
     private fun clearDetectedNumber() {

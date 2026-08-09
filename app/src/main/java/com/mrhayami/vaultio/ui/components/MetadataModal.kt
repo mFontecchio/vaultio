@@ -71,6 +71,7 @@ fun MetadataModal(
     modifier: Modifier = Modifier,
     folders: List<FolderEntity> = emptyList(),
     initialCondition: String = PricingUtils.CONDITION_NM,
+    isSaving: Boolean = false,
     onConfirm: (Int, String, String, String, List<Long>) -> Unit,
     onWishlistConfirm: ((Int, String, String, String) -> Unit)? = null,
     onBack: () -> Unit
@@ -267,6 +268,7 @@ fun MetadataModal(
                             selectedFolderIds.toList()
                         )
                     },
+                    enabled = !isSaving,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
@@ -293,6 +295,7 @@ fun MetadataModal(
                                 finish
                             )
                         },
+                        enabled = !isSaving,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),

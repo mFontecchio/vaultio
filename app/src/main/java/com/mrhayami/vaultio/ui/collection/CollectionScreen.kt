@@ -58,15 +58,14 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Deselect
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.FolderCopy
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.QrCodeScanner
@@ -75,15 +74,14 @@ import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -138,6 +136,7 @@ import com.mrhayami.vaultio.ui.collection.components.PokedexView
 import com.mrhayami.vaultio.ui.collection.components.SortFilterSheet
 import com.mrhayami.vaultio.ui.collection.components.StickyControls
 import com.mrhayami.vaultio.ui.collection.components.ViewSettingsSheet
+import com.mrhayami.vaultio.ui.components.AddScanFabMenu
 import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.EmptyState
 import com.mrhayami.vaultio.ui.theme.VaultioPreview
@@ -237,7 +236,6 @@ fun CollectionContent(
     var showViewSettings by remember { mutableStateOf(false) }
     var showSortFilterSheet by remember { mutableStateOf(false) }
     var showMoveToFolderSheet by remember { mutableStateOf(false) }
-    var fabExpanded by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     
     val sheetState = rememberModalBottomSheetState()
@@ -262,27 +260,17 @@ fun CollectionContent(
                 onImportClick = { importLauncher.launch(arrayOf("application/json")) },
                 onExportClick = { showExportDialog = true },
                 onShowViewSettings = { showViewSettings = true },
-                onShowManageFolders = { showManageFolders = true },
-                onShowMoveToFolder = { showMoveToFolderSheet = true }
+                onShowSortFilter = { showSortFilterSheet = true },
+                onShowMoveToFolder = { showMoveToFolderSheet = true },
+                onShowManageFolders = { showManageFolders = true }
             )
         },
         floatingActionButton = {
             if (!uiState.isSelectionMode) {
-                CollectionFab(
-                    expanded = fabExpanded,
-                    onToggle = { fabExpanded = !fabExpanded },
-                    onAddFolder = {
-                        showFolderDialog = FolderEntity(name = "")
-                        fabExpanded = false
-                    },
-                    onAddManual = {
-                        showAddCardModal = true
-                        fabExpanded = false
-                    },
-                    onScan = {
-                        onNavigateToScanner()
-                        fabExpanded = false
-                    }
+                AddScanFabMenu(
+                    onAddCard = { showAddCardModal = true },
+                    onScan = onNavigateToScanner,
+                    addLabel = "Add"
                 )
             }
         }
@@ -303,16 +291,13 @@ fun CollectionContent(
 
             StickyControls(
                 viewMode = uiState.viewMode,
-                sortMode = uiState.sortMode,
-                filterSettings = uiState.filterSettings,
                 folders = uiState.folders,
                 selectedFolderId = uiState.selectedFolderId,
                 totalQuantity = uiState.totalQuantity,
                 totalValue = uiState.totalValue,
                 pokedexCollectedCount = uiState.pokedexEntries.count { it.isCollected },
                 pokedexTotalCount = uiState.pokedexEntries.size,
-                onEvent = onEvent,
-                onSortClick = { showSortFilterSheet = true }
+                onEvent = onEvent
             )
 
             Box(modifier = Modifier.fillMaxSize()) {
@@ -460,7 +445,11 @@ fun CollectionContent(
                     showFolderDialog = folder
                     showManageFolders = false
                 },
-                onDeleteFolder = { onEvent(CollectionEvent.OnDeleteFolder(it)) }
+                onDeleteFolder = { onEvent(CollectionEvent.OnDeleteFolder(it)) },
+                onAddFolder = {
+                    showFolderDialog = FolderEntity(name = "")
+                    showManageFolders = false
+                }
             )
         }
     }
@@ -529,8 +518,9 @@ fun CollectionTopBar(
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
     onShowViewSettings: () -> Unit,
-    onShowManageFolders: () -> Unit,
-    onShowMoveToFolder: () -> Unit
+    onShowSortFilter: () -> Unit,
+    onShowMoveToFolder: () -> Unit,
+    onShowManageFolders: () -> Unit
 ) {
     if (uiState.isSelectionMode) {
         val filteredIds = uiState.filteredUserCards.map { it.details.userCard.id }.toSet()
@@ -552,8 +542,12 @@ fun CollectionTopBar(
         SearchTopBar(
             isSearchBarVisible = uiState.isSearchBarVisible,
             searchQuery = uiState.searchQuery,
+            activeFilterCount = uiState.filterSettings.activeFilterCount,
+            sortMode = uiState.sortMode,
+            sortDirection = uiState.sortDirection,
             onSearchQueryChange = { onEvent(CollectionEvent.OnSearchQueryChange(it)) },
             onToggleSearchBar = { onEvent(CollectionEvent.OnToggleSearchBar) },
+            onShowSortFilter = onShowSortFilter,
             onImportClick = onImportClick,
             onExportClick = onExportClick,
             onShowViewSettings = onShowViewSettings,
@@ -606,13 +600,30 @@ fun SelectionTopBar(
 fun SearchTopBar(
     isSearchBarVisible: Boolean,
     searchQuery: String,
+    activeFilterCount: Int,
+    sortMode: SortMode,
+    sortDirection: SortDirection,
     onSearchQueryChange: (String) -> Unit,
     onToggleSearchBar: () -> Unit,
+    onShowSortFilter: () -> Unit,
     onImportClick: () -> Unit,
     onExportClick: () -> Unit,
     onShowViewSettings: () -> Unit,
     onShowManageFolders: () -> Unit
 ) {
+    val sortCustom =
+        sortMode != SortMode.DATE_ADDED || sortDirection != SortDirection.DESCENDING
+    val filtersActive = activeFilterCount > 0 || sortCustom
+    val filterContentDescription = when {
+        activeFilterCount > 0 && sortCustom ->
+            "Sort and filter, $activeFilterCount filters active, custom sort"
+        activeFilterCount > 0 ->
+            "Sort and filter, $activeFilterCount active"
+        sortCustom ->
+            "Sort and filter, custom sort"
+        else ->
+            "Sort and filter"
+    }
     TopAppBar(
         title = {
             if (isSearchBarVisible) {
@@ -633,16 +644,36 @@ fun SearchTopBar(
                 IconButton(onClick = onToggleSearchBar) {
                     Icon(Icons.Rounded.Search, contentDescription = "Search")
                 }
+            } else {
+                IconButton(onClick = { onSearchQueryChange("") }) {
+                    Icon(Icons.Rounded.Clear, contentDescription = "Clear Search")
+                }
+            }
+            IconButton(onClick = onShowSortFilter) {
+                BadgedBox(
+                    badge = {
+                        if (filtersActive) {
+                            Badge {
+                                if (activeFilterCount > 0) {
+                                    Text("$activeFilterCount")
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        Icons.Rounded.FilterList,
+                        contentDescription = filterContentDescription
+                    )
+                }
+            }
+            if (!isSearchBarVisible) {
                 MoreOptionsMenu(
                     onShowViewSettings = onShowViewSettings,
                     onShowManageFolders = onShowManageFolders,
                     onImportClick = onImportClick,
                     onExportClick = onExportClick
                 )
-            } else {
-                IconButton(onClick = { onSearchQueryChange("") }) {
-                    Icon(Icons.Rounded.Clear, contentDescription = "Clear Search")
-                }
             }
         },
         windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Top)
@@ -715,7 +746,7 @@ fun MoreOptionsMenu(
             DropdownMenuItem(
                 text = { Text("Manage Folders") },
                 onClick = { showMenu = false; onShowManageFolders() },
-                leadingIcon = { Icon(Icons.Rounded.FolderCopy, null) }
+                leadingIcon = { Icon(Icons.Rounded.Folder, null) }
             )
             HorizontalDivider()
             DropdownMenuItem(
@@ -727,73 +758,6 @@ fun MoreOptionsMenu(
                 text = { Text("Export Collection") },
                 onClick = { showMenu = false; onExportClick() },
                 leadingIcon = { Icon(Icons.Rounded.FileUpload, null) }
-            )
-        }
-    }
-}
-
-@Composable
-fun CollectionFab(
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    onAddFolder: () -> Unit,
-    onAddManual: () -> Unit,
-    onScan: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        val rotation by animateFloatAsState(
-            targetValue = if (expanded) 45f else 0f,
-            label = "FabRotation"
-        )
-
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically()
-        ) {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ExtendedFloatingActionButton(
-                    onClick = onAddFolder,
-                    icon = { Icon(Icons.Rounded.CreateNewFolder, contentDescription = null) },
-                    text = { Text("Folder") },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-                )
-                ExtendedFloatingActionButton(
-                    onClick = onAddManual,
-                    icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
-                    text = { Text("Add") },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-                )
-                ExtendedFloatingActionButton(
-                    onClick = onScan,
-                    icon = { Icon(Icons.Rounded.QrCodeScanner, contentDescription = null) },
-                    text = { Text("Scan") },
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-                )
-            }
-        }
-
-        FloatingActionButton(
-            onClick = onToggle,
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            shape = CircleShape
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Add,
-                contentDescription = if (expanded) "Close Menu" else "Open Menu",
-                modifier = Modifier.graphicsLayer { rotationZ = rotation }
             )
         }
     }
@@ -881,12 +845,22 @@ fun FolderList(title: String, folders: List<FolderEntity>, onFolderClick: (Long)
 fun ManageFoldersContent(
     folders: List<FolderEntity>,
     onEditFolder: (FolderEntity) -> Unit,
-    onDeleteFolder: (FolderEntity) -> Unit
+    onDeleteFolder: (FolderEntity) -> Unit,
+    onAddFolder: () -> Unit = {}
 ) {
     Column(modifier = Modifier
         .padding(16.dp)
         .navigationBarsPadding()) {
-        Text("Manage Folders", style = MaterialTheme.typography.titleLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Manage Folders", style = MaterialTheme.typography.titleLarge)
+            IconButton(onClick = onAddFolder) {
+                Icon(Icons.Rounded.Add, contentDescription = "Add folder")
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
         LazyColumn {
             items(folders, key = { it.id }) { folder ->

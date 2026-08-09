@@ -22,11 +22,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CatchingPokemon
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -34,7 +32,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -72,6 +69,7 @@ import com.mrhayami.vaultio.data.remote.TcgDexCard
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.collection.CollectionEvent
 import com.mrhayami.vaultio.ui.collection.components.AddCardModal
+import com.mrhayami.vaultio.ui.components.AddScanFabMenu
 import com.mrhayami.vaultio.ui.components.ConfirmDestructiveDialog
 import com.mrhayami.vaultio.ui.components.EmptyState
 import com.mrhayami.vaultio.ui.components.MicroCaptureFanfare
@@ -127,13 +125,11 @@ fun WishlistScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddModal = true },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Rounded.Add, contentDescription = "Add to Wishlist")
-            }
+            AddScanFabMenu(
+                onAddCard = { showAddModal = true },
+                onScan = onNavigateToScanner,
+                addLabel = "Add"
+            )
         }
     ) { padding ->
         if (uiState.isLoading) {

@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -223,11 +224,10 @@ fun ScannerScreen(
         viewModel.onEvent(ScannerEvent.PermissionResult(cameraPermissionState.status.isGranted))
     }
 
-    LaunchedEffect(uiState.showSaveSuccess) {
-        if (uiState.showSaveSuccess) {
-            Toast.makeText(context, "Card added to collection", Toast.LENGTH_SHORT).show()
-            viewModel.onEvent(ScannerEvent.ConsumeSaveSuccess)
-        }
+    LaunchedEffect(uiState.successMessage) {
+        val message = uiState.successMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        viewModel.onEvent(ScannerEvent.ConsumeSuccessMessage)
     }
 
     LaunchedEffect(uiState.errorMessage) {
@@ -241,8 +241,16 @@ fun ScannerScreen(
 
     val onEventStable = remember(viewModel) { { event: ScannerEvent -> viewModel.onEvent(event) } }
 
+    // Zero content insets so the preview draws edge-to-edge; chrome already
+    // applies statusBarsPadding / navigationBarsPadding where needed.
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0.dp),
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.navigationBarsPadding()
+            )
+        },
         containerColor = Color.Transparent
     ) { padding ->
         ScannerContent(
@@ -943,8 +951,20 @@ fun ScannerContent(
                 MetadataModal(
                     card = uiState.selectedCard,
                     folders = uiState.folders,
+                    isSaving = uiState.isSaving,
                     onConfirm = { q, c, p, f, folderIds ->
                         onEvent(ScannerEvent.SaveScannedCard(uiState.selectedCard, q, c, p, f, folderIds))
+                    },
+                    onWishlistConfirm = { q, c, p, f ->
+                        onEvent(
+                            ScannerEvent.AddScannedToWishlist(
+                                card = uiState.selectedCard,
+                                quantity = q,
+                                condition = c,
+                                printing = p,
+                                finish = f
+                            )
+                        )
                     },
                     onBack = { onEvent(ScannerEvent.CardSelected(null)) }
                 )

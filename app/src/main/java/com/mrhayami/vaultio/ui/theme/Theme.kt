@@ -14,7 +14,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -108,6 +107,11 @@ fun VaultioTheme(
     themeBrand: ThemeBrand = ThemeBrand.DEFAULT,
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
+    /**
+     * Camera / other immersive surfaces: keep system bars transparent and use
+     * light (white) icons so they stay legible over dark preview content.
+     */
+    immersiveContent: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when (themeBrand) {
@@ -136,8 +140,12 @@ fun VaultioTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.surface.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            // Bar colors stay transparent via Activity.enableEdgeToEdge(); only
+            // icon contrast is adjusted here (and for immersive camera routes).
+            val controller = WindowCompat.getInsetsController(window, view)
+            val lightIcons = !immersiveContent && !darkTheme
+            controller.isAppearanceLightStatusBars = lightIcons
+            controller.isAppearanceLightNavigationBars = lightIcons
         }
     }
 
