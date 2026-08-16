@@ -6,8 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Describe the problem first, then the idea. Scanner / pricing / grading requests should note
-        offline vs online expectations.
+        Describe the problem first, then the idea. Scanner / pricing / grading / update requests
+        should note offline vs online expectations.
   - type: dropdown
     id: area
     attributes:
@@ -21,6 +21,7 @@ body:
         - Stats
         - AI grading
         - Settings / theme
+        - In-app updates
         - Navigation / onboarding
         - Other
     validations:

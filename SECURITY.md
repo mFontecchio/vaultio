@@ -24,3 +24,5 @@ and coordinate disclosure when a fix is ready.
   BuildConfig.
 - Release / nightly signing credentials live in GitHub Actions secrets or a local gitignored
   `keystore.properties` for maintainers.
+- Sideload in-app updates download APKs from this repo’s GitHub Releases and verify package
+  signature + `versionCode` before prompting install. Play-installed builds do not use that path.

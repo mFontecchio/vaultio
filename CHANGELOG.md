@@ -11,6 +11,9 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ### Added
 
+- In-app updates for GitHub-distributed **release** and **nightly** builds (Settings → About;
+  optional automatic check & download). Play Store installs continue to update through Play.
+  Downloaded APKs are signature- and version-checked before install.
 - Wishlist as a primary bottom-navigation tab with Add / Scan speed dial and clearer empty states.
 - Shared Add / Scan FAB menu on Collection and Wishlist (animated + → × with staggered actions).
 - Shared `EmptyState` and `ConfirmDestructiveDialog` components for consistent empty and destructive flows.

@@ -23,7 +23,7 @@
 
 ## Notes for reviewers
 
-<!-- Architecture, UX, Room version bump, navigation, or risk areas. -->
+<!-- Architecture, UX, Room version bump, navigation, update channel, or risk areas. -->
 
 ## Checklist
 

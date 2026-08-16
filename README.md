@@ -44,6 +44,8 @@ shipping your collection to the cloud.
 - **Pricing** — TCGDex primary; [JustTCG](https://justtcg.com/) fallback and vintage printings
 - **Stats** — collection value history and distribution charts
 - **AI grading** — on-device estimates via Gemini Nano / ML Kit GenAI (not a PSA/BGS substitute)
+- **In-app updates** — GitHub-distributed release / nightly APKs can check and download from
+  Settings → About (Play installs update through Play Store; debug has no update channel)
 - **Theming** — Material 3, dynamic color, Pokémon energy-type brands
 
 ## Screenshots
@@ -70,8 +72,9 @@ flow; Scanner and Grading are stills. Source `.webm` clips are also resized to *
 | **Nightly** | Rolling [Nightly](https://github.com/mFontecchio/vaultio/releases/tag/nightly) prerelease | `vaultio-nightly.apk` |
 | **Debug** | [Actions → CI](https://github.com/mFontecchio/vaultio/actions/workflows/ci.yml) artifacts (`vaultio-debug`) | `vaultio-debug.apk` |
 
-CI runs unit tests and `assembleDebug` on pulls and pushes to the default branch. Pushing a `v*` tag
-builds a signed release APK. The Nightly workflow (schedule + manual) publishes a signed nightly APK.
+CI runs unit tests and `assembleDebug` on pulls and pushes to `master` / `main`. Pushing a `v*` tag
+builds a signed release APK. The Nightly workflow (weekly Monday + manual) publishes a signed nightly
+APK.
 
 ### In-app updates
 
@@ -115,8 +118,9 @@ the app’s control.
 | Charts | Vico |
 | Background | WorkManager |
 | Images | Coil |
+| Sideload updates | GitHub Releases API (release / nightly only) |
 
-Single Gradle module: `:app`.
+Single Gradle module: `:app`. Default branch: `master`.
 
 ### Build types
 
@@ -151,15 +155,17 @@ On macOS / Linux, use `./gradlew` instead of `gradlew.bat`.
 app/src/main/java/com/mrhayami/vaultio/
 ├── MainActivity.kt              # Navigation host
 ├── VaultioApplication.kt        # Manual dependency wiring
-├── data/                        # Room, APIs, repository, workers, utils
+├── data/                        # Room, APIs, repository, workers, utils, updates
 └── ui/                          # Feature packages (collection, scanner, wishlist, …)
 ```
 
 Notable packages:
 
 - `data/repository/VaultioRepository.kt` — catalog, collection, wishlist, pricing hub
+- `data/repository/AppUpdateRepository.kt` + `data/update/` — GitHub sideload updates
 - `ui/scanner/` — camera analyzer, geometry, modes, bulk / page flows
 - `ui/collection/`, `ui/wishlist/`, `ui/stats/`, `ui/grading/`, `ui/settings/`
+- Bottom nav is Collection / Wishlist / Stats / Settings; scanner is opened from Add/Scan actions
 
 ### Architecture notes
 
@@ -172,8 +178,10 @@ Notable packages:
 
 - Collection and grading images stay on-device; grading uses on-device models where available
 - Catalog / pricing traffic goes to TCGDex and (optionally) JustTCG
+- Sideload release / nightly builds may query GitHub Releases for updates; Play installs do not
 - JustTCG keys are Settings-only (DataStore); never commit keys or keystores
-- Camera and Internet permissions are required for scanning and online enrichment
+- Camera and Internet are required for scanning and online enrichment. Sideload updates also use
+  install-packages and notification permissions
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 

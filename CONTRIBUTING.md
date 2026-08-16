@@ -12,14 +12,14 @@ will not be tolerated.
 
 - **Bug reports** — use the Bug report issue form
 - **Feature ideas** — use the Feature request issue form
-- **Code / docs** — open a PR against the active development branch
+- **Code / docs** — open a PR against `master` (or the feature branch you were asked to target)
 - **Questions** — prefer GitHub Discussions (if enabled) or a clearly titled issue; check the
   [README](README.md) first
 
 ## Development setup
 
 1. Fork and clone the repo
-2. Open in Android Studio (JDK 11+) or sync with Gradle from the CLI
+2. Open in Android Studio (JDK 11+ locally; CI uses JDK 17) or sync with Gradle from the CLI
 3. Optionally paste a JustTCG API key in **Settings** (DataStore). Never commit API keys,
    `local.properties`, keystores, or `keystore.properties`
 4. Run a debug build and, before PR, unit tests:
@@ -47,7 +47,7 @@ CI must pass on your PR (`test` + `build-debug` workflows).
 ## Pull request process
 
 1. Open an issue first for larger features or breaking changes (optional for small fixes)
-2. Create a branch from the latest default / feature branch you were asked to target
+2. Create a branch from the latest `master` / feature branch you were asked to target
 3. Keep commits readable; squash is fine if the history is noisy
 4. Fill out the pull request template
 5. Ensure the app builds and relevant tests pass; wait for CI
@@ -58,7 +58,7 @@ CI must pass on your PR (`test` + `build-debug` workflows).
 - [ ] Builds (`assembleDebug` at minimum)
 - [ ] `testDebugUnitTest` passes when code under test changed
 - [ ] CI green on the PR
-- [ ] Room / prefs / nav changes documented in the PR body
+- [ ] Room / prefs / nav / update-channel changes documented in the PR body
 - [ ] No secrets or generated junk in the diff
 
 ## Issue guidelines
@@ -67,7 +67,7 @@ CI must pass on your PR (`test` + `build-debug` workflows).
 vs actual behavior, and logs/screenshots when useful.
 
 **Features:** describe the problem, proposed solution, and alternatives you considered. Scanner,
-pricing, and grading ideas should note offline vs online expectations.
+pricing, grading, and in-app update ideas should note offline vs online expectations.
 
 ## License
 

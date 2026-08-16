@@ -11,8 +11,8 @@ body:
     id: version
     attributes:
       label: App version
-      description: Settings → About version string, or the APK build (e.g. 1.2.7-debug).
-      placeholder: "1.2.7-debug"
+      description: Settings → About version string, or the APK build (e.g. 1.2.8-debug).
+      placeholder: "1.2.8-debug"
     validations:
       required: true
   - type: dropdown
@@ -54,6 +54,7 @@ body:
         - Stats
         - AI grading
         - Settings / theme
+        - In-app updates
         - Navigation / onboarding
         - Other
     validations:
