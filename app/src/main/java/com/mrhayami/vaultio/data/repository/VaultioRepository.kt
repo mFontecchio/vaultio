@@ -16,6 +16,7 @@ import com.mrhayami.vaultio.data.local.ApiUsageDao
 import com.mrhayami.vaultio.data.local.ApiUsageEntity
 import com.mrhayami.vaultio.data.local.CardDao
 import com.mrhayami.vaultio.data.local.CardEntity
+import com.mrhayami.vaultio.data.local.mergedOnto
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.CollectionExportDto
 import com.mrhayami.vaultio.data.local.CollectionSnapshotDao
@@ -255,7 +256,10 @@ class VaultioRepository(
     suspend fun downloadSet(setId: String) {
         runCatching {
             val detail = tcgDexApi.getSetDetail(setId)
-            val cardEntities = detail.cards.map { it.toEntity(setId) }
+            val existingById = cardDao.getCardsBySetSync(setId).associateBy { it.id }
+            val cardEntities = detail.cards.map { brief ->
+                brief.toEntity(setId).mergedOnto(existingById[brief.id])
+            }
             cardDao.insertCards(cardEntities)
             setDao.updateDownloadStatus(setId, true)
             
@@ -263,6 +267,7 @@ class VaultioRepository(
             if (currentSet?.logo?.contains("http") == false) {
                 refreshSets() 
             }
+            repairReferencedCatalogStubs(setId)
         }.onFailure { e ->
             Log.e(TAG, "Error download set $setId", e)
         }
@@ -401,8 +406,13 @@ class VaultioRepository(
         cardDao.insertCards(listOf(cardEntity))
     }
 
-    private suspend fun backfillMissingDexIdsForOwnedCards() {
-        val missingIds = cardDao.getOwnedCardIdsMissingDex()
+    /**
+     * Re-fetches full card detail for owned or wishlisted rows that a set download
+     * replaced with a brief stub, or that are Pokémon still missing a dex id.
+     * Pass [setId] to limit the scan to one set; null scans the whole catalog.
+     */
+    suspend fun repairReferencedCatalogStubs(setId: String? = null) {
+        val missingIds = cardDao.getReferencedStubCardIds(setId)
         for (cardId in missingIds) {
             runCatching { ensureCatalogCardWithDex(cardId) }
                 .onFailure { Log.e(TAG, "Failed to backfill dex for $cardId", it) }
@@ -903,7 +913,7 @@ class VaultioRepository(
                 }
             }
 
-            backfillMissingDexIdsForOwnedCards()
+            repairReferencedCatalogStubs()
         }
     }
 

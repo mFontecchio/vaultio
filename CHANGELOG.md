@@ -7,6 +7,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-10-18
+
+### Fixed
+
+- Deleting and re-downloading a set no longer wipes dex, type, category, and scanner data for cards already in the library or wishlist. Owned and wishlisted catalog rows are kept on delete, merged on download, and repaired on the next launch if they were already overwritten.
+
 ## [1.2.8] - 2026-08-09
 
 ### Added
@@ -52,6 +58,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 - On-device AI grading (Gemini Nano / ML Kit GenAI)
 - Dependabot, CodeQL, and updated security reporting
 
-[Unreleased]: https://github.com/mFontecchio/vaultio/compare/v1.2.8...HEAD
+[Unreleased]: https://github.com/mFontecchio/vaultio/compare/v1.2.9...HEAD
+[1.2.9]: https://github.com/mFontecchio/vaultio/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/mFontecchio/vaultio/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/mFontecchio/vaultio/releases/tag/v1.2.7

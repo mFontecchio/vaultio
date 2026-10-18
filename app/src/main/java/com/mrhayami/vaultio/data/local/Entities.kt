@@ -44,6 +44,26 @@ data class CardEntity(
     val lastUpdated: Long = System.currentTimeMillis()
 )
 
+/**
+ * Fills null catalog fields from [existing] so a brief set-download stub cannot
+ * wipe dex, type, or scanner data already stored for this card.
+ * [CardEntity.pHash] always stays with the stored row.
+ */
+fun CardEntity.mergedOnto(existing: CardEntity?): CardEntity {
+    val prior = existing ?: return this
+    return copy(
+        image = image ?: prior.image,
+        rarity = rarity ?: prior.rarity,
+        category = category ?: prior.category,
+        types = types ?: prior.types,
+        dexId = dexId ?: prior.dexId,
+        dexIds = dexIds ?: prior.dexIds,
+        pokemonName = pokemonName ?: prior.pokemonName,
+        tcgPlayerId = tcgPlayerId ?: prior.tcgPlayerId,
+        pHash = prior.pHash
+    )
+}
+
 @Entity(
     tableName = "user_cards",
     indices = [

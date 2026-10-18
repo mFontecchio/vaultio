@@ -59,6 +59,9 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE setId = :setId")
     fun getCardsBySet(setId: String): Flow<List<CardEntity>>
 
+    @Query("SELECT * FROM cards WHERE setId = :setId")
+    suspend fun getCardsBySetSync(setId: String): List<CardEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCards(cards: List<CardEntity>): List<Long>
 
@@ -88,13 +91,22 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE pokemonName = :name COLLATE NOCASE AND dexId IS NOT NULL LIMIT 5")
     suspend fun getCardsByPokemonName(name: String): List<CardEntity>
 
-    @Query("DELETE FROM cards WHERE setId = :setId AND id NOT IN (SELECT cardId FROM user_cards)")
+    @Query("""
+        DELETE FROM cards
+        WHERE setId = :setId
+        AND id NOT IN (SELECT cardId FROM user_cards)
+        AND id NOT IN (SELECT cardId FROM wishlist_cards)
+    """)
     suspend fun deleteCardsBySet(setId: String): Int
 
     @Query("UPDATE cards SET pHash = :pHash WHERE id = :cardId")
     suspend fun updateCardPHash(cardId: String, pHash: Long)
 
-    @Query("DELETE FROM cards WHERE id NOT IN (SELECT cardId FROM user_cards)")
+    @Query("""
+        DELETE FROM cards
+        WHERE id NOT IN (SELECT cardId FROM user_cards)
+        AND id NOT IN (SELECT cardId FROM wishlist_cards)
+    """)
     suspend fun deleteAllUnusedCards(): Int
     
     @Query("SELECT COUNT(*) FROM cards")
@@ -103,13 +115,24 @@ interface CardDao {
     @Query("SELECT COUNT(*) FROM cards")
     fun observeCardCount(): Flow<Int>
 
-    /** Distinct owned catalog cards still missing National Dex metadata. */
+    /**
+     * Owned or wishlisted catalog rows that are set-download stubs, or Pokémon
+     * rows still missing a National Dex id. [setId] null scans the whole catalog.
+     */
     @Query("""
         SELECT DISTINCT c.id FROM cards c
-        INNER JOIN user_cards uc ON uc.cardId = c.id
-        WHERE c.dexId IS NULL
+        WHERE (:setId IS NULL OR c.setId = :setId)
+        AND c.id IN (
+            SELECT cardId FROM user_cards
+            UNION
+            SELECT cardId FROM wishlist_cards
+        )
+        AND (
+            c.category IS NULL
+            OR (c.dexId IS NULL AND c.category IN ('Pokemon', 'Pokémon'))
+        )
     """)
-    suspend fun getOwnedCardIdsMissingDex(): List<String>
+    suspend fun getReferencedStubCardIds(setId: String?): List<String>
 }
 
 @Dao
