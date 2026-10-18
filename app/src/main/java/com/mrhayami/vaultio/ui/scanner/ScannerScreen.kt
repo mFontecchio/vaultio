@@ -618,6 +618,38 @@ fun ScannerContent(
                     
                     Spacer(modifier = Modifier.weight(1f))
 
+                    Text(
+                        text = when (uiState.eraOverride) {
+                            ScannerEraOverride.AUTO -> "Auto"
+                            ScannerEraOverride.MODERN -> "Modern"
+                            ScannerEraOverride.VINTAGE -> "Vintage"
+                        },
+                        color = if (uiState.eraOverride == ScannerEraOverride.AUTO) {
+                            Color.White
+                        } else {
+                            MaterialTheme.colorScheme.onPrimary
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(
+                                if (uiState.eraOverride == ScannerEraOverride.AUTO) {
+                                    Color.Black.copy(alpha = 0.5f)
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                }
+                            )
+                            .clickable {
+                                val next = when (uiState.eraOverride) {
+                                    ScannerEraOverride.AUTO -> ScannerEraOverride.MODERN
+                                    ScannerEraOverride.MODERN -> ScannerEraOverride.VINTAGE
+                                    ScannerEraOverride.VINTAGE -> ScannerEraOverride.AUTO
+                                }
+                                onEvent(ScannerEvent.SetEraOverride(next))
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                    )
+
                     IconButton(
                         onClick = { onEvent(ScannerEvent.ToggleTorch) },
                         colors = IconButtonDefaults.iconButtonColors(

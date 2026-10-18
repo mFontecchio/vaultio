@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.mrhayami.vaultio.ui.scanner.ScannerEraOverride
 import com.mrhayami.vaultio.ui.collection.GridSettings
 import com.mrhayami.vaultio.ui.collection.ListSettings
 import com.mrhayami.vaultio.ui.collection.PokedexSettings
@@ -61,6 +62,7 @@ class UserPreferencesRepository(context: Context) {
         val BULK_SCAN_PRINTING = stringPreferencesKey("bulk_scan_printing")
         val BULK_SCAN_FINISH = stringPreferencesKey("bulk_scan_finish")
         val BULK_SCAN_FOLDER_IDS = stringPreferencesKey("bulk_scan_folder_ids")
+        val SCANNER_ERA_OVERRIDE = stringPreferencesKey("scanner_era_override")
 
         val AUTO_UPDATE_ENABLED = booleanPreferencesKey("auto_update_enabled")
         val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
@@ -256,6 +258,21 @@ class UserPreferencesRepository(context: Context) {
     suspend fun setBulkScanFolderIds(ids: List<Long>) {
         dataStore.edit {
             it[PreferencesKeys.BULK_SCAN_FOLDER_IDS] = ids.joinToString(",")
+        }
+    }
+
+    val scannerEraOverride: Flow<ScannerEraOverride> = dataStore.data.map {
+        val stored = it[PreferencesKeys.SCANNER_ERA_OVERRIDE] ?: ScannerEraOverride.AUTO.name
+        try {
+            ScannerEraOverride.valueOf(stored)
+        } catch (e: Exception) {
+            ScannerEraOverride.AUTO
+        }
+    }
+
+    suspend fun setScannerEraOverride(override: ScannerEraOverride) {
+        dataStore.edit {
+            it[PreferencesKeys.SCANNER_ERA_OVERRIDE] = override.name
         }
     }
 

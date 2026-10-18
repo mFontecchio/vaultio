@@ -52,6 +52,9 @@ interface SetDao {
 
     @Query("SELECT * FROM sets WHERE id = :setId")
     suspend fun getSetById(setId: String): SetEntity?
+
+    @Query("SELECT * FROM sets WHERE id IN (:setIds)")
+    suspend fun getSetsByIds(setIds: List<String>): List<SetEntity>
 }
 
 @Dao
@@ -83,6 +86,17 @@ interface CardDao {
         AND (sets.totalCards = :total OR sets.officialCards = :total)
     """)
     suspend fun getCardsByLocalIdAndSetTotal(localId: String, total: Int): List<CardEntity>
+
+    @Query("SELECT * FROM cards WHERE localId IN (:localIds)")
+    suspend fun getCardsByLocalIds(localIds: List<String>): List<CardEntity>
+
+    @Query("""
+        SELECT cards.* FROM cards
+        INNER JOIN sets ON cards.setId = sets.id
+        WHERE cards.localId IN (:localIds)
+        AND (sets.totalCards = :total OR sets.officialCards = :total)
+    """)
+    suspend fun getCardsByLocalIdsAndSetTotal(localIds: List<String>, total: Int): List<CardEntity>
 
     @Query("SELECT * FROM cards WHERE name LIKE '%' || :name || '%'")
     suspend fun searchCardsByName(name: String): List<CardEntity>

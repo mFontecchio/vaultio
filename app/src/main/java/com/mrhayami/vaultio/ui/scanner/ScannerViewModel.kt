@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mrhayami.vaultio.data.PHash
+import com.mrhayami.vaultio.data.VintageSets
 import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
@@ -32,7 +33,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** One frame's worth of extracted OCR data used by the consensus buffer. */
-private data class FrameDetection(val number: String?, val total: String?, val name: String?, val pHash: Long? = null)
+private data class FrameDetection(
+    val number: String?,
+    val total: String?,
+    val name: String?,
+    val pHash: Long? = null,
+    val era: CardEra = CardEra.MODERN
+)
 
 @Immutable
 data class ScannerUiState(
@@ -67,7 +74,8 @@ data class ScannerUiState(
     val focusPoint: Offset? = null,
     val recognizerUnavailable: Boolean = false,
     val isCatalogEmpty: Boolean = false,
-    val showEmptyCatalogHint: Boolean = false
+    val showEmptyCatalogHint: Boolean = false,
+    val eraOverride: ScannerEraOverride = ScannerEraOverride.AUTO
 ) {
     val isBulkMode: Boolean get() = activeMode == ScannerMode.BULK
     val isGradingMode: Boolean get() = activeMode == ScannerMode.GRADING
@@ -149,6 +157,7 @@ sealed interface ScannerEvent {
     data object DismissEmptyCatalogHint : ScannerEvent
     data object OpenSetDownloads : ScannerEvent
     data object ClearErrorMessage : ScannerEvent
+    data class SetEraOverride(val override: ScannerEraOverride) : ScannerEvent
 }
 
 class ScannerViewModel(
@@ -207,25 +216,16 @@ class ScannerViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            repository.userPreferencesRepository.scannerEraOverride.collect { override ->
+                val changed = _uiState.value.eraOverride != override
+                _uiState.update { it.copy(eraOverride = override) }
+                if (changed) {
+                    synchronized(detectionHistory) { detectionHistory.clear() }
+                }
+            }
+        }
     }
-
-    // Pokemon Card Layout Analysis: Regex to capture varied collector number formats:
-    // 1. "Number / Total" (e.g. 123 / 191) - Primary format
-    private val numberTotalRegex = Regex("""([A-Z0-9]{1,5})\s*/\s*([A-Z0-9]{1,5})""")
-
-    // 2. Set Prefix + Number (e.g. SWSH123 or XY 123) - Secondary format
-    private val setNumberRegex = Regex("""([A-Z]{1,4})\s*(\d{1,4})""")
-
-    // 3. Fallback: Standalone number (3-5 digits) - Tertiary format
-    private val standaloneNumberRegex = Regex("""(\d{3,5})""")
-    
-    private val noiseWords = setOf(
-        "HP", "STAGE", "BASIC", "LEVEL", "WEAKNESS", "RESISTANCE", "RETREAT", 
-        "POKEMON", "DRAGON", "PULSE", "SPIRAL", "BURST", "RAPID", "STRIKE", 
-        "DISCARD", "ENERGY", "DAMAGE", "RULE", "ABILITY", "TRAINER", "ITEM", 
-        "SUPPORTER", "STADIUM", "ATTACK", "VRULE", "KNOCKED", "VMAX", "VSTAR",
-        "EX", "GX", "BREAK", "MEGA", "TAG TEAM", "PRISM", "RADIANT", "TERA"
-    )
 
     fun onEvent(event: ScannerEvent) {
         when (event) {
@@ -377,6 +377,11 @@ class ScannerViewModel(
                     _effect.send(ScannerEffect.NavigateToSetDownloads)
                 }
             }
+            is ScannerEvent.SetEraOverride -> {
+                viewModelScope.launch {
+                    repository.userPreferencesRepository.setScannerEraOverride(event.override)
+                }
+            }
         }
     }
 
@@ -426,190 +431,74 @@ class ScannerViewModel(
         _uiState.update { it.copy(isGlareDetected = isGlareDetected) }
 
         viewModelScope.launch(defaultDispatcher) {
-            val nameCandidates = lines
-                .filter {
-                    (it.boundingBox?.top?.toFloat() ?: Float.MAX_VALUE) / it.imageHeight < 0.30f
-                }
-                .sortedBy { it.boundingBox?.top ?: Int.MAX_VALUE }
-                .take(3)
-            var bestName: String? = null
-            for (line in nameCandidates) {
-                val cleaned = cleanCardName(line.text)
-                if (cleaned.length >= 3) {
-                    bestName = cleaned
-                    break
-                }
-            }
-
-            var bestLocalId: String? = null
-            var bestTotal: String? = null
-            val numberCandidates = lines.filter {
-                (it.boundingBox?.centerY()?.toFloat() ?: 0f) / it.imageHeight > 0.70f
-            }
-            
-            val combinedBottomText = numberCandidates.joinToString(" ") { it.text }
-            val normalizedBottom = normalizeOcrTextForNumbers(combinedBottomText)
-
-            // Prioritized matching: Number/Total > Set Prefix + Number > Standalone Number
-            val totalMatch = numberTotalRegex.find(normalizedBottom)
-            if (totalMatch != null) {
-                bestLocalId = totalMatch.groupValues[1]
-                bestTotal = totalMatch.groupValues[2]
-            } else {
-                val setMatch = setNumberRegex.find(normalizedBottom)
-                if (setMatch != null) {
-                    bestLocalId = "${setMatch.groupValues[1]}${setMatch.groupValues[2]}"
-                } else {
-                    val standaloneMatch = standaloneNumberRegex.find(normalizedBottom)
-                    if (standaloneMatch != null) {
-                        bestLocalId = standaloneMatch.groupValues[1]
-                    }
-                }
-            }
-
-            // Validation: Ensure bestLocalId doesn't match known noise words
-            if (bestLocalId != null && noiseWords.contains(bestLocalId.uppercase())) {
-                bestLocalId = null
-            }
+            val parsed = CardTextParser.parse(lines, _uiState.value.eraOverride)
+            val bestLocalId = parsed.number
+            val bestTotal = parsed.total
+            val bestName = parsed.name
 
             synchronized(detectionHistory) {
                 if (detectionHistory.size >= 5) detectionHistory.removeFirst()
-                detectionHistory.addLast(FrameDetection(number = bestLocalId, total = bestTotal, name = bestName, pHash = pHash))
+                detectionHistory.addLast(
+                    FrameDetection(
+                        number = bestLocalId,
+                        total = bestTotal,
+                        name = bestName,
+                        pHash = pHash,
+                        era = parsed.era
+                    )
+                )
             }
 
             if (bestLocalId == null) return@launch
-            
-            val (consensusTotal, consensusName) = synchronized(detectionHistory) {
+
+            val consensus = synchronized(detectionHistory) {
                 val count = detectionHistory.count { it.number == bestLocalId }
+                if (count < 3) return@launch
 
-                // Restore stability: Require 3 frames for a solid lock.
-                val requiredFrames = 3
-                if (count < requiredFrames) {
-                    return@launch
-                }
-
-                val total = detectionHistory
-                    .filter { it.number == bestLocalId }
-                    .mapNotNull { it.total }
+                val matching = detectionHistory.filter { it.number == bestLocalId }
+                val total = matching.mapNotNull { it.total }
                     .groupingBy { it }
                     .eachCount()
                     .maxByOrNull { it.value }
                     ?.key ?: bestTotal
-
-                val name = detectionHistory
-                    .filter { it.number == bestLocalId }
-                    .mapNotNull { it.name }
+                val name = matching.mapNotNull { it.name }
                     .groupingBy { it }
                     .eachCount()
                     .maxByOrNull { it.value }
                     ?.key ?: bestName
-                total to name
+                val vintageVotes = detectionHistory.count { it.era == CardEra.VINTAGE }
+                val modernVotes = detectionHistory.count { it.era == CardEra.MODERN }
+                val era = if (vintageVotes > modernVotes) CardEra.VINTAGE else CardEra.MODERN
+                Triple(total, name, era)
             }
 
-            if (bestLocalId == lastMatchedNumber && consensusTotal == _uiState.value.detectedTotal) return@launch
+            if (bestLocalId == lastMatchedNumber && consensus.first == _uiState.value.detectedTotal) return@launch
 
             _uiState.update { it.copy(
                 detectedNumber = bestLocalId,
-                detectedTotal = consensusTotal,
-                detectedName = consensusName,
+                detectedTotal = consensus.first,
+                detectedName = consensus.second,
                 isSearching = true
             ) }
 
             searchJob?.cancel()
             searchJob = launch {
-                delay(120) // Slightly longer debounce for stability
-                searchCard(bestLocalId, consensusTotal, consensusName, pHash)
+                delay(120)
+                searchCard(bestLocalId, consensus.first, consensus.second, pHash, consensus.third)
             }
         }
     }
 
-    private fun searchCard(localId: String, totalCount: String?, name: String?, pHash: Long?) {
+    private fun searchCard(
+        localId: String,
+        totalCount: String?,
+        name: String?,
+        pHash: Long?,
+        era: CardEra
+    ) {
         viewModelScope.launch(defaultDispatcher) {
             try {
-                val numberNorm = if (localId.all { it.isDigit() }) localId.padStart(3, '0') else localId
-                var localResults = emptyList<CardEntity>()
-                val totalInt = totalCount?.toIntOrNull()
-                if (totalInt != null) {
-                    localResults = repository.searchLocalCardsWithTotal(numberNorm, totalInt)
-                }
-                
-                if (localResults.isEmpty()) {
-                    localResults = repository.searchLocalCards(numberNorm)
-                }
-
-                // If we have local candidates but multiple, try to disambiguate with pHash
-                if (localResults.size > 1) {
-                    val hashed = localResults.filter { it.pHash != null }
-                    if (hashed.isNotEmpty() && pHash != null) {
-                        val bestMatch = hashed.minByOrNull { PHash.hammingDistance(it.pHash!!, pHash) }
-                        if (bestMatch != null && PHash.hammingDistance(bestMatch.pHash!!, pHash) < 12) {
-                            localResults = listOf(bestMatch)
-                        }
-                    } else if (pHash != null) {
-                        // None have pHash locally, try to fetch and update on-the-fly for the top 2
-                        localResults.take(2).forEach { card ->
-                            if (card.image != null) {
-                                val bitmap = repository.fetchBitmapFromUrl(card.image)
-                                if (bitmap != null) {
-                                    val computed = PHash.computeHash(bitmap)
-                                    repository.updateCardPHash(card.id, computed)
-                                    // If this is a match, we can use it immediately for the next frame
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (name != null && localResults.size > 1) {
-                    val filtered = localResults.filter { card ->
-                        calculateSimilarity(card.name, name) > 0.65f
-                    }
-                    if (filtered.isNotEmpty()) localResults = filtered
-                }
-
-                val finalCandidates = if (localResults.size == 1) {
-                    localResults.map { mapToTcgDexCard(it) }
-                } else {
-                    val remoteResults = try {
-                        repository.searchTcgDexByLocalId(localId)
-                    } catch (e: Exception) {
-                        if (e is kotlinx.coroutines.CancellationException) throw e
-                        emptyList()
-                    }
-                    
-                    val all = (localResults.map { mapToTcgDexCard(it) } + remoteResults).distinctBy { it.id }
-                    
-                    var filtered = all
-                    if (totalInt != null) {
-                        filtered = all.filter { card ->
-                            val cardTotal = card.id.substringAfterLast("-").toIntOrNull()
-                            cardTotal == null || cardTotal == totalInt
-                        }
-                        if (filtered.isEmpty()) filtered = all 
-                    }
-
-                    // On-the-fly pHash for remote candidates if still ambiguous
-                    if (filtered.size > 1 && pHash != null) {
-                        for (card in filtered.take(3)) {
-                            if (card.image != null) {
-                                val bitmap = repository.fetchBitmapFromUrl(card.image)
-                                if (bitmap != null) {
-                                    val computed = PHash.computeHash(bitmap)
-                                    if (PHash.hammingDistance(computed, pHash) < 12) {
-                                        filtered = listOf(card)
-                                        repository.updateCardPHash(card.id, computed)
-                                        break
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (name != null && filtered.size > 1) {
-                        filtered = filtered.sortedByDescending { calculateSimilarity(it.name, name) }
-                    }
-                    filtered
-                }
+                val finalCandidates = findCandidates(localId, totalCount, name, pHash, era)
 
                 if (finalCandidates.size == 1) {
                     val card = finalCandidates.first()
@@ -695,29 +584,9 @@ class ScannerViewModel(
                 })
             }
 
-            val ocr = cell.ocrResult ?: ""
-            val normalizedOcr = normalizeOcrTextForNumbers(ocr)
-
-            var localId: String? = null
-            var totalCount: String? = null
-
-            val totalMatch = numberTotalRegex.find(normalizedOcr)
-            if (totalMatch != null) {
-                localId = totalMatch.groupValues[1]
-                totalCount = totalMatch.groupValues[2]
-            } else {
-                val setMatch = setNumberRegex.find(normalizedOcr)
-                if (setMatch != null) {
-                    localId = "${setMatch.groupValues[1]}${setMatch.groupValues[2]}"
-                } else {
-                    val standaloneMatch = standaloneNumberRegex.find(normalizedOcr)
-                    if (standaloneMatch != null) {
-                        localId = standaloneMatch.groupValues[1]
-                    }
-                }
-            }
-
-            val name = cleanCardName(ocr).takeIf { it.isNotEmpty() }
+            val parsed = CardTextParser.parse(cell.ocrLines, _uiState.value.eraOverride)
+            val localId = parsed.number
+            val name = parsed.name
 
             if (localId == null) {
                 _uiState.update { state ->
@@ -729,27 +598,13 @@ class ScannerViewModel(
             }
 
             try {
-                val numberNorm =
-                    if (localId.all { it.isDigit() }) localId.padStart(3, '0') else localId
-                var localResults = repository.searchLocalCards(numberNorm)
-                val totalInt = totalCount?.toIntOrNull()
-
-                if (totalInt != null) {
-                    val withTotal = repository.searchLocalCardsWithTotal(numberNorm, totalInt)
-                    if (withTotal.isNotEmpty()) localResults = withTotal
-                }
-
-                val finalCandidates = if (localResults.size == 1) {
-                    localResults.map { mapToTcgDexCard(it) }
-                } else {
-                    val remoteResults = try {
-                        repository.searchTcgDexByLocalId(localId)
-                    } catch (e: Exception) {
-                        if (e is kotlinx.coroutines.CancellationException) throw e
-                        emptyList()
-                    }
-                    (localResults.map { mapToTcgDexCard(it) } + remoteResults).distinctBy { it.id }
-                }
+                val finalCandidates = findCandidates(
+                    localId,
+                    parsed.total,
+                    name,
+                    cell.pHash,
+                    parsed.era
+                )
 
                 val bestMatch = if (name != null) {
                     finalCandidates.maxByOrNull { calculateSimilarity(it.name, name) }
@@ -868,34 +723,111 @@ class ScannerViewModel(
         dexId = entity.dexId?.let { listOf(it.toInt()) }
     )
 
-    private fun normalizeOcrTextForNumbers(text: String): String {
-        return text.split(Regex("\\s+")).joinToString(" ") { token ->
-            if (token.any { it.isDigit() || it == '/' } || token.length <= 5) {
-                token.uppercase()
-                    .replace("O", "0")
-                    .replace("I", "1")
-                    .replace("L", "1")
-                    .replace("S", "5")
-                    .replace("B", "8")
-                    .replace("G", "6")
-                    .replace("D", "0")
-                    .replace("Z", "2")
-                    .replace("Q", "9")
-            } else {
-                token
+    private suspend fun findCandidates(
+        localId: String,
+        totalCount: String?,
+        name: String?,
+        pHash: Long?,
+        era: CardEra
+    ): List<TcgDexCard> {
+        val keys = CardTextParser.localIdLookupKeys(localId)
+        val totalInt = totalCount?.toIntOrNull()
+        var localResults = if (totalInt != null) {
+            repository.searchLocalCardsWithTotal(keys, totalInt)
+        } else {
+            emptyList()
+        }
+        if (localResults.isEmpty()) {
+            localResults = repository.searchLocalCards(keys)
+        }
+        localResults = localResults.preferVintage(era, totalInt) { it.setId }
+
+        if (localResults.size > 1) {
+            val hashed = localResults.filter { it.pHash != null }
+            if (hashed.isNotEmpty() && pHash != null) {
+                val bestMatch = hashed.minByOrNull { card ->
+                    PHash.hammingDistance(card.pHash ?: Long.MAX_VALUE, pHash)
+                }
+                val bestHash = bestMatch?.pHash
+                if (bestMatch != null && bestHash != null && PHash.hammingDistance(bestHash, pHash) < 12) {
+                    localResults = listOf(bestMatch)
+                }
+            } else if (pHash != null) {
+                localResults.take(2).forEach { card ->
+                    val image = card.image ?: return@forEach
+                    val bitmap = repository.fetchBitmapFromUrl(image) ?: return@forEach
+                    val computed = PHash.computeHash(bitmap)
+                    repository.updateCardPHash(card.id, computed)
+                }
             }
         }
+
+        if (name != null && localResults.size > 1) {
+            val filtered = localResults.filter { calculateSimilarity(it.name, name) > 0.65f }
+            if (filtered.isNotEmpty()) localResults = filtered
+        }
+
+        if (localResults.size == 1) {
+            return localResults.map { mapToTcgDexCard(it) }
+        }
+
+        val remoteResults = try {
+            repository.searchTcgDexByLocalId(localId)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            emptyList()
+        }
+
+        val all = (localResults.map { mapToTcgDexCard(it) } + remoteResults).distinctBy { it.id }
+        var filtered = if (totalInt != null) filterByKnownSetTotal(all, totalInt) else all
+        filtered = filtered.preferVintage(era, totalInt) { setIdOf(it) }
+
+        if (filtered.size > 1 && pHash != null) {
+            for (card in filtered.take(3)) {
+                val image = card.image ?: continue
+                val bitmap = repository.fetchBitmapFromUrl(image) ?: continue
+                val computed = PHash.computeHash(bitmap)
+                if (PHash.hammingDistance(computed, pHash) < 12) {
+                    filtered = listOf(card)
+                    repository.updateCardPHash(card.id, computed)
+                    break
+                }
+            }
+        }
+
+        if (name != null && filtered.size > 1) {
+            filtered = filtered.sortedByDescending { calculateSimilarity(it.name, name) }
+        }
+        return filtered
     }
 
-    private fun cleanCardName(text: String): String {
-        val upper = text.uppercase()
-        if (noiseWords.contains(upper.trim())) return ""
-        val prefixes = listOf("BASIC", "STAGE 1", "STAGE 2", "LEVEL")
-        var cleaned = upper
-        prefixes.forEach { cleaned = cleaned.replace(it, "") }
-        val result = cleaned.replace(Regex("[^A-Z0-9 ]"), "").trim()
-        if (result.all { it.isDigit() } || noiseWords.contains(result)) return ""
-        return result
+    private fun setIdOf(card: TcgDexCard): String = card.id.substringBeforeLast('-')
+
+    private suspend fun filterByKnownSetTotal(
+        cards: List<TcgDexCard>,
+        total: Int
+    ): List<TcgDexCard> {
+        if (cards.isEmpty()) return cards
+        val sets = repository.getSetsByIds(cards.map { setIdOf(it) }).associateBy { it.id }
+        if (sets.isEmpty()) return cards
+        val matching = cards.filter { card ->
+            val set = sets[setIdOf(card)] ?: return@filter true
+            set.totalCards == total || set.officialCards == total
+        }
+        return matching.ifEmpty { cards }
+    }
+
+    private fun <T> List<T>.preferVintage(
+        era: CardEra,
+        total: Int?,
+        setId: (T) -> String
+    ): List<T> {
+        if (era != CardEra.VINTAGE || size <= 1) return this
+        val vintage = filter { VintageSets.isVintageSet(setId(it)) }
+        val narrowed = vintage.ifEmpty { this }
+        if (total == null || narrowed.size <= 1) return narrowed
+        val byPrinted = narrowed.filter { VintageSets.printedTotalFor(setId(it)) == total }
+        return byPrinted.ifEmpty { narrowed }
     }
 
     private fun calculateSimilarity(s1: String, s2: String): Float {

@@ -308,8 +308,26 @@ class VaultioRepository(
 
     suspend fun searchLocalCards(localId: String): List<CardEntity> = cardDao.getCardsByLocalId(localId)
 
-    suspend fun searchLocalCardsWithTotal(localId: String, total: Int): List<CardEntity> = 
+    suspend fun searchLocalCards(localIds: Collection<String>): List<CardEntity> {
+        val ids = localIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (ids.isEmpty()) return emptyList()
+        return cardDao.getCardsByLocalIds(ids)
+    }
+
+    suspend fun searchLocalCardsWithTotal(localId: String, total: Int): List<CardEntity> =
         cardDao.getCardsByLocalIdAndSetTotal(localId, total)
+
+    suspend fun searchLocalCardsWithTotal(localIds: Collection<String>, total: Int): List<CardEntity> {
+        val ids = localIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (ids.isEmpty()) return emptyList()
+        return cardDao.getCardsByLocalIdsAndSetTotal(ids, total)
+    }
+
+    suspend fun getSetsByIds(setIds: Collection<String>): List<SetEntity> {
+        val ids = setIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (ids.isEmpty()) return emptyList()
+        return setDao.getSetsByIds(ids)
+    }
 
     suspend fun updateCardPHash(cardId: String, pHash: Long) = withContext(ioDispatcher) {
         cardDao.updateCardPHash(cardId, pHash)

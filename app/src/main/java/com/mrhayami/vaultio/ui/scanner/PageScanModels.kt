@@ -25,6 +25,8 @@ data class PageScanCell(
     val col: Int,
     val bitmap: Bitmap? = null,
     val ocrResult: String? = null,
+    val ocrLines: List<DetectedLine> = emptyList(),
+    val pHash: Long? = null,
     val matchedCard: TcgDexCard? = null,
     val candidates: List<TcgDexCard> = emptyList(),
     val status: PageScanCellStatus = PageScanCellStatus.IDLE,
