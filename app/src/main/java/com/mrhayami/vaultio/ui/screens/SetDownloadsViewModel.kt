@@ -32,6 +32,7 @@ class SetDownloadsViewModel(
             SetDownloadsEvent.DownloadAll -> downloadAll()
             SetDownloadsEvent.DeleteAll -> deleteAll()
             is SetDownloadsEvent.DownloadSet -> downloadSet(event.setId)
+            is SetDownloadsEvent.DownloadSeries -> downloadSeries(event.series)
             is SetDownloadsEvent.DeleteSet -> deleteSet(event.setId)
             SetDownloadsEvent.DismissError -> updateState { copy(error = null) }
         }
@@ -86,7 +87,16 @@ class SetDownloadsViewModel(
 
     private fun downloadSet(setId: String) {
         viewModelScope.launch {
-            repository.downloadSet(setId)
+            updateState { copy(downloadingSetIds = downloadingSetIds + setId) }
+            runCatching { repository.downloadSet(setId) }
+            updateState { copy(downloadingSetIds = downloadingSetIds - setId) }
+        }
+    }
+
+    private fun downloadSeries(series: String) {
+        viewModelScope.launch {
+            val remaining = state.value.remainingSets.filter { (it.series ?: "Other") == series }
+            remaining.forEach { downloadSet(it.id) }
         }
     }
 

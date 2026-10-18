@@ -137,6 +137,13 @@ private fun StatsContent(
                 mostValuableCardsSection(state.mostValuableCards, onNavigation)
             }
 
+            if (state.milestones.isNotEmpty()) {
+                item {
+                    SectionTitle("Milestones")
+                    MilestoneShelf(state.milestones)
+                }
+            }
+
             if (state.setCompletion.isNotEmpty()) {
                 setCompletionSection(state.setCompletion)
             }
@@ -351,8 +358,16 @@ private fun LazyListScope.mostValuableCardsSection(
     cards: List<CardWithValue>,
     onNavigation: (StatsEffect.Navigation) -> Unit,
 ) {
-    item { SectionTitle("Top 5 Most Valuable Cards") }
-    items(cards, key = { it.details.userCard.id }) { cardWithValue ->
+    item { SectionTitle("Top Chase Cards") }
+    item {
+        CrownJewelPodium(
+            cards = cards,
+            onCardClick = { id ->
+                onNavigation(StatsEffect.Navigation.GoToCardDetail(id))
+            }
+        )
+    }
+    items(cards.drop(3), key = { it.details.userCard.id }) { cardWithValue ->
         MostValuableCardItem(
             cardWithValue = cardWithValue
         ) {

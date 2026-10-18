@@ -11,6 +11,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,8 +77,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
@@ -93,7 +100,12 @@ import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
 import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.repository.VaultioRepository
+import com.mrhayami.vaultio.ui.components.AnimatedCounter
 import com.mrhayami.vaultio.ui.components.CardAttributeBadges
+import com.mrhayami.vaultio.ui.components.CardFlipContainer
+import com.mrhayami.vaultio.ui.components.PokemonCardBack
+import com.mrhayami.vaultio.ui.components.PriceSparkline
+import com.mrhayami.vaultio.ui.components.ThreeDCard
 import com.mrhayami.vaultio.ui.components.energyEffect
 import com.mrhayami.vaultio.ui.components.holoEffect
 import com.mrhayami.vaultio.ui.theme.VaultioPreview
@@ -133,6 +145,9 @@ fun CardDetailContent(
     var printing by remember { mutableStateOf("") }
     var finish by remember { mutableStateOf("") }
     var isInitialized by remember { mutableStateOf(false) }
+    var cardFlipped by remember { mutableStateOf(false) }
+    var inspectFullscreen by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
 
     LaunchedEffect(uiState.cardWithDetails) {
         if (uiState.cardWithDetails != null && !isInitialized) {
@@ -340,26 +355,76 @@ fun CardDetailContent(
                                 modifier = Modifier
                                     .fillMaxWidth(0.9f) // Slightly smaller width for more rotation room
                                     .aspectRatio(0.718f)
-                                    .holoEffect(
-                                        finish = finish,
-                                        show = showFinishAnims,
-                                        useGyro = true, // Enabled gyro for better tilting experience
-                                        isFullArt = isFullArt,
-                                        cornerRadius = 12.dp
-                                    )
-                                    .shimmerEffect(
-                                        show = isGold && showFinishAnims,
-                                        cornerRadius = 12.dp
-                                    )
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(
+                                            onTap = { inspectFullscreen = true },
+                                            onDoubleTap = { cardFlipped = !cardFlipped }
+                                        )
+                                    }
                             ) {
-                                AsyncImage(
-                                    model = "${card.image}/high.webp",
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(12.dp)),
-                                    contentScale = ContentScale.FillBounds
+                                CardFlipContainer(
+                                    flipped = cardFlipped,
+                                    modifier = Modifier.fillMaxSize(),
+                                    front = {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .holoEffect(
+                                                    finish = finish,
+                                                    show = showFinishAnims,
+                                                    useGyro = true,
+                                                    isFullArt = isFullArt,
+                                                    cornerRadius = 12.dp
+                                                )
+                                                .shimmerEffect(
+                                                    show = isGold && showFinishAnims,
+                                                    cornerRadius = 12.dp
+                                                )
+                                        ) {
+                                            AsyncImage(
+                                                model = "${card.image}/high.webp",
+                                                contentDescription = null,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .clip(RoundedCornerShape(12.dp)),
+                                                contentScale = ContentScale.FillBounds
+                                            )
+                                        }
+                                    },
+                                    back = {
+                                        PokemonCardBack(Modifier.fillMaxSize())
+                                    }
                                 )
+                            }
+                        }
+                    }
+
+                    if (inspectFullscreen) {
+                        Dialog(
+                            onDismissRequest = { inspectFullscreen = false },
+                            properties = DialogProperties(usePlatformDefaultWidth = false)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black)
+                                    .clickable { inspectFullscreen = false },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ThreeDCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.92f)
+                                        .aspectRatio(0.718f)
+                                ) { _, _ ->
+                                    AsyncImage(
+                                        model = "${card.image}/high.webp",
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(12.dp)),
+                                        contentScale = ContentScale.FillBounds
+                                    )
+                                }
                             }
                         }
                     }
@@ -436,11 +501,35 @@ fun CardDetailContent(
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        val priceText = remember(marketPriceValue) {
-                                            NumberFormat.getCurrencyInstance(Locale.US)
-                                                .format(marketPriceValue)
+                                        val sparklineValues = remember(currentPrice, marketPriceValue) {
+                                            when (currentPrice) {
+                                                is PriceEntity -> listOfNotNull(
+                                                    currentPrice.lowPrice,
+                                                    currentPrice.midPrice,
+                                                    currentPrice.marketPrice,
+                                                    currentPrice.highPrice
+                                                )
+                                                is VintagePriceEntity -> listOfNotNull(
+                                                    currentPrice.lowPrice,
+                                                    currentPrice.midPrice,
+                                                    currentPrice.marketPrice,
+                                                    currentPrice.highPrice
+                                                )
+                                                else -> listOf(marketPriceValue)
+                                            }
                                         }
-                                        Text(priceText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            AnimatedCounter(
+                                                value = marketPriceValue,
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            PriceSparkline(
+                                                values = sparklineValues,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
                                         Spacer(modifier = Modifier.weight(1f))
                                         IconButton(
                                             onClick = { onEvent(CardDetailEvent.RefreshPrice) },
@@ -685,7 +774,7 @@ fun CardDetailContent(
 
                                     Spacer(modifier = Modifier.height(16.dp))
 
-                                    DetailDropdown(
+                                    TactileChoiceRow(
                                         label = "Condition",
                                         value = condition,
                                         options = listOf(
@@ -695,12 +784,15 @@ fun CardDetailContent(
                                             PricingUtils.CONDITION_HP,
                                             PricingUtils.CONDITION_DMG
                                         ),
-                                        onSelected = { condition = it }
+                                        onSelected = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            condition = it
+                                        }
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    DetailDropdown(
+                                    TactileChoiceRow(
                                         label = "Printing",
                                         value = printing,
                                         options = listOf(
@@ -709,12 +801,15 @@ fun CardDetailContent(
                                             PricingUtils.PRINTING_PROMO,
                                             PricingUtils.PRINTING_1ST_EDITION
                                         ),
-                                        onSelected = { printing = it }
+                                        onSelected = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            printing = it
+                                        }
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    DetailDropdown(
+                                    TactileChoiceRow(
                                         label = "Finish",
                                         value = finish,
                                         options = listOf(
@@ -724,7 +819,10 @@ fun CardDetailContent(
                                             PricingUtils.FINISH_TEXTURED,
                                             PricingUtils.FINISH_GOLD
                                         ),
-                                        onSelected = { finish = it }
+                                        onSelected = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            finish = it
+                                        }
                                     )
 
                                     if (quantity > 1) {
@@ -901,6 +999,34 @@ fun CardDetailScreen(
         },
         onNavigateToScannerGrading = { onNavigateToScannerGrading(userCardId) }
     )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TactileChoiceRow(
+    label: String,
+    value: String,
+    options: List<String>,
+    onSelected: (String) -> Unit
+) {
+    Column {
+        Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = option == value,
+                    onClick = { onSelected(option) },
+                    label = { Text(option) },
+                    shape = CircleShape
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

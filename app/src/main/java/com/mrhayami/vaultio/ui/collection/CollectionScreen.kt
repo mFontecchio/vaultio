@@ -114,6 +114,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -330,6 +331,7 @@ fun CollectionContent(
                                 onPrimaryClick = onNavigateToScanner,
                                 secondaryLabel = "Add manually",
                                 onSecondaryClick = { showAddCardModal = true },
+                                animatedHero = true,
                                 modifier = Modifier.align(Alignment.Center)
                             )
                         }
@@ -342,6 +344,35 @@ fun CollectionContent(
                         onCardLongClick = onCardLongClick,
                         onDexClick = onDexClick
                     )
+                }
+
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = uiState.isSelectionMode,
+                    enter = androidx.compose.animation.slideInVertically { it } + fadeIn(),
+                    exit = androidx.compose.animation.slideOutVertically { it } + fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 16.dp)
+                ) {
+                    val selectedValue = uiState.filteredUserCards
+                        .filter { it.details.userCard.id in uiState.selectedIds }
+                        .sumOf { it.price * it.details.userCard.quantity }
+                    Card(
+                        shape = CircleShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    ) {
+                        Text(
+                            text = "${uiState.selectedIds.size} selected · $${
+                                String.format(java.util.Locale.US, "%.2f", selectedValue)
+                            }",
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

@@ -24,6 +24,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -163,6 +164,8 @@ import com.mrhayami.vaultio.data.repository.VaultioRepository
 import com.mrhayami.vaultio.ui.components.CardAttributeBadges
 import com.mrhayami.vaultio.ui.components.DropdownSelector
 import com.mrhayami.vaultio.ui.components.MetadataModal
+import com.mrhayami.vaultio.ui.components.MicroCaptureFanfare
+import com.mrhayami.vaultio.ui.components.TargetLockReticle
 import com.mrhayami.vaultio.ui.theme.VaultioPreview
 import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import kotlinx.collections.immutable.persistentListOf
@@ -315,6 +318,11 @@ fun ScannerContent(
     modifier: Modifier = Modifier
 ) {
     val onEventStable = remember(onEvent) { onEvent }
+    val haptic = LocalHapticFeedback.current
+    val locked = uiState.autoSelectedCard != null || uiState.priceCheckInfo != null
+    LaunchedEffect(locked) {
+        if (locked) haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+    }
 
     val fabOffset by animateDpAsState(
         targetValue = when {
@@ -377,6 +385,10 @@ fun ScannerContent(
                             isPriceCheckMode = uiState.isPriceCheckMode,
                             isTargetDetected = uiState.autoSelectedCard != null || uiState.priceCheckInfo != null,
                             focusPoint = uiState.focusPoint
+                        )
+                        TargetLockReticle(
+                            locked = uiState.autoSelectedCard != null || uiState.priceCheckInfo != null,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
 
@@ -931,7 +943,7 @@ fun ScannerContent(
                 activeMode = uiState.activeMode,
                 onModeSelected = { onEvent(ScannerEvent.SelectMode(it)) },
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
+                    .align(Alignment.BottomCenter)
                     .padding(16.dp)
                     .padding(bottom = fabOffset)
                     .navigationBarsPadding()
@@ -1164,6 +1176,19 @@ fun BulkModeHUD(
     val lastSaved = remember(uiState.bulkSessionLog) {
         uiState.bulkSessionLog.lastOrNull { it.status != BulkScanStatus.SKIPPED_AMBIGUOUS }
     }
+    var flyInKey by remember { mutableStateOf(0L) }
+    var fanfareAt by remember { mutableStateOf<Offset?>(null) }
+    LaunchedEffect(lastSaved?.timestamp) {
+        if (lastSaved != null) {
+            flyInKey = lastSaved.timestamp
+            fanfareAt = Offset(80f, 80f)
+        }
+    }
+    val flyScale by animateFloatAsState(
+        targetValue = if (lastSaved != null) 1f else 0.4f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "bulkFlyScale"
+    )
     val skippedCount = remember(uiState.skippedCards) {
         uiState.skippedCards.distinctBy { it.id }.size
     }
@@ -1172,6 +1197,7 @@ fun BulkModeHUD(
             .sumOf { it.quantity }
     }
 
+    Box {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1226,7 +1252,12 @@ fun BulkModeHUD(
                 if (lastSaved != null) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.size(48.dp, 68.dp)
+                        modifier = Modifier
+                            .size(48.dp, 68.dp)
+                            .graphicsLayer {
+                                scaleX = flyScale
+                                scaleY = flyScale
+                            }
                     ) {
                         AsyncImage(
                             model = coil.request.ImageRequest.Builder(LocalContext.current)
@@ -1279,6 +1310,13 @@ fun BulkModeHUD(
                     }
                 }
             }
+        }
+    }
+        fanfareAt?.let { pos ->
+            MicroCaptureFanfare(
+                center = pos,
+                onAnimationFinished = { fanfareAt = null }
+            )
         }
     }
 }
@@ -2524,72 +2562,53 @@ private fun ScannerContentBulkModePreview() {
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScannerModeFab(
     activeMode: ScannerMode,
     onModeSelected: (ScannerMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
     val modes = listOf(
         ScannerMode.SEARCH to ("Search" to Icons.Rounded.Search),
-        ScannerMode.PRICE_CHECK to ("Price Check" to Icons.Rounded.Payments),
-        ScannerMode.BULK to ("Bulk Scan" to Icons.Rounded.Layers),
-        ScannerMode.PAGE to ("Page Scan" to Icons.Rounded.GridView),
-        ScannerMode.GRADING to ("AI Grading" to Icons.Rounded.AutoFixHigh)
+        ScannerMode.PRICE_CHECK to ("Price" to Icons.Rounded.Payments),
+        ScannerMode.BULK to ("Bulk" to Icons.Rounded.Layers),
+        ScannerMode.PAGE to ("Page" to Icons.Rounded.GridView),
+        ScannerMode.GRADING to ("Grade" to Icons.Rounded.AutoFixHigh)
     )
 
-    val currentModeInfo = modes.find { it.first == activeMode }
-    val currentIcon = currentModeInfo?.second?.second ?: Icons.Rounded.PhotoCamera
-    val currentLabel = currentModeInfo?.second?.first ?: "Select Mode"
-
-    Column(
+    Surface(
         modifier = modifier,
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        shape = CircleShape,
+        color = Color.Black.copy(alpha = 0.55f),
+        tonalElevation = 4.dp
     ) {
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
-            exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                modes.forEach { (mode, info) ->
-                    if (mode != activeMode) {
-                        ExtendedFloatingActionButton(
-                            onClick = {
-                                onModeSelected(mode)
-                                expanded = false
-                            },
-                            icon = { Icon(info.second, contentDescription = null) },
-                            text = { Text(info.first) },
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            shape = CircleShape
-                        )
+            modes.forEach { (mode, info) ->
+                val selected = activeMode == mode
+                Surface(
+                    onClick = { onModeSelected(if (selected) ScannerMode.IDLE else mode) },
+                    shape = CircleShape,
+                    color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else Color.White
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(info.second, contentDescription = info.first, modifier = Modifier.size(16.dp))
+                        if (selected) {
+                            Text(info.first, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
         }
-
-        ExtendedFloatingActionButton(
-            onClick = { expanded = !expanded },
-            icon = {
-                Icon(
-                    if (expanded) Icons.Rounded.Close else currentIcon,
-                    contentDescription = null
-                )
-            },
-            text = { Text(if (expanded) "Close" else currentLabel) },
-            containerColor = if (activeMode == ScannerMode.IDLE) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
-            contentColor = if (activeMode == ScannerMode.IDLE) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary,
-            shape = CircleShape,
-            expanded = expanded || activeMode != ScannerMode.IDLE
-        )
     }
 }
 
@@ -2739,6 +2758,20 @@ fun PriceCheckHUD(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    info.card.rarity?.let { rarity ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = CircleShape,
+                            modifier = Modifier.padding(top = 6.dp)
+                        ) {
+                            Text(
+                                rarity,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
                 FilledTonalIconButton(
                     onClick = onReset,

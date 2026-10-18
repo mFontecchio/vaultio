@@ -97,6 +97,12 @@ class StatsViewModel(
         }.filter { it.collectedCount > 0 }
             .sortedByDescending { it.completionPercentage }
 
+        val uniqueSpecies = userCards.mapNotNull { details ->
+            details.card.dexId?.toIntOrNull() ?: details.card.pokemonName
+        }.toSet().size
+        val vintageCount = userCards.count { VintageSets.isVintageSet(it.card.setId) }
+        val completedSets = setCompletion.count { it.completionPercentage >= 99.9f }
+
         return StatsViewState(
             isLoading = false,
             totalValue = totalValue,
@@ -105,7 +111,13 @@ class StatsViewModel(
             mostValuableCards = mostValuable.toImmutableList(),
             distributionByRarity = rarityDist.toImmutableMap(),
             distributionByType = typeDist.toImmutableMap(),
-            setCompletion = setCompletion.toImmutableList()
+            setCompletion = setCompletion.toImmutableList(),
+            milestones = computeCollectionMilestones(
+                cardCount = totalCount,
+                vintageCount = vintageCount,
+                completedSetCount = completedSets,
+                uniqueSpeciesCount = uniqueSpecies
+            ).toImmutableList()
         )
     }
 

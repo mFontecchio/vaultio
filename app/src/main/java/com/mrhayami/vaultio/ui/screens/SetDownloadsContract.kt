@@ -8,7 +8,8 @@ data class SetDownloadsState(
     val sets: List<SetEntity> = emptyList(),
     val isRefreshing: Boolean = false,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val downloadingSetIds: Set<String> = emptySet()
 ) {
     val downloadedSets = sets.filter { it.isDownloaded }
     val remainingSets = sets.filter { !it.isDownloaded }
@@ -27,6 +28,7 @@ sealed interface SetDownloadsEvent {
     data object DownloadAll : SetDownloadsEvent
     data object DeleteAll : SetDownloadsEvent
     data class DownloadSet(val setId: String) : SetDownloadsEvent
+    data class DownloadSeries(val series: String) : SetDownloadsEvent
     data class DeleteSet(val setId: String) : SetDownloadsEvent
     data object DismissError : SetDownloadsEvent
 }

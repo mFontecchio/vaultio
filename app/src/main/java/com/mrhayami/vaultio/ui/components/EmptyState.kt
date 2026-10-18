@@ -33,6 +33,7 @@ fun EmptyState(
     onPrimaryClick: (() -> Unit)? = null,
     secondaryLabel: String? = null,
     onSecondaryClick: (() -> Unit)? = null,
+    animatedHero: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -42,12 +43,16 @@ fun EmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-        )
+        if (animatedHero) {
+            FloatingPokeBall()
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = title,

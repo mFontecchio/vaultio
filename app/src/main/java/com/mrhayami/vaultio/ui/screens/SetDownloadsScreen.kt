@@ -1,6 +1,8 @@
 package com.mrhayami.vaultio.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +31,8 @@ import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.ImageNotSupported
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
@@ -47,6 +51,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -184,13 +189,59 @@ fun SetDownloadsScreen(
                     }
                 }
             } else {
+                val grouped = remember(state.sets) {
+                    state.sets.groupBy { it.series ?: "Other" }
+                }
+                var expandedSeries by remember { mutableStateOf(grouped.keys) }
                 LazyColumn(modifier = Modifier.navigationBarsPadding()) {
-                    items(state.sets, key = { it.id }) { set ->
-                        SetItem(
-                            set = set,
-                            onDownload = { viewModel.onEvent(SetDownloadsEvent.DownloadSet(set.id)) },
-                            onDelete = { viewModel.onEvent(SetDownloadsEvent.DeleteSet(set.id)) }
-                        )
+                    grouped.forEach { (series, seriesSets) ->
+                        val remaining = seriesSets.count { !it.isDownloaded }
+                        item(key = "header-$series") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        expandedSeries = if (series in expandedSeries) {
+                                            expandedSeries - series
+                                        } else {
+                                            expandedSeries + series
+                                        }
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    if (series in expandedSeries) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                                    contentDescription = null
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(series, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "${seriesSets.count { it.isDownloaded }}/${seriesSets.size} offline",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (remaining > 0) {
+                                    TextButton(onClick = {
+                                        viewModel.onEvent(SetDownloadsEvent.DownloadSeries(series))
+                                    }) {
+                                        Text("Download")
+                                    }
+                                }
+                            }
+                        }
+                        if (series in expandedSeries) {
+                            items(seriesSets, key = { it.id }) { set ->
+                                SetItem(
+                                    set = set,
+                                    isDownloading = set.id in state.downloadingSetIds,
+                                    onDownload = { viewModel.onEvent(SetDownloadsEvent.DownloadSet(set.id)) },
+                                    onDelete = { viewModel.onEvent(SetDownloadsEvent.DeleteSet(set.id)) }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -212,7 +263,8 @@ fun SetDownloadsScreen(
 fun SetItem(
     set: SetEntity,
     onDownload: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    isDownloading: Boolean = false
 ) {
     // TCGDex predictable asset URL fallback - Always prefer logo for Set Downloads view
     val imageUrl = remember(set.logo, set.symbol, set.id) {
@@ -264,6 +316,11 @@ fun SetItem(
                         )
                     }
                 }
+            } else if (isDownloading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
             } else {
                 IconButton(onClick = onDownload) {
                     Icon(
