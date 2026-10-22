@@ -121,6 +121,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.mrhayami.vaultio.data.PokemonUtils
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.CardWithDetails
@@ -508,10 +509,16 @@ fun CollectionContent(
         )
     }
 
-    if (uiState.selectedDexId != null) {
+    val selectedDexId = uiState.selectedDexId
+    if (selectedDexId != null) {
+        val dexTitle = uiState.pokedexEntries
+            .firstOrNull { it.dexNumber == selectedDexId }
+            ?.pokemonName
+            ?: PokemonUtils.speciesName(selectedDexId)
+            ?: "#$selectedDexId"
         ModalBottomSheet(onDismissRequest = { onEvent(CollectionEvent.OnDismissDexDetail) }) {
             DexDetailContent(
-                dexId = uiState.selectedDexId,
+                title = dexTitle,
                 cards = uiState.collectedCardsForDex,
                 onCardClick = { userCardId ->
                     onNavigateToCardDetail(userCardId)
@@ -927,13 +934,13 @@ fun ManageFoldersContent(
 }
 
 @Composable
-fun DexDetailContent(dexId: Int, cards: List<CardUiModel>, onCardClick: (Long) -> Unit) {
+fun DexDetailContent(title: String, cards: List<CardUiModel>, onCardClick: (Long) -> Unit) {
     Column(modifier = Modifier
         .fillMaxWidth()
         .padding(16.dp)
         .navigationBarsPadding()) {
         Text(
-            "Pokédex #$dexId Collected Cards",
+            title,
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(bottom = 16.dp)
         )

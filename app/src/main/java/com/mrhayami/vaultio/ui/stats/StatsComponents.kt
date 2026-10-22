@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
@@ -439,13 +442,15 @@ fun MilestoneShelf(
     milestones: List<CollectionMilestone>,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    LazyRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        milestones.forEach { milestone ->
+        items(milestones, key = { it.id }) { milestone ->
             Surface(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .width(148.dp)
+                    .height(96.dp),
                 shape = RoundedCornerShape(16.dp),
                 color = if (milestone.unlocked) {
                     MaterialTheme.colorScheme.primaryContainer
@@ -454,20 +459,24 @@ fun MilestoneShelf(
                 }
             ) {
                 Column(
-                    modifier = Modifier.padding(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
                         milestone.title,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 2
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         if (milestone.unlocked) "Unlocked" else milestone.subtitle,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -609,5 +618,34 @@ private fun SetCompletionItemPreview() {
 private fun SectionTitlePreview() {
     VaultioPreview {
         SectionTitle(title = "Top 5 Most Valuable Cards")
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun MilestoneShelfPreview() {
+    VaultioPreview {
+        MilestoneShelf(
+            milestones = listOf(
+                CollectionMilestone(
+                    id = "first_card",
+                    title = "First Card",
+                    subtitle = "Add a card to your vault",
+                    unlocked = true
+                ),
+                CollectionMilestone(
+                    id = "century",
+                    title = "Century Club",
+                    subtitle = "Hold 100 cards",
+                    unlocked = false
+                ),
+                CollectionMilestone(
+                    id = "pokedex",
+                    title = "Pokédex Master",
+                    subtitle = "Collect 151 unique species",
+                    unlocked = false
+                )
+            )
+        )
     }
 }
