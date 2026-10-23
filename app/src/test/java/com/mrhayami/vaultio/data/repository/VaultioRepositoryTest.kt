@@ -414,4 +414,56 @@ class VaultioRepositoryTest {
         assertEquals("Electric", repaired.types)
         assertEquals(7L, repaired.pHash)
     }
+
+    @Test
+    fun `manual add search by printed number keeps cards with that set size`() = runTest {
+        coEvery { tcgDexApi.searchCardsByLocalId("190") } returns listOf(
+            TcgDexCard(id = "sv1-190", localId = "190", name = "Miraidon", image = null, rarity = null, category = "Pokemon"),
+            TcgDexCard(id = "swsh1-190", localId = "190", name = "Other", image = null, rarity = null, category = "Pokemon")
+        )
+        coEvery { setDao.getSetsByIds(any()) } returns listOf(
+            SetEntity(id = "sv1", name = "Paldea", series = null, logo = null, symbol = null, totalCards = 250, officialCards = 198, releaseDate = null),
+            SetEntity(id = "swsh1", name = "Sword", series = null, logo = null, symbol = null, totalCards = 216, officialCards = 202, releaseDate = null)
+        )
+
+        val results = repository.searchCardsForManualAdd("190/250")
+
+        assertEquals(listOf("sv1-190"), results.map { it.id })
+        coVerify(exactly = 0) { tcgDexApi.searchCards(any()) }
+    }
+
+    @Test
+    fun `manual add search returns local id hits when the set catalog is empty`() = runTest {
+        coEvery { tcgDexApi.searchCardsByLocalId("190") } returns listOf(
+            TcgDexCard(id = "sv1-190", localId = "190", name = "Miraidon", image = null, rarity = null, category = "Pokemon")
+        )
+        coEvery { setDao.getSetsByIds(any()) } returns emptyList()
+
+        val results = repository.searchCardsForManualAdd("190/250")
+
+        assertEquals(listOf("sv1-190"), results.map { it.id })
+    }
+
+    @Test
+    fun `manual add search of a gallery number does not filter by set size`() = runTest {
+        val gallery = TcgDexCard(id = "swsh9-TG05", localId = "TG05", name = "Friends", image = null, rarity = null, category = "Trainer")
+        coEvery { tcgDexApi.searchCardsByLocalId("TG05") } returns listOf(gallery)
+        coEvery { tcgDexApi.searchCardsByLocalId("TG5") } returns emptyList()
+
+        val results = repository.searchCardsForManualAdd("TG05/TG30")
+
+        assertEquals(listOf("swsh9-TG05"), results.map { it.id })
+        coVerify(exactly = 0) { setDao.getSetsByIds(any()) }
+    }
+
+    @Test
+    fun `manual add search keeps name lookup and skips a half-typed number`() = runTest {
+        val pikachu = TcgDexCard(id = "base1-58", localId = "58", name = "Pikachu", image = null, rarity = null, category = "Pokemon")
+        coEvery { tcgDexApi.searchCards("pikachu*") } returns listOf(pikachu)
+
+        assertEquals(listOf("base1-58"), repository.searchCardsForManualAdd("pikachu").map { it.id })
+        assertTrue(repository.searchCardsForManualAdd("190/").isEmpty())
+        coVerify(exactly = 0) { tcgDexApi.searchCardsByLocalId(any()) }
+        coVerify(exactly = 0) { tcgDexApi.searchCards("190/*") }
+    }
 }

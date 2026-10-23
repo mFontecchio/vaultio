@@ -1712,7 +1712,9 @@ fun CameraPreview(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp)
+                    .navigationBarsPadding()
+                    // Clear the mode bar: 16.dp margin + 48.dp targets + 12.dp row padding + 12.dp gap.
+                    .padding(bottom = 88.dp)
             ) {
                 Surface(
                     onClick = {

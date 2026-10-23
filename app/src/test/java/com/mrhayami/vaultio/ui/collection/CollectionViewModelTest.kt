@@ -12,6 +12,7 @@ import com.mrhayami.vaultio.data.local.VintagePriceEntity
 import com.mrhayami.vaultio.data.local.WishlistCardWithDetails
 import com.mrhayami.vaultio.data.repository.VaultioRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -94,5 +95,15 @@ class CollectionViewModelTest {
         advanceUntilIdle()
 
         assertEquals(true, viewModel.state.value.isSearchBarVisible)
+    }
+
+    @Test
+    fun `remote search goes through manual add search`() = runTest(testDispatcher) {
+        coEvery { repository.searchCardsForManualAdd("190/250") } returns emptyList()
+
+        viewModel.onEvent(CollectionEvent.OnSearchRemoteCards("190/250"))
+        advanceUntilIdle()
+
+        coVerify { repository.searchCardsForManualAdd("190/250") }
     }
 }

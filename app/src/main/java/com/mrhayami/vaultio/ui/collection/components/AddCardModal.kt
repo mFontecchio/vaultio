@@ -112,7 +112,7 @@ fun AddCardModal(
                             Box(modifier = Modifier.weight(1f)) {
                                 if (searchQuery.isEmpty()) {
                                     Text(
-                                        "Search Pokemon Cards",
+                                        "Name or number (190/250)",
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
                                             alpha = 0.7f

@@ -84,7 +84,7 @@ class WishlistViewModel(
     private fun searchRemoteCards(query: String) {
         viewModelScope.launch {
             updateState { copy(isSearching = true) }
-            val results = repository.searchTcgDex(query)
+            val results = repository.searchCardsForManualAdd(query)
             updateState { copy(searchResults = results.toImmutableList(), isSearching = false) }
         }
     }

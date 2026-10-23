@@ -746,7 +746,7 @@ fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
             decorationBox = { innerTextField ->
                 if (query.isEmpty()) {
                     Text(
-                        "Search your cards...",
+                        "Name or number (190/250)",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )

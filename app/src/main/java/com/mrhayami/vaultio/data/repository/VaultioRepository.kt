@@ -8,8 +8,11 @@ import androidx.sqlite.db.SimpleSQLiteQuery
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.mrhayami.vaultio.data.collectionSearchClause
+import com.mrhayami.vaultio.data.filterCardsByPrintedTotal
 import com.mrhayami.vaultio.data.PokemonUtils
 import com.mrhayami.vaultio.data.PricingUtils
+import com.mrhayami.vaultio.data.PrintedCardNumber
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.VintageSets
 import com.mrhayami.vaultio.data.local.ApiUsageDao
@@ -142,12 +145,9 @@ class VaultioRepository(
             args.add(folderId)
         }
 
-        if (searchQuery.isNotBlank()) {
-            queryBuilder.append(" AND (c.name LIKE ? OR c.pokemonName LIKE ? OR s.name LIKE ?) ")
-            val likeQuery = "%$searchQuery%"
-            args.add(likeQuery)
-            args.add(likeQuery)
-            args.add(likeQuery)
+        collectionSearchClause(searchQuery)?.let { clause ->
+            queryBuilder.append(clause.sql)
+            args.addAll(clause.args)
         }
 
         if (filterSettings.rarities.isNotEmpty()) {
@@ -367,6 +367,18 @@ class VaultioRepository(
     }.getOrElse { e ->
         Log.e(TAG, "Error searching by local ID", e)
         emptyList()
+    }
+
+    suspend fun searchCardsForManualAdd(query: String): List<TcgDexCard> {
+        if (query.isBlank() || PrintedCardNumber.isIncompleteNumber(query)) return emptyList()
+        val printed = PrintedCardNumber.parse(query) ?: return searchTcgDex(query)
+        val results = printed.localIdKeys()
+            .flatMap { key -> searchTcgDexByLocalId(key) }
+            .distinctBy { it.id }
+        val total = printed.totalCount ?: return results
+        val setIds = results.map { it.id.substringBeforeLast('-') }.distinct()
+        val sets = getSetsByIds(setIds).associateBy { it.id }
+        return filterCardsByPrintedTotal(results, total, sets)
     }
 
     suspend fun getCardDetail(cardId: String): TcgDexCard? = runCatching {

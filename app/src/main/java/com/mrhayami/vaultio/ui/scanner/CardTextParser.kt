@@ -1,5 +1,6 @@
 package com.mrhayami.vaultio.ui.scanner
 
+import com.mrhayami.vaultio.data.PrintedCardNumber
 import com.mrhayami.vaultio.data.VintageSets
 import java.text.Normalizer
 
@@ -85,17 +86,8 @@ object CardTextParser {
      * Forms to try against Room. Vintage TCGDex ids are unpadded ("4") while a
      * modern read is often zero-padded ("025").
      */
-    fun localIdLookupKeys(localId: String): List<String> {
-        val trimmed = localId.trim()
-        if (trimmed.isEmpty()) return emptyList()
-        val keys = linkedSetOf(trimmed)
-        if (trimmed.all { it.isDigit() }) {
-            val stripped = trimmed.trimStart('0').ifEmpty { "0" }
-            keys += stripped
-            keys += stripped.padStart(3, '0')
-        }
-        return keys.toList()
-    }
+    fun localIdLookupKeys(localId: String): List<String> =
+        PrintedCardNumber.digitLookupKeys(localId)
 
     private data class NumberRead(val number: String?, val total: String?)
 
