@@ -1,6 +1,7 @@
 package com.mrhayami.vaultio
 
 import android.app.Application
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
@@ -125,6 +126,10 @@ class VaultioApplication : Application() {
 
         scheduleDailySnapshot()
         scheduleDailyPriceUpdate()
+        applicationScope.launch {
+            runCatching { repository.repairReferencedCatalogStubs() }
+                .onFailure { Log.e("VaultioApplication", "Catalog stub repair failed", it) }
+        }
         applicationScope.launch {
             if (userPreferencesRepository.autoUpdateEnabled.first()) {
                 scheduleAppUpdateChecks()

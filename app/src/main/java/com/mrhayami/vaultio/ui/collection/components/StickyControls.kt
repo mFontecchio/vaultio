@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.CatchingPokemon
@@ -21,10 +22,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +35,8 @@ import com.mrhayami.vaultio.data.local.FolderEntity
 import com.mrhayami.vaultio.ui.collection.CollectionEvent
 import com.mrhayami.vaultio.ui.collection.ViewMode
 import com.mrhayami.vaultio.ui.collection.getIconFromName
+import com.mrhayami.vaultio.ui.components.AnimatedCounter
+import com.mrhayami.vaultio.ui.components.AnimatedIntCounter
 import com.mrhayami.vaultio.ui.theme.VaultioPreview
 import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import java.util.Locale
@@ -90,20 +95,50 @@ fun StickyControls(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.padding(start = 4.dp)) {
-                Text(
-                    if (viewMode == ViewMode.POKEDEX) "$pokedexCollectedCount / $pokedexTotalCount Collected"
-                    else "$totalQuantity Cards",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                if (viewMode != ViewMode.POKEDEX) {
-                    Text(
-                        "$${String.format(Locale.US, "%.2f", totalValue)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Medium
-                    )
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = Color.Transparent
+            ) {
+                Column(
+                    modifier = Modifier
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f)
+                                )
+                            ),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    if (viewMode == ViewMode.POKEDEX) {
+                        Text(
+                            "Pokédex",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        AnimatedIntCounter(
+                            value = pokedexCollectedCount,
+                            suffix = " / $pokedexTotalCount",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    } else {
+                        AnimatedIntCounter(
+                            value = totalQuantity,
+                            suffix = " Cards",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        AnimatedCounter(
+                            value = totalValue,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 

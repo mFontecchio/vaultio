@@ -7,6 +7,12 @@ import com.mrhayami.vaultio.data.remote.TcgDexCard
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 
+enum class ScannerEraOverride {
+    AUTO,
+    MODERN,
+    VINTAGE
+}
+
 enum class ScannerMode {
     IDLE,
     SEARCH,

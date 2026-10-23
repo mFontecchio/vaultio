@@ -116,7 +116,27 @@ class MainActivity : ComponentActivity() {
                         NavHost(
                             navController,
                             startDestination = startDestination,
-                            Modifier.padding(innerPadding)
+                            Modifier.padding(innerPadding),
+                            enterTransition = {
+                                fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                                    slideIntoContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Left,
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                    )
+                            },
+                            exitTransition = {
+                                fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                            },
+                            popEnterTransition = {
+                                fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                            },
+                            popExitTransition = {
+                                fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                                    slideOutOfContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Right,
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                    )
+                            }
                         ) {
                             composable(Screen.Walkthrough.route) {
                                 WalkthroughScreen(

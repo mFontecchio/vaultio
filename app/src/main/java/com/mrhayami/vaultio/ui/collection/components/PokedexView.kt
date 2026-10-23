@@ -7,20 +7,31 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
@@ -33,8 +44,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.mrhayami.vaultio.ui.collection.PokedexEntry
+import com.mrhayami.vaultio.ui.collection.PokedexGenerations
 import com.mrhayami.vaultio.ui.collection.PokedexSettings
+import com.mrhayami.vaultio.ui.collection.entriesForGeneration
+import com.mrhayami.vaultio.ui.collection.generationProgress
 import com.mrhayami.vaultio.ui.components.EntranceType
+import com.mrhayami.vaultio.ui.components.MicroCaptureFanfare
 import com.mrhayami.vaultio.ui.components.staggeredEntrance
 import com.mrhayami.vaultio.ui.theme.VaultioPreview
 import com.mrhayami.vaultio.ui.theme.VaultioPreviews
@@ -50,15 +65,76 @@ fun PokedexView(
     val grayscaleFilter = remember {
         ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
     }
+    var selectedGenId by remember { mutableStateOf<Int?>(null) }
+    var celebrateCenter by remember { mutableStateOf<Offset?>(null) }
+    val selectedGen = remember(selectedGenId) {
+        PokedexGenerations.firstOrNull { it.id == selectedGenId }
+    }
+    val visibleEntries = remember(entries, selectedGen) {
+        entriesForGeneration(entries, selectedGen)
+    }
+    val progress = remember(entries, selectedGen) {
+        selectedGen?.let { generationProgress(entries, it) }
+    }
+    var wasComplete by remember(selectedGenId) { mutableStateOf(progress?.complete == true) }
+    LaunchedEffect(progress?.complete, selectedGenId) {
+        val nowComplete = progress?.complete == true
+        if (nowComplete && !wasComplete) {
+            celebrateCenter = Offset(400f, 400f)
+        }
+        wasComplete = nowComplete
+    }
 
-    LazyVerticalGrid(
+    Column(modifier = modifier.fillMaxSize()) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                FilterChip(
+                    selected = selectedGenId == null,
+                    onClick = { selectedGenId = null },
+                    label = { Text("All") },
+                    shape = RoundedCornerShape(20.dp)
+                )
+            }
+            items(PokedexGenerations, key = { it.id }) { gen ->
+                val genProgress = remember(entries, gen) { generationProgress(entries, gen) }
+                FilterChip(
+                    selected = selectedGenId == gen.id,
+                    onClick = { selectedGenId = gen.id },
+                    label = { Text("${gen.shortName} ${genProgress.collected}/${genProgress.total}") },
+                    shape = RoundedCornerShape(20.dp)
+                )
+            }
+        }
+        if (progress != null) {
+            LinearProgressIndicator(
+                progress = { progress.fraction },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .height(6.dp)
+            )
+            Text(
+                text = if (progress.complete) "${progress.generation.region} complete!" else "${progress.generation.region} · ${progress.collected} of ${progress.total}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+            )
+        }
+
+        Box(modifier = Modifier.weight(1f)) {
+        LazyVerticalGrid(
         columns = GridCells.Fixed(4),
         contentPadding = PaddingValues(8.dp, 8.dp, 8.dp, 80.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.navigationBarsPadding()
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
     ) {
-        itemsIndexed(entries, key = { _, it -> it.dexNumber }) { index, entry ->
+        itemsIndexed(visibleEntries, key = { _, it -> it.dexNumber }) { index, entry ->
             val isCollected = entry.isCollected
             val isInitialLoad = remember { System.currentTimeMillis() - gridLoadTime < 500 }
 
@@ -138,6 +214,14 @@ fun PokedexView(
                         )
                     }
                 }
+            }
+        }
+    }
+            celebrateCenter?.let { pos ->
+                MicroCaptureFanfare(
+                    center = pos,
+                    onAnimationFinished = { celebrateCenter = null }
+                )
             }
         }
     }

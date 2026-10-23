@@ -17,7 +17,8 @@ data class StatsViewState(
     val mostValuableCards: ImmutableList<CardWithValue> = persistentListOf(),
     val distributionByRarity: ImmutableMap<String, Int> = persistentMapOf(),
     val distributionByType: ImmutableMap<String, Int> = persistentMapOf(),
-    val setCompletion: ImmutableList<SetCompletionInfo> = persistentListOf()
+    val setCompletion: ImmutableList<SetCompletionInfo> = persistentListOf(),
+    val milestones: ImmutableList<CollectionMilestone> = persistentListOf()
 )
 
 @Immutable

@@ -712,7 +712,7 @@ class CollectionViewModel(
     private fun searchRemoteCards(query: String) {
         viewModelScope.launch {
             _isRemoteSearching.value = true
-            val results = repository.searchTcgDex(query)
+            val results = repository.searchCardsForManualAdd(query)
             _remoteSearchResults.value = results
             _isRemoteSearching.value = false
         }

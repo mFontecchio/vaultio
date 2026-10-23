@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,7 +22,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.automirrored.rounded.List
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -94,6 +103,7 @@ fun WishlistScreen(
     var showAddModal by remember { mutableStateOf(false) }
     var fanfarePosition by remember { mutableStateOf<Offset?>(null) }
     var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
+    var gridMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.sideEffects.collect { effect ->
@@ -120,6 +130,14 @@ fun WishlistScreen(
                                 contentDescription = "Back"
                             )
                         }
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { gridMode = !gridMode }) {
+                        Icon(
+                            if (gridMode) Icons.AutoMirrored.Rounded.List else Icons.Rounded.GridView,
+                            contentDescription = if (gridMode) "List view" else "Grid view"
+                        )
                     }
                 }
             )
@@ -150,10 +168,44 @@ fun WishlistScreen(
                 onPrimaryClick = { showAddModal = true },
                 secondaryLabel = "Open scanner",
                 onSecondaryClick = onNavigateToScanner,
+                animatedHero = true,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
             )
+        } else if (gridMode) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = padding.calculateTopPadding(),
+                    bottom = padding.calculateBottomPadding() + 80.dp,
+                    start = 12.dp,
+                    end = 12.dp
+                ),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(uiState.wishlistItems, key = { it.details.wishlistCard.id }) { item ->
+                    Card(
+                        onClick = {
+                            if (onItemClick != null) onItemClick(item)
+                            else viewModel.onEvent(WishlistEvent.OpenOwnedCard(item.details.wishlistCard.cardId))
+                        },
+                        modifier = Modifier.animateItem(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        AsyncImage(
+                            model = "${item.details.card.image}/low.webp",
+                            contentDescription = item.details.card.name,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(0.718f),
+                            contentScale = ContentScale.FillBounds
+                        )
+                    }
+                }
+            }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -178,6 +230,43 @@ fun WishlistScreen(
                     )
                 }
                 items(uiState.wishlistItems, key = { it.details.wishlistCard.id }) { item ->
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            when (value) {
+                                SwipeToDismissBoxValue.StartToEnd -> {
+                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    fanfarePosition = Offset(200f, 400f)
+                                    viewModel.onEvent(
+                                        WishlistEvent.MoveToCollection(item.details.wishlistCard.id)
+                                    )
+                                    true
+                                }
+                                SwipeToDismissBoxValue.EndToStart -> {
+                                    pendingDeleteId = item.details.wishlistCard.id
+                                    false
+                                }
+                                else -> false
+                            }
+                        }
+                    )
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {
+                            val acquiring = dismissState.targetValue == SwipeToDismissBoxValue.StartToEnd
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(4.dp),
+                                contentAlignment = if (acquiring) Alignment.CenterStart else Alignment.CenterEnd
+                            ) {
+                                Text(
+                                    if (acquiring) "Catch" else "Remove",
+                                    color = if (acquiring) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    ) {
                     WishlistItem(
                         item = item,
                         onClick = {
@@ -201,6 +290,7 @@ fun WishlistScreen(
                         },
                         modifier = Modifier.animateItem()
                     )
+                    }
                 }
             }
         }

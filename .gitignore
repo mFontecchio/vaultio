@@ -28,3 +28,6 @@ keystore.properties
 AGENTS.md
 context-map.md
 docs/plans
+
+# Local research corpora (legacy card images, scanner experiments)
+.research/

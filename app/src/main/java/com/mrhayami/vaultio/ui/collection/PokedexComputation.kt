@@ -95,3 +95,54 @@ internal fun computePokedexEntries(
     }
     return entries
 }
+
+data class PokedexGeneration(
+    val id: Int,
+    val shortName: String,
+    val region: String,
+    val start: Int,
+    val endInclusive: Int
+) {
+    fun contains(dexNumber: Int): Boolean = dexNumber in start..endInclusive
+}
+
+val PokedexGenerations: List<PokedexGeneration> = listOf(
+    PokedexGeneration(1, "Gen 1", "Kanto", 1, 151),
+    PokedexGeneration(2, "Gen 2", "Johto", 152, 251),
+    PokedexGeneration(3, "Gen 3", "Hoenn", 252, 386),
+    PokedexGeneration(4, "Gen 4", "Sinnoh", 387, 493),
+    PokedexGeneration(5, "Gen 5", "Unova", 494, 649),
+    PokedexGeneration(6, "Gen 6", "Kalos", 650, 721),
+    PokedexGeneration(7, "Gen 7", "Alola", 722, 809),
+    PokedexGeneration(8, "Gen 8", "Galar", 810, 905),
+    PokedexGeneration(9, "Gen 9", "Paldea", 906, 1025)
+)
+
+fun entriesForGeneration(
+    entries: List<PokedexEntry>,
+    generation: PokedexGeneration?
+): List<PokedexEntry> {
+    if (generation == null) return entries
+    return entries.filter { generation.contains(it.dexNumber) }
+}
+
+data class GenerationProgress(
+    val generation: PokedexGeneration,
+    val collected: Int,
+    val total: Int
+) {
+    val complete: Boolean get() = total > 0 && collected >= total
+    val fraction: Float get() = if (total == 0) 0f else collected.toFloat() / total
+}
+
+fun generationProgress(
+    entries: List<PokedexEntry>,
+    generation: PokedexGeneration
+): GenerationProgress {
+    val inGen = entries.filter { generation.contains(it.dexNumber) }
+    val total = (generation.endInclusive - generation.start + 1)
+        .coerceAtMost(inGen.size.coerceAtLeast(generation.endInclusive - generation.start + 1))
+    val collected = inGen.count { it.isCollected }
+    val slotTotal = if (inGen.isNotEmpty()) inGen.size else total
+    return GenerationProgress(generation, collected, slotTotal)
+}

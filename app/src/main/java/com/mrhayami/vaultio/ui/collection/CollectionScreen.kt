@@ -114,12 +114,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.mrhayami.vaultio.data.PokemonUtils
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.CardWithDetails
@@ -330,6 +332,7 @@ fun CollectionContent(
                                 onPrimaryClick = onNavigateToScanner,
                                 secondaryLabel = "Add manually",
                                 onSecondaryClick = { showAddCardModal = true },
+                                animatedHero = true,
                                 modifier = Modifier.align(Alignment.Center)
                             )
                         }
@@ -342,6 +345,35 @@ fun CollectionContent(
                         onCardLongClick = onCardLongClick,
                         onDexClick = onDexClick
                     )
+                }
+
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = uiState.isSelectionMode,
+                    enter = androidx.compose.animation.slideInVertically { it } + fadeIn(),
+                    exit = androidx.compose.animation.slideOutVertically { it } + fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 16.dp)
+                ) {
+                    val selectedValue = uiState.filteredUserCards
+                        .filter { it.details.userCard.id in uiState.selectedIds }
+                        .sumOf { it.price * it.details.userCard.quantity }
+                    Card(
+                        shape = CircleShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    ) {
+                        Text(
+                            text = "${uiState.selectedIds.size} selected · $${
+                                String.format(java.util.Locale.US, "%.2f", selectedValue)
+                            }",
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -477,10 +509,16 @@ fun CollectionContent(
         )
     }
 
-    if (uiState.selectedDexId != null) {
+    val selectedDexId = uiState.selectedDexId
+    if (selectedDexId != null) {
+        val dexTitle = uiState.pokedexEntries
+            .firstOrNull { it.dexNumber == selectedDexId }
+            ?.pokemonName
+            ?: PokemonUtils.speciesName(selectedDexId)
+            ?: "#$selectedDexId"
         ModalBottomSheet(onDismissRequest = { onEvent(CollectionEvent.OnDismissDexDetail) }) {
             DexDetailContent(
-                dexId = uiState.selectedDexId,
+                title = dexTitle,
                 cards = uiState.collectedCardsForDex,
                 onCardClick = { userCardId ->
                     onNavigateToCardDetail(userCardId)
@@ -708,7 +746,7 @@ fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
             decorationBox = { innerTextField ->
                 if (query.isEmpty()) {
                     Text(
-                        "Search your cards...",
+                        "Name or number (190/250)",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -896,13 +934,13 @@ fun ManageFoldersContent(
 }
 
 @Composable
-fun DexDetailContent(dexId: Int, cards: List<CardUiModel>, onCardClick: (Long) -> Unit) {
+fun DexDetailContent(title: String, cards: List<CardUiModel>, onCardClick: (Long) -> Unit) {
     Column(modifier = Modifier
         .fillMaxWidth()
         .padding(16.dp)
         .navigationBarsPadding()) {
         Text(
-            "Pokédex #$dexId Collected Cards",
+            title,
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(bottom = 16.dp)
         )

@@ -8,14 +8,18 @@ import androidx.sqlite.db.SimpleSQLiteQuery
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.mrhayami.vaultio.data.collectionSearchClause
+import com.mrhayami.vaultio.data.filterCardsByPrintedTotal
 import com.mrhayami.vaultio.data.PokemonUtils
 import com.mrhayami.vaultio.data.PricingUtils
+import com.mrhayami.vaultio.data.PrintedCardNumber
 import com.mrhayami.vaultio.data.UserPreferencesRepository
 import com.mrhayami.vaultio.data.VintageSets
 import com.mrhayami.vaultio.data.local.ApiUsageDao
 import com.mrhayami.vaultio.data.local.ApiUsageEntity
 import com.mrhayami.vaultio.data.local.CardDao
 import com.mrhayami.vaultio.data.local.CardEntity
+import com.mrhayami.vaultio.data.local.mergedOnto
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.CollectionExportDto
 import com.mrhayami.vaultio.data.local.CollectionSnapshotDao
@@ -141,12 +145,9 @@ class VaultioRepository(
             args.add(folderId)
         }
 
-        if (searchQuery.isNotBlank()) {
-            queryBuilder.append(" AND (c.name LIKE ? OR c.pokemonName LIKE ? OR s.name LIKE ?) ")
-            val likeQuery = "%$searchQuery%"
-            args.add(likeQuery)
-            args.add(likeQuery)
-            args.add(likeQuery)
+        collectionSearchClause(searchQuery)?.let { clause ->
+            queryBuilder.append(clause.sql)
+            args.addAll(clause.args)
         }
 
         if (filterSettings.rarities.isNotEmpty()) {
@@ -255,7 +256,10 @@ class VaultioRepository(
     suspend fun downloadSet(setId: String) {
         runCatching {
             val detail = tcgDexApi.getSetDetail(setId)
-            val cardEntities = detail.cards.map { it.toEntity(setId) }
+            val existingById = cardDao.getCardsBySetSync(setId).associateBy { it.id }
+            val cardEntities = detail.cards.map { brief ->
+                brief.toEntity(setId).mergedOnto(existingById[brief.id])
+            }
             cardDao.insertCards(cardEntities)
             setDao.updateDownloadStatus(setId, true)
             
@@ -263,6 +267,7 @@ class VaultioRepository(
             if (currentSet?.logo?.contains("http") == false) {
                 refreshSets() 
             }
+            repairReferencedCatalogStubs(setId)
         }.onFailure { e ->
             Log.e(TAG, "Error download set $setId", e)
         }
@@ -303,8 +308,26 @@ class VaultioRepository(
 
     suspend fun searchLocalCards(localId: String): List<CardEntity> = cardDao.getCardsByLocalId(localId)
 
-    suspend fun searchLocalCardsWithTotal(localId: String, total: Int): List<CardEntity> = 
+    suspend fun searchLocalCards(localIds: Collection<String>): List<CardEntity> {
+        val ids = localIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (ids.isEmpty()) return emptyList()
+        return cardDao.getCardsByLocalIds(ids)
+    }
+
+    suspend fun searchLocalCardsWithTotal(localId: String, total: Int): List<CardEntity> =
         cardDao.getCardsByLocalIdAndSetTotal(localId, total)
+
+    suspend fun searchLocalCardsWithTotal(localIds: Collection<String>, total: Int): List<CardEntity> {
+        val ids = localIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (ids.isEmpty()) return emptyList()
+        return cardDao.getCardsByLocalIdsAndSetTotal(ids, total)
+    }
+
+    suspend fun getSetsByIds(setIds: Collection<String>): List<SetEntity> {
+        val ids = setIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (ids.isEmpty()) return emptyList()
+        return setDao.getSetsByIds(ids)
+    }
 
     suspend fun updateCardPHash(cardId: String, pHash: Long) = withContext(ioDispatcher) {
         cardDao.updateCardPHash(cardId, pHash)
@@ -344,6 +367,18 @@ class VaultioRepository(
     }.getOrElse { e ->
         Log.e(TAG, "Error searching by local ID", e)
         emptyList()
+    }
+
+    suspend fun searchCardsForManualAdd(query: String): List<TcgDexCard> {
+        if (query.isBlank() || PrintedCardNumber.isIncompleteNumber(query)) return emptyList()
+        val printed = PrintedCardNumber.parse(query) ?: return searchTcgDex(query)
+        val results = printed.localIdKeys()
+            .flatMap { key -> searchTcgDexByLocalId(key) }
+            .distinctBy { it.id }
+        val total = printed.totalCount ?: return results
+        val setIds = results.map { it.id.substringBeforeLast('-') }.distinct()
+        val sets = getSetsByIds(setIds).associateBy { it.id }
+        return filterCardsByPrintedTotal(results, total, sets)
     }
 
     suspend fun getCardDetail(cardId: String): TcgDexCard? = runCatching {
@@ -401,8 +436,13 @@ class VaultioRepository(
         cardDao.insertCards(listOf(cardEntity))
     }
 
-    private suspend fun backfillMissingDexIdsForOwnedCards() {
-        val missingIds = cardDao.getOwnedCardIdsMissingDex()
+    /**
+     * Re-fetches full card detail for owned or wishlisted rows that a set download
+     * replaced with a brief stub, or that are Pokémon still missing a dex id.
+     * Pass [setId] to limit the scan to one set; null scans the whole catalog.
+     */
+    suspend fun repairReferencedCatalogStubs(setId: String? = null) {
+        val missingIds = cardDao.getReferencedStubCardIds(setId)
         for (cardId in missingIds) {
             runCatching { ensureCatalogCardWithDex(cardId) }
                 .onFailure { Log.e(TAG, "Failed to backfill dex for $cardId", it) }
@@ -903,7 +943,7 @@ class VaultioRepository(
                 }
             }
 
-            backfillMissingDexIdsForOwnedCards()
+            repairReferencedCatalogStubs()
         }
     }
 

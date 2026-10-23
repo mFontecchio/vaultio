@@ -5,7 +5,6 @@ import android.graphics.Matrix
 import android.graphics.Rect
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognizer
 import com.mrhayami.vaultio.data.PHash
 
@@ -104,27 +103,15 @@ class CameraAnalyzer(
         val enhanced = ScannerUtils.enhanceImage(cropped, reusableEnhanced)
         reusableEnhanced = enhanced
 
-        val image = InputImage.fromBitmap(enhanced, 0)
-
-        client.process(image)
-            .addOnSuccessListener { visionText ->
-                lastScanTime = System.currentTimeMillis()
-                val lines = visionText.textBlocks.flatMap { block ->
-                    block.lines.map { line ->
-                        DetectedLine(
-                            text = line.text,
-                            boundingBox = line.boundingBox,
-                            imageWidth = enhanced.width,
-                            imageHeight = enhanced.height
-                        )
-                    }
-                }
-                onLinesDetected(lines, pHash, isGlareDetected)
-            }
-            .addOnFailureListener { e -> e.printStackTrace() }
-            .addOnCompleteListener {
-                if (rotated != cropped && !rotated.isRecycled) rotated.recycle()
-                imageProxy.close()
-            }
+        try {
+            val lines = ScannerUtils.recognizeCard(enhanced, client)
+            lastScanTime = System.currentTimeMillis()
+            onLinesDetected(lines, pHash, isGlareDetected)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            if (rotated != cropped && !rotated.isRecycled) rotated.recycle()
+            imageProxy.close()
+        }
     }
 }

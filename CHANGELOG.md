@@ -7,6 +7,28 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-22
+
+### Added
+
+- Scanner era control cycles Auto, Modern, and Vintage and is remembered between sessions. Auto still detects Wizards-era cards, copyright years through 2003, and known vintage printed totals.
+- Collection search, Add Card, and Wishlist accept a printed collector number such as `190/250`. The number is matched to the set size, including unpadded vintage ids and zero-padded modern ids.
+
+### Changed
+
+- Pokédex detail sheet titles show the Pokémon name.
+- Stats milestones scroll horizontally so longer titles stay readable.
+
+### Fixed
+
+- Vintage scans accept only a number/total, and common OCR mistakes on printed totals (a dropped or repeated leading 1) are corrected when a single known vintage total fits.
+
+## [1.2.9] - 2026-10-18
+
+### Fixed
+
+- Deleting and re-downloading a set no longer wipes dex, type, category, and scanner data for cards already in the library or wishlist. Owned and wishlisted catalog rows are kept on delete, merged on download, and repaired on the next launch if they were already overwritten.
+
 ## [1.2.8] - 2026-08-09
 
 ### Added
@@ -52,6 +74,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 - On-device AI grading (Gemini Nano / ML Kit GenAI)
 - Dependabot, CodeQL, and updated security reporting
 
-[Unreleased]: https://github.com/mFontecchio/vaultio/compare/v1.2.8...HEAD
+[Unreleased]: https://github.com/mFontecchio/vaultio/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/mFontecchio/vaultio/compare/v1.2.9...v1.3.0
+[1.2.9]: https://github.com/mFontecchio/vaultio/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/mFontecchio/vaultio/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/mFontecchio/vaultio/releases/tag/v1.2.7

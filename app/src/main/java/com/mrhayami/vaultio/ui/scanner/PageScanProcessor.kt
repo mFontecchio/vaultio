@@ -33,13 +33,14 @@ object PageScanProcessor {
             
             async {
                 val (lines, pHash) = ScannerUtils.processCell(cellBitmap)
-                val ocrResult = lines.joinToString(" ")
                 PageScanCell(
                     id = index,
                     row = row,
                     col = col,
                     bitmap = cellBitmap,
-                    ocrResult = ocrResult,
+                    ocrResult = lines.joinToString(" ") { it.text },
+                    ocrLines = lines,
+                    pHash = pHash,
                     status = PageScanCellStatus.IDLE
                 )
             }

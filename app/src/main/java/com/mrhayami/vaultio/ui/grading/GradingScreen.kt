@@ -71,7 +71,9 @@ import androidx.compose.ui.unit.sp
 import com.mrhayami.vaultio.data.PricingUtils
 import com.mrhayami.vaultio.data.local.CardGradeEntity
 import com.mrhayami.vaultio.data.repository.GeminiNanoClient
+import com.mrhayami.vaultio.ui.components.GradingRadarOverlay
 import com.mrhayami.vaultio.ui.components.MetadataModal
+import com.mrhayami.vaultio.ui.components.SlabHologramOverlay
 import com.mrhayami.vaultio.ui.theme.VaultioPreview
 import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import kotlinx.coroutines.flow.Flow
@@ -159,12 +161,23 @@ fun GradingScreen(
                                 .height(300.dp),
                             elevation = CardDefaults.cardElevation(8.dp)
                         ) {
-                            Image(
-                                bitmap = imageBitmap,
-                                contentDescription = "Captured Card",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit
-                            )
+                            Box {
+                                Image(
+                                    bitmap = imageBitmap,
+                                    contentDescription = "Captured Card",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit
+                                )
+                                GradingRadarOverlay(
+                                    active = state.isAnalyzing,
+                                    modifier = Modifier.fillMaxSize(),
+                                    statusText = when {
+                                        state.analysisProgress < 0.33f -> "Analyzing centering…"
+                                        state.analysisProgress < 0.66f -> "Inspecting edges…"
+                                        else -> "Checking surface…"
+                                    }
+                                )
+                            }
                         }
                     }
 
@@ -584,6 +597,7 @@ fun DigitalGradeSlab(
                 }
             }
         }
+        SlabHologramOverlay()
     }
 }
 

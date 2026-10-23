@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
@@ -50,6 +53,8 @@ import com.mrhayami.vaultio.data.local.CardEntity
 import com.mrhayami.vaultio.data.local.CardWithDetails
 import com.mrhayami.vaultio.data.local.SetEntity
 import com.mrhayami.vaultio.data.local.UserCardEntity
+import com.mrhayami.vaultio.ui.components.AnimatedCounter
+import com.mrhayami.vaultio.ui.components.AnimatedIntCounter
 import com.mrhayami.vaultio.ui.theme.VaultioPreview
 import com.mrhayami.vaultio.ui.theme.VaultioPreviews
 import java.text.NumberFormat
@@ -95,13 +100,10 @@ fun SummaryCards(totalValue: Double, cardCount: Int, modifier: Modifier = Modifi
                         maxLines = 1
                     )
                 }
-                Text(
-                    text = formatCurrency(totalValue),
+                AnimatedCounter(
+                    value = totalValue,
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -134,13 +136,10 @@ fun SummaryCards(totalValue: Double, cardCount: Int, modifier: Modifier = Modifi
                         maxLines = 1
                     )
                 }
-                Text(
-                    text = cardCount.toString(),
+                AnimatedIntCounter(
+                    value = cardCount,
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -159,11 +158,16 @@ fun DonutChart(
     val total = remember(data) { data.sumOf { it.second }.toFloat() }
     val density = LocalDensity.current
     val thicknessPx = with(density) { thickness.toPx() }
+    val reveal = remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(data) {
+        reveal.snapTo(0f)
+        reveal.animateTo(1f, androidx.compose.animation.core.tween(800))
+    }
 
     Canvas(modifier = modifier) {
         var startAngle = -90f
         data.forEachIndexed { index, pair ->
-            val sweepAngle = (pair.second / total) * 360f
+            val sweepAngle = (pair.second / total) * 360f * reveal.value
             drawArc(
                 color = colors[index % colors.size],
                 startAngle = startAngle,
@@ -372,6 +376,115 @@ fun SetCompletionItem(info: SetCompletionInfo) {
 }
 
 @Composable
+fun CrownJewelPodium(
+    cards: List<CardWithValue>,
+    onCardClick: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val topThree = cards.take(3)
+    if (topThree.isEmpty()) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        val order = when (topThree.size) {
+            1 -> listOf(0)
+            2 -> listOf(1, 0)
+            else -> listOf(1, 0, 2)
+        }
+        order.forEach { index ->
+            val card = topThree[index]
+            val height = when (index) {
+                0 -> 140.dp
+                1 -> 110.dp
+                else -> 96.dp
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onCardClick(card.details.userCard.id) }
+                    .padding(4.dp)
+            ) {
+                Text(
+                    text = "${index + 1}",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data("${card.details.card.image}/low.webp")
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = card.details.card.name,
+                    modifier = Modifier
+                        .height(height)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Fit
+                )
+                Text(
+                    formatCurrency(card.value * card.details.userCard.quantity),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MilestoneShelf(
+    milestones: List<CollectionMilestone>,
+    modifier: Modifier = Modifier
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(milestones, key = { it.id }) { milestone ->
+            Surface(
+                modifier = Modifier
+                    .width(148.dp)
+                    .height(96.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = if (milestone.unlocked) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        milestone.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        if (milestone.unlocked) "Unlocked" else milestone.subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun SectionTitle(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
@@ -505,5 +618,34 @@ private fun SetCompletionItemPreview() {
 private fun SectionTitlePreview() {
     VaultioPreview {
         SectionTitle(title = "Top 5 Most Valuable Cards")
+    }
+}
+
+@VaultioPreviews
+@Composable
+private fun MilestoneShelfPreview() {
+    VaultioPreview {
+        MilestoneShelf(
+            milestones = listOf(
+                CollectionMilestone(
+                    id = "first_card",
+                    title = "First Card",
+                    subtitle = "Add a card to your vault",
+                    unlocked = true
+                ),
+                CollectionMilestone(
+                    id = "century",
+                    title = "Century Club",
+                    subtitle = "Hold 100 cards",
+                    unlocked = false
+                ),
+                CollectionMilestone(
+                    id = "pokedex",
+                    title = "Pokédex Master",
+                    subtitle = "Collect 151 unique species",
+                    unlocked = false
+                )
+            )
+        )
     }
 }

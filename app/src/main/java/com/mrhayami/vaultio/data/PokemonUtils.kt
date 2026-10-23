@@ -1,5 +1,7 @@
 package com.mrhayami.vaultio.data
 
+import java.util.Locale
+
 object PokemonUtils {
 
     /**
@@ -573,7 +575,24 @@ object PokemonUtils {
     fun lookupDexIds(fullName: String): List<Int> =
         extractAllPokemonNames(fullName).mapNotNull { lookupDexId(it) }
 
+    /**
+     * Canonical display name for a National Dex number.
+     * Uses the first map key for that id so aliases ("nidoran-f") are skipped.
+     */
+    fun speciesName(dexId: Int): String? = DEX_TO_SPECIES_NAME[dexId]
+
     // ─── Internal helpers ─────────────────────────────────────────────────────
+
+    private val DEX_TO_SPECIES_NAME: Map<Int, String> = buildMap {
+        for ((name, id) in POKEMON_DEX_MAP) {
+            if (id in this) continue
+            put(id, name.split(' ').joinToString(" ") { word ->
+                word.replaceFirstChar { char ->
+                    if (char.isLowerCase()) char.titlecase(Locale.ROOT) else char.toString()
+                }
+            })
+        }
+    }
 
     private fun cleanSinglePokemonName(input: String): String {
         var name = input
